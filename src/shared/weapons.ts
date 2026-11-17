@@ -37,11 +37,12 @@ export const bySeat = (a: Pick<Person, 'rack' | 'wpos'>, b: Pick<Person, 'rack' 
 // Οπλοβαστός χωρίς Θέση, σε δύναμη και με όπλο: προειδοποίηση «Χωρίς θέση»
 export const noSeat = (p: Pick<Person, 'active' | 'weapon' | 'rack' | 'wpos'>) => !!p.active && !!weaponKey(p.weapon) && !!rackKey(p.rack) && !posKey(p.wpos);
 
-export type WeaponFilter = 'all' | 'with' | 'out' | 'without' | 'unarmed' | 'dup' | 'return';
+export type WeaponFilter = 'all' | 'with' | 'out' | 'away' | 'without' | 'unarmed' | 'dup' | 'return';
 export const WEAPON_FILTERS: [WeaponFilter, string, string, string][] = [
   ['all', 'Όλοι', 'ΟΠΛΙΣΜΟΣ', 'Όλοι σε δύναμη'],
   ['with', 'Με όπλο', 'ΜΕ ΟΠΛΟ', 'Σε δύναμη, με αριθμό όπλου'],
   ['out', 'Εκτός οπλοβαστού', 'ΕΚΤΟΣ ΟΠΛΟΒΑΣΤΟΥ', 'Το όπλο τους βγήκε με λόγο (ΕΚΠ, βολή…) και δεν μπήκε ακόμα, ή έχουν ένοπλη υπηρεσία τη μέρα'],
+  ['away', 'Απόντα', 'ΑΠΟΝΤΑ', 'Το όπλο το έχουν μαζί τους σε υπηρεσία εκτός στρατοπέδου (στήλη απόντων της ΗΚΑΙ): δεν είναι στον οπλοβαστό, μετρά απόν και όχι εκτός'],
   ['without', 'Χωρίς όπλο', 'ΧΩΡΙΣ ΟΠΛΟ', 'Σε δύναμη, ένοπλοι κατά τη Σ.Ι., χωρίς αριθμό όπλου'],
   ['unarmed', 'Άοπλοι με όπλο', 'ΑΟΠΛΟΙ ΜΕ ΟΠΛΟ', 'Άοπλοι κατά τη Σ.Ι. (Ι3 ΧΩΡΙΣ ΟΠΛΟ, Ι4 ή ό,τι όρισες στις Ρυθμίσεις › Σ.Ι.) που έχουν όπλο'],
   ['dup', 'Ίδιος αριθμός', 'ΙΔΙΟΣ ΑΡΙΘΜΟΣ', 'Ο ίδιος αριθμός όπλου ή η ίδια θέση οπλοβαστού σε δύο ή περισσότερους'],
@@ -52,6 +53,8 @@ export interface WeaponInfo {
   unarmed: Set<number>;               // άοπλοι κατά τη Σ.Ι. (μόνιμα, όχι ΕΑ/ΕΟ της μέρας)
   holders: Map<string, Person[]>;     // weaponKey → όσοι έχουν αυτό το όπλο (και εκτός δύναμης, αφού δεν το παρέδωσαν)
   racks: Map<string, Person[]>;       // seatKey (οπλοβαστός + θέση) → όσοι έχουν αυτή τη θέση (μόνο σε δύναμη)
+  away: Map<number, string>;          // απόν: σε υπηρεσία εκτός στρατοπέδου (BlockDef.hkCol σε στήλη απόντων), pid → «ΥΠΗΡΕΣΙΑ ΦΥΛΑΚΙΟ ΠΟΤΑΜΟΥ 14:00–14:00»· δεν είναι και στο out
+  awayName: Map<number, string>;      // pid → το όνομα της υπηρεσίας με κεφαλαία («ΦΥΛΑΚΙΟ ΠΟΤΑΜΟΥ»), για το Μητρώο οπλισμού
   out: Map<number, string>;           // εκτός οπλοβαστού λόγω ένοπλης υπηρεσίας: pid → «Σκοπός 3ης (α) 15:45–18:15» (τώρα, ή όλα τα νούμερα της μέρας)
   moves: Map<number, WeaponMove>;     // βγήκε από τον οπλοβαστό (Έξοδος όπλων) και δεν μπήκε ακόμα: pid → η κίνηση
   repair: Map<number, string>;        // το όπλο του είναι «Προς επισκευή»/«Ακινησία» στο Μητρώο (sweep 17/11): pid → «ΠΡΟΣ ΕΠΙΣΚΕΥΗ: λόγος»
@@ -72,23 +75,31 @@ export function openMoves(log: WeaponMove[] | undefined): Map<number, WeaponMove
 }
 // «ΕΚΠ από 18/10 08:15»
 export const moveOutTxt = (m: WeaponMove) => m.reason + ' από ' + dm(m.outDay) + ' ' + m.outTime;
-export const isOut = (info: WeaponInfo, pid: number) => info.moves.has(pid) || info.repair.has(pid) || info.out.has(pid);
+// Εκτός οπλοβαστού = ΕΚΤΟΣ ή ΑΠΩΝ (το όπλο δεν είναι στον οπλοβαστό)· isAbsent: μόνο ΑΠΩΝ (υπηρεσία εκτός στρατοπέδου)
+export const isOut = (info: WeaponInfo, pid: number) => info.moves.has(pid) || info.repair.has(pid) || info.out.has(pid) || info.away.has(pid);
+export const isAbsent = (info: WeaponInfo, pid: number) => info.away.has(pid) && !info.moves.has(pid) && !info.repair.has(pid);
 // Όσοι είναι εκτός (σε δύναμη): κίνηση ή ένοπλη υπηρεσία, μία φορά ο καθένας. Από εδώ μετράνε και η κεφαλίδα, και το chip, και η καρτέλα Κινήσεις
 export const outPeople = (people: Person[], info: WeaponInfo) => people.filter(p => p.active && isOut(info, p.id));
+// ΑΠΩΝ ξεχωριστά: οι απόντες (μέρος των outPeople) και οι υπόλοιποι εκτός, για την κεφαλίδα «Ν εκτός, εκ των οποίων Μ απόντα»
+export const awayPeople = (people: Person[], info: WeaponInfo) => people.filter(p => p.active && isAbsent(info, p.id));
+export const exOutPeople = (people: Person[], info: WeaponInfo) => people.filter(p => p.active && isOut(info, p.id) && !isAbsent(info, p.id));
 // Ο λόγος που φαίνεται για κάθε εκτός: ο χειροκίνητος (όπως γράφτηκε) ή AUTO_KEY για ένοπλη υπηρεσία χωρίς κίνηση (η κίνηση νικά, μετράει μία φορά)
 export const AUTO_KEY = '@auto';
+export const AWAY_KEY = '@away';
 export const REPAIR_KEY = 'ΠΡΟΣ ΕΠΙΣΚΕΥΗ';
-export const outReasonOf = (info: WeaponInfo, pid: number) => info.moves.get(pid)?.reason ?? (info.repair.has(pid) ? REPAIR_KEY : info.out.has(pid) ? AUTO_KEY : '');
+export const outReasonOf = (info: WeaponInfo, pid: number) => info.moves.get(pid)?.reason ?? (info.repair.has(pid) ? REPAIR_KEY : info.away.has(pid) ? AWAY_KEY : info.out.has(pid) ? AUTO_KEY : '');
 export function outReasons(people: Person[], info: WeaponInfo): [string, number][] {
   const n = new Map<string, number>();
-  for (const p of outPeople(people, info)) { const r = outReasonOf(info, p.id); n.set(r, (n.get(r) || 0) + 1); }
+  for (const p of exOutPeople(people, info)) { const r = outReasonOf(info, p.id); n.set(r, (n.get(r) || 0) + 1); }
   return [...n].sort((a, b) => Number(a[0] === AUTO_KEY) - Number(b[0] === AUTO_KEY) || b[1] - a[1] || a[0].localeCompare(b[0]));
 }
 // «Σκοπός 3ης (α) 15:45–18:15»: το νούμερο που τρέχει· στη μέρα όλα τα νούμερα του ιδιοκτήτη (στο «της θέσης» από την πρώτη έξοδο ως την τελευταία είσοδο)
+export const armHours = (rows: ArmRow[]): string => (rows[0].mode === 'post' ? armWhen({ out: rows[0].out, in: rows[rows.length - 1].in }) : rows.map(armWhen).join(', '));
 export function armTxt(rows: ArmRow[]): string {
-  const r = rows[0];
-  return r.label + ' ' + (r.mode === 'post' ? armWhen({ out: r.out, in: rows[rows.length - 1].in }) : rows.map(armWhen).join(', '));
+  return rows[0].label + ' ' + armHours(rows);
 }
+// ΑΠΩΝ: «ΥΠΗΡΕΣΙΑ ΦΥΛΑΚΙΟ ΠΟΤΑΜΟΥ 14:00–14:00» (το όνομα της υπηρεσίας, όχι της θέσης), ίδιες ώρες με το ΕΚΤΟΣ
+export const awayTxt = (rows: ArmRow[]): string => 'ΥΠΗΡΕΣΙΑ ' + upper(rows[0].away || rows[0].label) + ' ' + armHours(rows);
 // Ένοπλες υπηρεσίες: με now («ΩΩ:ΛΛ», η d είναι σήμερα) όσοι είναι εκτός αυτή τη στιγμή· χωρίς, όσοι έχουν νούμερο τη μέρα d
 function armInfo(st: ArmState, d: ISODate, now?: string): ArmInfo {
   if (now) return { live: true, ...armedLive(st, d, now) };
@@ -107,10 +118,12 @@ export function weaponInfo(s: Pick<AppState, 'people' | 'settings'> & Partial<Pi
     const k = weaponKey(p.weapon); if (k) push(holders, k, p);
   }
   const arm = d ? armInfo({ guards: s.guards || {}, dutyLog: s.dutyLog || {}, settings: s.settings, rules: s.rules, dutyFix: s.dutyFix }, d, now) : NO_ARM;
-  const out = new Map<number, string>();
-  if (arm.live) arm.cur.forEach((r, pid) => out.set(pid, armTxt([r])));
-  else { const by = new Map<number, ArmRow[]>(); for (const r of arm.rows) { const l = by.get(r.owner); if (l) l.push(r); else by.set(r.owner, [r]); } by.forEach((l, pid) => out.set(pid, armTxt(l))); }
-  return { unarmed, holders, racks, out, moves: openMoves(s.weaponLog), repair: repairOf(s), arm };
+  const out = new Map<number, string>(), away = new Map<number, string>(), awayName = new Map<number, string>();
+  // γραμμή σε υπηρεσία εκτός στρατοπέδου (ArmRow.away) = ΑΠΩΝ, όχι ΕΚΤΟΣ· αν ο ιδιοκτήτης έχει και τα δύο, νικά το ΑΠΩΝ
+  const put = (pid: number, l: ArmRow[]) => { const a = l.filter(r => r.away); if (a.length) { away.set(pid, awayTxt(a)); awayName.set(pid, upper(a[0].away!)); out.delete(pid); } else if (!away.has(pid)) out.set(pid, armTxt(l)); };
+  if (arm.live) arm.cur.forEach((r, pid) => put(pid, [r]));
+  else { const by = new Map<number, ArmRow[]>(); for (const r of arm.rows) { const l = by.get(r.owner); if (l) l.push(r); else by.set(r.owner, [r]); } by.forEach((l, pid) => put(pid, l)); }
+  return { unarmed, holders, racks, away, awayName, out, moves: openMoves(s.weaponLog), repair: repairOf(s), arm };
 }
 // Όπλα του Μητρώου «Προς επισκευή» ή σε «Ακινησία» (όχι διαγραμμένα): δεν είναι στον οπλοβαστό. Μόνο κατηγορίες όπλων (όχι υλικό/οχήματα)
 const WEAPON_CATS = ['tyfekia', 'pistolia', 'polyvola', 'antiarm', 'pyrovola'];
@@ -127,7 +140,7 @@ export const sameRack = (info: WeaponInfo, p: Pick<Person, 'id' | 'rack' | 'wpos
   (info.racks.get(seatKey(rack, wpos)) || []).filter(x => x.id !== p.id);
 // «ΕΝΤΟΣ» ή «ΕΚΤΟΣ: ΣΚΟΠΟΣ …»· κενό για όποιον δεν έχει όπλο ούτε ένοπλη υπηρεσία
 // Πρώτα η έξοδος με λόγο (ΕΚΠ…), μετά η ένοπλη υπηρεσία
-export const inOutText = (p: Person, info: WeaponInfo) => (info.moves.has(p.id) ? 'ΕΚΤΟΣ: ' + moveOutTxt(info.moves.get(p.id)!) : info.repair.has(p.id) ? 'ΕΚΤΟΣ: ' + info.repair.get(p.id) : info.out.has(p.id) ? 'ΕΚΤΟΣ: ' + info.out.get(p.id) : weaponKey(p.weapon) && p.active ? 'ΕΝΤΟΣ' : '');
+export const inOutText = (p: Person, info: WeaponInfo) => (info.moves.has(p.id) ? 'ΕΚΤΟΣ: ' + moveOutTxt(info.moves.get(p.id)!) : info.repair.has(p.id) ? 'ΕΚΤΟΣ: ' + info.repair.get(p.id) : info.away.has(p.id) ? 'ΑΠΩΝ: ' + info.away.get(p.id) : info.out.has(p.id) ? 'ΕΚΤΟΣ: ' + info.out.get(p.id) : weaponKey(p.weapon) && p.active ? 'ΕΝΤΟΣ' : '');
 // Οι άλλοι που έχουν τον ίδιο αριθμό
 export const sameWeapon = (info: WeaponInfo, p: Pick<Person, 'id' | 'weapon'>, weapon = p.weapon) =>
   (info.holders.get(weaponKey(weapon)) || []).filter(x => x.id !== p.id);
@@ -138,7 +151,8 @@ export function weaponMatch(f: WeaponFilter, p: Person, info: WeaponInfo): boole
   if (!p.active) return false;
   if (f === 'all') return true;
   if (f === 'with') return has;
-  if (f === 'out') return isOut(info, p.id);
+  if (f === 'out') return isOut(info, p.id) && !isAbsent(info, p.id);
+  if (f === 'away') return isAbsent(info, p.id);
   if (f === 'without') return !has && !info.unarmed.has(p.id);
   if (f === 'unarmed') return has && info.unarmed.has(p.id);
   return (has && sameWeapon(info, p).length > 0) || (!!rackKey(p.rack) && sameRack(info, p).length > 0);
@@ -150,7 +164,7 @@ export const W_NUM = WEAPON_COLS.indexOf('ΑΡΙΘΜΟΣ ΟΠΛΟΥ');
 export interface WeaponSheet { name: string; title: string; head: string[]; rows: (string | number)[][]; note: string }
 export function weaponSheets(s: AppState, d: ISODate): WeaponSheet[] {
   const info = weaponInfo(s, d); const lists = s.settings.lists; const people = [...s.people].sort(byRoomName);
-  return WEAPON_FILTERS.map(([f, , name, note], i) => {
+  return WEAPON_FILTERS.filter(([f]) => f !== 'away' || people.some(p => weaponMatch(f, p, info))).map(([f, , name, note], i) => {
     const rows = people.filter(p => weaponMatch(f, p, info)).map((p, j) => [j + 1, rankTxt(p), p.spec, p.last, p.first, p.father, p.asm, p.room ?? '', p.si ? siOf(p, lists).text : '', p.wtype || '', normWeapon(p.weapon), normRack(p.rack), normPos(p.wpos), inOutText(p, info)]);
     if (f === 'dup') rows.sort((a, b) => weaponKey(a[W_NUM]).localeCompare(weaponKey(b[W_NUM])) || 0).forEach((r, j) => { r[0] = j + 1; });
     return { name, title: name + ' ' + dmy(d), head: i === 0 ? [...WEAPON_COLS, 'ΥΠΟΓΡΑΦΗ'] : WEAPON_COLS, rows: i === 0 ? rows.map(r => [...r, '']) : rows, note };

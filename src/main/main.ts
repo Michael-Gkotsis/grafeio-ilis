@@ -8,7 +8,7 @@ import { addImage, copyImages, readImage } from './eikones';
 import { copyDurable, dataDirOf, ownBinding, ownOsDir, writeAll, writeJson, freeName, isLocked, ChangedError, LockedError } from './files';
 import { preflight, hasErrors } from '../shared/preflight';
 import { apply, rosterChanges, type Command } from '../shared/commands';
-import { assetView, ASSET_FILTER_IDS, type AssetFilter } from '../shared/assets';
+import { assetView, registry, ASSET_FILTER_IDS, type AssetFilter } from '../shared/assets';
 import { dm, dow, nowHM, nowParts, pskDays, today, type ISODate } from '../shared/dates';
 import { Workbook, mergeFirstSheets, mergeSheets, sheetSafe } from './xlsx';
 import { zipHash } from './ziphash';
@@ -1170,7 +1170,7 @@ else {
     ipcMain.handle('export:assets', async (_e, print?: boolean, view?: { cat?: string; filter?: string; q?: string }) => {
       try {
         const v = view && typeof view === 'object' ? view : {}; const d = today();
-        const rows = assetView(store.state, { cat: typeof v.cat === 'string' && v.cat ? v.cat : undefined, filter: ASSET_FILTER_IDS.includes(v.filter as AssetFilter) ? v.filter as AssetFilter : 'all', q: typeof v.q === 'string' ? v.q : '' }, d);
+        const rows = assetView(store.state, { cat: typeof v.cat === 'string' && v.cat ? v.cat : undefined, filter: ASSET_FILTER_IDS.includes(v.filter as AssetFilter) ? v.filter as AssetFilter : 'all', q: typeof v.q === 'string' ? v.q : '' }, d, registry(store.state, { day: d, hm: nowHM() }));
         const r = await excel().assetBook(store.state, rows, d);
         const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
         const warnings: string[] = [];

@@ -17,8 +17,8 @@ import type { Sig } from '../../shared/sigs';
 import { fullName, plainName, platoonsOf, platoonShort, shortName, unitOf, type Person } from '../../shared/domain';
 import { siOf, siShort } from '../../shared/si';
 import { byRoomName } from '../../shared/rosterLists';
-import { personMatch, statusHint } from '../../shared/weaponView';
-import { AUTO_KEY, WEAPON_FILTERS, bySeat, canOut, dutyPicks, idRange, isOut, noSeat, normPos, normRack, normWeapon, outPeople, outReasonOf, outReasons as byReason, posKey, outSplit, rackKey, redoGroups, sameRack, scanFind, seatTxt, skipTxt, sameWeapon, weaponInfo, weaponKey, weaponMatch, type WeaponFilter, type WeaponInfo } from '../../shared/weapons';
+import { outHeadTxt, personMatch, statusHint } from '../../shared/weaponView';
+import { AUTO_KEY, WEAPON_FILTERS, bySeat, canOut, dutyPicks, idRange, isOut, noSeat, normPos, normRack, normWeapon, awayPeople, outPeople, outReasonOf, outReasons as byReason, posKey, outSplit, rackKey, redoGroups, sameRack, scanFind, seatTxt, skipTxt, sameWeapon, weaponInfo, weaponKey, weaponMatch, type WeaponFilter, type WeaponInfo } from '../../shared/weapons';
 import type { WeaponChange } from '../../shared/commands';
 import { live as liveSts, listOf, rankTxt } from '../../shared/ranks';
 import { collator } from '../../shared/text';
@@ -93,7 +93,7 @@ function notes(p: Person, info: WeaponInfo, lists: P, pm: Map<number, Person>, s
   if (noSeat(p)) out.push({ tone: 'warn', text: 'Χωρίς θέση', tip: 'Έχει οπλοβαστό (' + normRack(p.rack) + ') αλλά όχι θέση: γράψε τη Θέση' });
   // ένοπλη υπηρεσία χωρίς όπλο: και πριν ξεκινήσει το νούμερο, για να προλάβει να του δοθεί (Michael, 24/10)
   const soon = info.arm.next.get(p.id);
-  if (!has && p.active && (isOut(info, p.id) || soon)) out.push({ tone: 'bad', text: 'Ένοπλη χωρίς όπλο', tip: 'Ένοπλη υπηρεσία (' + (info.out.get(p.id) || soon!.label + ' ' + armWhen(soon!)) + ') χωρίς αριθμό όπλου' });
+  if (!has && p.active && (isOut(info, p.id) || soon)) out.push({ tone: 'bad', text: 'Ένοπλη χωρίς όπλο', tip: 'Ένοπλη υπηρεσία (' + (info.out.get(p.id) || info.away.get(p.id) || soon!.label + ' ' + armWhen(soon!)) + ') χωρίς αριθμό όπλου' });
   const hold = info.arm.holding.get(p.id);
   if (hold) out.push({ tone: 'info', text: 'Κρατά όπλο θέσης', tip: 'Κρατά το όπλο της θέσης (' + hold.label + ') του ' + (pm.get(hold.owner) ? rkShort(pm.get(hold.owner)!) : '—') + ' ως τις ' + hmOf(hold.in) });
   // «αυτόματα»: εκτός λόγω ένοπλης υπηρεσίας (ξεχωρίζει από τον χειροκίνητο λόγο ΥΠΗΡΕΣΙΑ), δεν μετρά στο «⚠ n»
@@ -196,6 +196,7 @@ export function WeaponsScreen() {
   // Κεφαλίδα, chip «Εκτός οπλοβαστού» και καρτέλα «Κινήσεις» μετράνε τους ίδιους: κινήσεις και ένοπλες υπηρεσίες, μία φορά ο καθένας
   const armPpl = useMemo(() => [...state.people, ...cadreSeats(state)], [state.people, state.cadreList]);   // εκτός τώρα: και στελέχη σε ένοπλη υπηρεσία (Κινήσεις)
   const outN = useMemo(() => outPeople(armPpl, info).length, [armPpl, info]);
+  const awayN = useMemo(() => awayPeople(armPpl, info).length, [armPpl, info]);   // υπηρεσία εκτός στρατοπέδου: ΑΠΩΝ, μέρος του outN
   const reasons = useMemo(() => byReason(armPpl, info), [armPpl, info]);
   const selP = state.people.filter(p => sel.has(p.id));
   const sp = outSplit(selP, info); const selIn = sp.go;   // όσοι από τους τσεκαρισμένους μπορούν να βγουν
@@ -294,10 +295,10 @@ export function WeaponsScreen() {
   // Τύπος σε όλους όσους φαίνονται και έχουν αριθμό όπλου αλλά όχι τύπο
   const noType = rows.filter(p => p.active && weaponKey(p.weapon) && !p.wtype);
   const typeAll = (t: string) => { if (t && noType.length) save(noType.map(p => ({ pid: p.id, wtype: t })), { what: 'τύπος ' + t, msg: 'Τύπος ' + t + ' σε ' + noType.length + (noType.length === 1 ? ' άτομο' : ' άτομα') + ' χωρίς τύπο' }); };
-  const empty = { all: 'Δεν υπάρχει κανείς σε δύναμη.', with: 'Κανείς δεν έχει ακόμα όπλο.', out: 'Κανείς δεν είναι εκτός οπλοβαστού ' + (date === today ? 'τώρα' : dm(date)) + '.', without: 'Όλοι οι ένοπλοι έχουν όπλο.', unarmed: 'Κανένας άοπλος δεν έχει όπλο.', dup: 'Κανένας αριθμός δεν είναι σε δύο.', return: 'Όλοι οι εκτός δύναμης παρέδωσαν το όπλο τους.' }[filter];
+  const empty = { all: 'Δεν υπάρχει κανείς σε δύναμη.', with: 'Κανείς δεν έχει ακόμα όπλο.', out: 'Κανείς δεν είναι εκτός οπλοβαστού ' + (date === today ? 'τώρα' : dm(date)) + '.', away: 'Κανένα όπλο δεν είναι απόν ' + (date === today ? 'τώρα' : dm(date)) + '.', without: 'Όλοι οι ένοπλοι έχουν όπλο.', unarmed: 'Κανένας άοπλος δεν έχει όπλο.', dup: 'Κανένας αριθμός δεν είναι σε δύο.', return: 'Όλοι οι εκτός δύναμης παρέδωσαν το όπλο τους.' }[filter];
 
   return html`<div>
-    <${PageHeader} title="Οπλισμός" quote="«Το θέμα είναι ο οπλισμός» - Λοχαγός Μ. Γ' ΕΣΣΟ 2026" sub=${'Με όπλο ' + armedN + ' από ' + total + ' σε δύναμη, εκτός οπλοβαστού ' + (date === today ? 'τώρα' : dow(date) + ' ' + dm(date)) + ' ' + outN + '. Πάτα ΕΚΤΟΣ ή ΕΝΤΟΣ στη γραμμή.'}>
+    <${PageHeader} title="Οπλισμός" quote="«Το θέμα είναι ο οπλισμός» - Λοχαγός Μ. Γ' ΕΣΣΟ 2026" sub=${'Με όπλο ' + armedN + ' από ' + total + ' σε δύναμη, εκτός οπλοβαστού ' + (date === today ? 'τώρα' : dow(date) + ' ' + dm(date)) + ' ' + outHeadTxt(outN, awayN) + '. Πάτα ΕΚΤΟΣ ή ΕΝΤΟΣ στη γραμμή.'}>
       <div className="page-head__acts weapons__acts"><${DateBar} value=${date} onChange=${(d: string) => nav.set({ wdate: d === today ? null : d })} days=${[today, tomorrow]}/>
       ${hp.node}
       <${Button} variant="outline" disabled=${xl} onClick=${() => exportXl(false)} data-tip="Κατάσταση οπλισμού με στήλη υπογραφής, και ένα φύλλο για κάθε φίλτρο (χωρίς όπλο, άοπλοι με όπλο, ίδιος αριθμός, να παραδώσουν)">${xl ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>

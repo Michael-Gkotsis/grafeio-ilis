@@ -82,3 +82,6 @@ export function stayOutByDuty(s: ArmState, pid: number, day: ISODate, hm: string
 // Όσοι έχουν το όπλο εκτός (κινήσεις και ένοπλες υπηρεσίες, μία φορά ο καθένας): όσοι μετράει η κεφαλίδα του Οπλισμού
 export const outCountOn = (s: Pick<AppState, 'people' | 'settings'> & Partial<Pick<AppState, 'guards' | 'dutyLog' | 'weaponLog' | 'rules' | 'dutyFix' | 'cadreList'>>, d: ISODate, hm?: string) => outPeople([...s.people, ...(s.cadreList ? [...armMap(s).values()].filter(p => p.cid) : [])], weaponInfo(s, d, hm)).length;
 
+
+// Κεφαλίδα του Οπλισμού: «7» ή, με υπηρεσία εκτός στρατοπέδου, «9, εκ των οποίων 2 απόντα» (τα απόντα μετρούν και στα εκτός)
+export const outHeadTxt = (out: number, away: number) => String(out) + (away > 0 ? ', εκ των οποίων ' + away + ' απόντα' : '');

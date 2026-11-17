@@ -7,7 +7,8 @@ import { addDays, dmy, type ISODate } from './dates';
 import type { AppState, Asset, AssetCat, AssetCfg, AssetEvent, AssetHolder, PlaceWord, Settings } from './domain';
 import { listOf, rankTxt } from './ranks';
 import { normGreek, upper } from './text';
-import { normPos, normRack, normWeapon, seatTxt, weaponKey } from './weapons';
+import { normPos, normRack, normWeapon, seatTxt, weaponInfo, weaponKey, armMap } from './weapons';
+import { hasSvcAway } from './rules';
 
 export const ASSET_WARN_DAYS = 30;
 // Οι προεπιλεγμένες κατηγορίες: τα id μένουν σταθερά (τα χρησιμοποιούν οι εγγραφές)
@@ -125,6 +126,7 @@ export interface AssetRow {
   stored: boolean;                             // υπάρχει ως εγγραφή στο s.assets
   link?: Extract<AssetHolder, { k: 'person' | 'cadre' }>;                          // είναι το κύριο όπλο αυτού του ατόμου/στελέχους (από το Δυναμολόγιο)
   cat: AssetCat | undefined;
+  away?: string;                               // ΑΠΩΝ: το όνομα της υπηρεσίας εκτός στρατοπέδου που το έχει τώρα μαζί της (κύριο όπλο, registry με live)
 }
 interface Primary { h: Extract<AssetHolder, { k: 'person' | 'cadre' }>; no: string; type: string; rack: string; wpos: string; active: boolean }
 // Τα κύρια όπλα όσων έχουν αριθμό (και όσων βγήκαν εκτός δύναμης και δεν παρέδωσαν)
@@ -135,7 +137,11 @@ export function primaryWeapons(s: Pick<AppState, 'people' | 'cadreList'>): Prima
   return out;
 }
 const clean = <T extends object>(o: T): T => { for (const k of Object.keys(o) as (keyof T)[]) if (o[k] === undefined) delete o[k]; return o; };
-export function registry(s: Pick<AppState, 'people' | 'cadreList' | 'assets' | 'settings'>): AssetRow[] {
+// Η θέση όπως φαίνεται στο μητρώο: «ΑΠΩΝ (ΦΥΛΑΚΙΟ ΠΟΤΑΜΟΥ)» όσο το όπλο είναι σε υπηρεσία εκτός στρατοπέδου, αλλιώς οπλοβαστός/θέση
+export const rowPlace = (cfg: Pick<AssetCfg, 'places'>, r: Pick<AssetRow, 'a' | 'away'>): string => (r.away ? 'ΑΠΩΝ (' + r.away + ')' : placeText(cfg, r.a));
+// live: η μέρα και η ώρα που κρίνονται οι ένοπλες υπηρεσίες (σήμερα, τώρα)· χωρίς αυτό δεν μπαίνει ΑΠΩΝ πουθενά
+export type RegistryState = Pick<AppState, 'people' | 'cadreList' | 'assets' | 'settings'> & Partial<Pick<AppState, 'guards' | 'dutyLog' | 'weaponLog' | 'rules' | 'dutyFix'>>;
+export function registry(s: RegistryState, live?: { day: ISODate; hm: string }): AssetRow[] {
   const cfg = assetCfgOf(s.settings); const prim = primaryWeapons(s);
   const byKey = new Map<string, Primary>();
   for (const x of prim) { const k = weaponKey(x.no); const o = byKey.get(k); if (!o || (!o.active && x.active)) byKey.set(k, x); }
@@ -153,6 +159,13 @@ export function registry(s: Pick<AppState, 'people' | 'cadreList' | 'assets' | '
     if (seen.has(weaponKey(x.no))) continue;
     const c = catOfType(cfg, x.type); const id = x.h.k === 'person' ? 'v:p:' + x.h.pid : 'v:c:' + x.h.cid;
     rows.push({ key: id, a: clean({ id, cat: c.id, type: x.type, no: x.no, holder: x.h, rack: x.rack || undefined, wpos: x.wpos || undefined, state: 'ok' as const }), stored: false, link: x.h, cat: c });
+  }
+  if (live && hasSvcAway(s.settings)) {
+    const info = weaponInfo(s, live.day, live.hm); const seat = new Map<string, number>(); armMap(s as AppState).forEach((p, id) => { if (p.cid) seat.set(p.cid, id); });
+    for (const r of rows) {
+      const h = r.link; const pid = h ? (h.k === 'person' ? h.pid : seat.get(h.cid)) : undefined;
+      const nm = pid != null ? info.awayName.get(pid) : undefined; if (nm) r.away = nm;
+    }
   }
   const order = new Map(cfg.cats.map((c, i) => [c.id, i]));
   return rows.sort((x, y) => (order.get(x.a.cat) ?? 99) - (order.get(y.a.cat) ?? 99));   // με τη σειρά των κατηγοριών (σταθερή ταξινόμηση)
@@ -238,34 +251,37 @@ export function assetSheets(s: Pick<AppState, 'people' | 'cadreList' | 'assets' 
     const l = sortRows(wk.filter(r => normGreek(r.a.type) === normGreek(t))); const fx = extras(l); const name = t ? upper(t) : 'ΧΩΡΙΣ ΤΥΠΟ';
     const head = ['Α/Α', 'ΒΑΘΜΟΣ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΤΥΠΟΣ ΟΠΛΟΥ', 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ', 'ΘΕΣΗ', 'ΚΑΤΑΣΤΑΣΗ', 'ΤΕΛ. ΣΥΝΤΗΡΗΣΗ', 'ΕΠΟΜ. ΣΥΝΤΗΡΗΣΗ', ...fx.map(x => upper(x.name)), 'ΠΑΡΑΤΗΡΗΣΕΙΣ'];
     out.push({ name: uniq(name), title: 'ΜΗΤΡΩΟ ΟΠΛΙΣΜΟΥ ' + name + ' ' + dmy(d), head, kind: 'weapon', note: 'ΤΑ ΑΧΡΕΩΤΑ ΦΑΙΝΟΝΤΑΙ ΩΣ «ΑΧΡΕΩΤΟ»',
-      rows: l.map((r, j) => { const [rk, nm] = holderXl(s, r.a.holder); return [j + 1, rk, nm, upper(r.a.type), upper(r.a.no), upper(placeText(cfg, r.a)), stateXl(r.a), ...maintCells(r.a), ...fx.map(x => upper(r.a.extra?.[x.id] || '')), upper([r.a.acc && 'ΠΑΡΕΛΚΟΜΕΝΑ: ' + r.a.acc, r.a.why && 'ΛΟΓΟΣ: ' + r.a.why, r.a.note].filter(Boolean).join(' · '))]; }) });
+      rows: l.map((r, j) => { const [rk, nm] = holderXl(s, r.a.holder); return [j + 1, rk, nm, upper(r.a.type), upper(r.a.no), upper(rowPlace(cfg, r)), stateXl(r.a), ...maintCells(r.a), ...fx.map(x => upper(r.a.extra?.[x.id] || '')), upper([r.a.acc && 'ΠΑΡΕΛΚΟΜΕΝΑ: ' + r.a.acc, r.a.why && 'ΛΟΓΟΣ: ' + r.a.why, r.a.note].filter(Boolean).join(' · '))]; }) });
   }
   for (const c of cfg.cats) {
     if (c.kind !== 'material') continue; const l = sortRows(mat.filter(r => r.a.cat === c.id)); if (!l.length) continue;
     const fx = extras(l);
     const head = ['Α/Α', 'ΤΥΠΟΣ', 'ΑΡΙΘΜΟΣ', 'ΠΟΣΟΤΗΤΑ', 'ΒΑΘΜΟΣ', 'ΧΡΕΩΜΕΝΟ ΣΕ', 'ΘΕΣΗ', 'ΚΑΤΑΣΤΑΣΗ', 'ΤΕΛ. ΣΥΝΤΗΡΗΣΗ', 'ΕΠΟΜ. ΣΥΝΤΗΡΗΣΗ', ...fx.map(x => upper(x.name)), 'ΠΑΡΑΤΗΡΗΣΕΙΣ'];
     out.push({ name: uniq(c.name), title: 'ΜΗΤΡΩΟ ΥΛΙΚΟΥ ' + upper(c.name) + ' ' + dmy(d), head, kind: 'material', note: 'ΤΑ ΑΧΡΕΩΤΑ ΦΑΙΝΟΝΤΑΙ ΩΣ «ΑΧΡΕΩΤΟ»',
-      rows: l.map((r, j) => { const [rk, nm] = holderXl(s, r.a.holder); return [j + 1, upper(r.a.type), upper(r.a.no), r.a.qty || 1, rk, nm, upper(placeText(cfg, r.a)), stateXl(r.a), ...maintCells(r.a), ...fx.map(x => upper(r.a.extra?.[x.id] || '')), upper([r.a.acc && 'ΠΑΡΕΛΚΟΜΕΝΑ: ' + r.a.acc, r.a.why && 'ΛΟΓΟΣ: ' + r.a.why, r.a.note].filter(Boolean).join(' · '))]; }) });
+      rows: l.map((r, j) => { const [rk, nm] = holderXl(s, r.a.holder); return [j + 1, upper(r.a.type), upper(r.a.no), r.a.qty || 1, rk, nm, upper(rowPlace(cfg, r)), stateXl(r.a), ...maintCells(r.a), ...fx.map(x => upper(r.a.extra?.[x.id] || '')), upper([r.a.acc && 'ΠΑΡΕΛΚΟΜΕΝΑ: ' + r.a.acc, r.a.why && 'ΛΟΓΟΣ: ' + r.a.why, r.a.note].filter(Boolean).join(' · '))]; }) });
   }
   out.push(totalsSheet(rows, cfg, d, uniq('ΣΥΝΟΛΑ')));
   return out;
 }
 // Σύνολα ανά κατηγορία και τύπο: σύνολο, χρεωμένα (σε στρατιώτη/στέλεχος), αχρέωτα, σε άλλον, επισκευή, διαγραφή. Το υλικό μετρά με την ποσότητά του
 export function totalsSheet(rows: AssetRow[], cfg: AssetCfg, d: ISODate, name = 'ΣΥΝΟΛΑ'): AssetSheet {
-  const head = ['ΚΑΤΗΓΟΡΙΑ', 'ΤΥΠΟΣ', 'ΣΥΝΟΛΟ', 'ΧΡΕΩΜΕΝΑ', 'ΑΧΡΕΩΤΑ', 'ΣΕ ΑΛΛΟΝ', 'ΕΠΙΣΚΕΥΗ', 'ΔΙΑΓΡΑΦΗ'];
-  const body: (string | number)[][] = []; const tot = [0, 0, 0, 0, 0, 0];
+  // ΑΠΟΝΤΑ: από τα χρεωμένα, όσα είναι τώρα μαζί με υπηρεσία εκτός στρατοπέδου (μόνο όταν υπάρχει έστω ένα)
+  const av = rows.some(r => r.away);
+  const head = ['ΚΑΤΗΓΟΡΙΑ', 'ΤΥΠΟΣ', 'ΣΥΝΟΛΟ', 'ΧΡΕΩΜΕΝΑ', ...(av ? ['ΑΠΟΝΤΑ'] : []), 'ΑΧΡΕΩΤΑ', 'ΣΕ ΑΛΛΟΝ', 'ΕΠΙΣΚΕΥΗ', 'ΔΙΑΓΡΑΦΗ'];
+  const body: (string | number)[][] = []; const tot = [0, 0, 0, 0, 0, 0, 0];
   const count = (l: AssetRow[]) => {
-    const n = [0, 0, 0, 0, 0, 0];
-    for (const r of l) { const q = r.a.qty || 1; const k = r.a.holder?.k; n[0] += q; if (k === 'person' || k === 'cadre') n[1] += q; else if (!k) n[2] += q; else n[3] += q; if (r.a.state === 'repair' || r.a.state === 'immobile') n[4] += q; if (r.a.state === 'writeoff') n[5] += q; }
+    const n = [0, 0, 0, 0, 0, 0, 0];
+    for (const r of l) { const q = r.a.qty || 1; const k = r.a.holder?.k; n[0] += q; if (k === 'person' || k === 'cadre') n[1] += q; else if (!k) n[2] += q; else n[3] += q; if (r.a.state === 'repair' || r.a.state === 'immobile') n[4] += q; if (r.a.state === 'writeoff') n[5] += q; if (r.away) n[6] += q; }
     return n;
   };
+  const cells = (n: number[]) => (av ? [n[0], n[1], n[6], n[2], n[3], n[4], n[5]] : n.slice(0, 6));
   for (const c of cfg.cats) {
     if (c.kind === 'vehicle') continue; const l = rows.filter(r => r.a.cat === c.id); if (!l.length) continue;
     const ts: string[] = []; for (const r of l) { const t = r.a.type; if (!ts.some(x => normGreek(x) === normGreek(t))) ts.push(t); }
     ts.sort((x, y) => collator.compare(x, y));
-    for (const t of ts) { const n = count(l.filter(r => normGreek(r.a.type) === normGreek(t))); n.forEach((v, i) => { tot[i] += v; }); body.push([upper(c.name), upper(t) || '—', ...n]); }
+    for (const t of ts) { const n = count(l.filter(r => normGreek(r.a.type) === normGreek(t))); n.forEach((v, i) => { tot[i] += v; }); body.push([upper(c.name), upper(t) || '—', ...cells(n)]); }
   }
-  body.push(['ΓΕΝΙΚΟ ΣΥΝΟΛΟ', '', ...tot]);
+  body.push(['ΓΕΝΙΚΟ ΣΥΝΟΛΟ', '', ...cells(tot)]);
   return { name, title: 'ΣΥΝΟΛΑ ΟΠΛΙΣΜΟΥ ΚΑΙ ΥΛΙΚΟΥ ' + dmy(d), head, rows: body, kind: 'totals', note: 'ΤΟ ΥΛΙΚΟ ΜΕΤΡΑ ΜΕ ΤΗΝ ΠΟΣΟΤΗΤΑ ΤΟΥ· ΣΕ ΑΛΛΟΝ: ΑΛΛΗ ΜΟΝΑΔΑ Ή ΦΥΣΙΚΟ ΠΡΟΣΩΠΟ' };
 }
 

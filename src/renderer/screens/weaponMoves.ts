@@ -363,7 +363,7 @@ function InPop({ p, m, anchor, onClose, onEdit }: P) {
 export function WeaponState({ p, info, pm }: P) {
   const { state, today } = useStore(); const lists = state.settings.lists;
   const ref = useRef<HTMLDivElement>(null); const [open, setOpen] = useState(false); const [edit, setEdit] = useState<WeaponMove | null>(null); const [fix, setFix] = useState<ArmRow | null>(null);
-  const m: WeaponMove | undefined = info.moves.get(p.id); const duty: string | undefined = info.out.get(p.id);
+  const m: WeaponMove | undefined = info.moves.get(p.id); const duty: string | undefined = info.out.get(p.id) ?? info.away.get(p.id); const absent = !m && info.away.has(p.id);   // ΑΠΩΝ: υπηρεσία εκτός στρατοπέδου
   const arm: ArmInfo = info.arm; const has = !!p.weapon;
   const cur = arm.cur.get(p.id); const day = !arm.live && duty ? arm.rows.filter((r: ArmRow) => r.owner === p.id) : [];   // τρέχον νούμερο, ή όλα της μέρας
   const nxt = arm.next.get(p.id), prv = arm.prev.get(p.id), hold = arm.holding.get(p.id);
@@ -384,7 +384,7 @@ export function WeaponState({ p, info, pm }: P) {
   return html`<div className=${cx('wstate', out && 'is-out', auto && 'is-auto')}>
     <div className="wstate__row"><div ref=${ref} className="wstate__sw" role="group" aria-label=${'Κατάσταση όπλου ' + p.weapon}>
       <button type="button" aria-pressed=${!out} disabled=${auto} onClick=${() => click(false)} data-tip=${out && !auto ? 'Μπαίνει στον οπλοβαστό: ώρα και λόγος εισαγωγής' : undefined}>ΕΝΤΟΣ</button>
-      <button type="button" aria-pressed=${out} disabled=${auto} onClick=${() => click(true)} data-tip=${!out ? 'Βγαίνει από τον οπλοβαστό: ώρα και λόγος' : undefined}>ΕΚΤΟΣ</button>
+      <button type="button" aria-pressed=${out} disabled=${auto} onClick=${() => click(true)} data-tip=${!out ? 'Βγαίνει από τον οπλοβαστό: ώρα και λόγος' : absent ? 'Σε υπηρεσία εκτός στρατοπέδου: το όπλο μετρά ΑΠΩΝ' : undefined}>${absent ? 'ΑΠΩΝ' : 'ΕΚΤΟΣ'}</button>
     </div>${auto && first && (canFix ? html`<button type="button" className="wstate__fix" onClick=${() => setFix(cur || day[0])} aria-label=${'Διόρθωση…: ' + first.reason} data-tip="Διόρθωση…: άλλαξε την ώρα εξόδου ή εισόδου αυτού του νούμερου, με λόγο">${times} ✎</button>` : html`<span className="wstate__time" data-tip="Για να αλλάξει μία ώρα: Κινήσεις › Διόρθωση…">${times}</span>`)}</div>${why}
     ${open && (m ? html`<${InPop} p=${p} m=${m} anchor=${ref} onClose=${() => setOpen(false)} onEdit=${setEdit}/>` : html`<${OutPop} p=${p} anchor=${ref} onClose=${() => setOpen(false)}/>`)}
     ${edit && html`<${EditMoveDialog} m=${edit} onClose=${() => setEdit(null)}/>`}

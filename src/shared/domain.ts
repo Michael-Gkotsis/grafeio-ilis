@@ -282,14 +282,16 @@ export function shiftReport(start: string, list: ShiftOwn[], count: number): Shi
 export interface PostDef { k: string; label: string; short: string; rot?: number | null; grp?: number; hrs?: string; hidden?: boolean; code?: string }
 // armWeapon (Michael, 24/10): στις ένοπλες υπηρεσίες, «own» (προεπιλογή, χωρίς πεδίο) = κάθε άτομο βγάζει το δικό του όπλο στο νούμερό του·
 // «post» = ένα όπλο της θέσης, που περνά από χέρι σε χέρι στις αλλαγές (armed.ts)
-export interface BlockDef { id: string; kind: DutyKind; name: string; armed: boolean; posts: PostDef[]; custom?: boolean; hidden?: boolean; shift?: ShiftDef | null; armWeapon?: 'own' | 'post' }
+// hkCol (Michael, 17/11): η στήλη της ΗΚΑΙ όπου μετρούν όσοι είναι στην υπηρεσία (κλειδί από HK_K ή HK_A, ranks.ts svcColOf). Λείπει = όπως πάντα
+// (μαγειρεία 'mag', οι άλλες 'yp'). Στήλη απόντων = η υπηρεσία είναι εκτός στρατοπέδου: απόντες στην ΗΚΑΙ, στη Δύναμη και στο Σήμερα, και το όπλο ΑΠΩΝ
+export interface BlockDef { id: string; kind: DutyKind; name: string; armed: boolean; posts: PostDef[]; custom?: boolean; hidden?: boolean; shift?: ShiftDef | null; armWeapon?: 'own' | 'post'; hkCol?: string }
 // Έντυπο υπηρεσιών: ΣΒΕΝ, ΣΠΕΝ ή δικό σου (Michael, 22/10: «dropdown και λίστα»). Το δικό σου έχει δικές του
 // υπηρεσίες και βγαίνει στο Excel με το έντυπο της ΣΒΕΝ ή της ΣΠΕΝ (base), με το όνομά του.
 export type BasePhase = 'sven' | 'spen';
 export type Phase = string;
 export const PHASE_NAME: Record<BasePhase, string> = { sven: 'ΣΒΕΝ', spen: 'ΣΠΕΝ' };
 export interface PhaseDef { id: string; name: string; base: BasePhase; blocks: BlockDef[] }
-export interface Post extends PostDef { block: string; kind: DutyKind; armed: boolean; slots: string[] | null; hours: string; cyc?: number }
+export interface Post extends PostDef { block: string; kind: DutyKind; armed: boolean; slots: string[] | null; hours: string; cyc?: number; hkCol?: string }
 
 // Προεπιλογή = το πραγματικό έντυπο «ΦΡΟΥΡΑ ΣΒΕΝ» (δείγμα 01): Λ/Υ, Δ/Υ, 2 μπλοκ θαλαμοφυλάκων 4×3, μαγειρεία ×5.
 // Ποιες θέσεις είναι ένοπλες θέλει επιβεβαίωση από τον λοχία: ρυθμίζεται.
@@ -401,7 +403,7 @@ export function buildPosts(blocks: BlockDef[], start: string = DEFAULT_DUTY_STAR
       const mine = sl ? sl[groups.indexOf(groupKey(p))] : undefined;
       const slots = sl ? (sh!.list?.length && !mine?.length ? null : mine || null) : p.rot != null ? def[p.rot] : null;
       const hrs = p.hrs === '14:00 → 14:00' ? start + ' → ' + start : p.hrs;   // Λ/Υ, Δ/Υ: όλος ο κύκλος
-      return { ...p, ...(hrs !== p.hrs ? { hrs } : {}), block: b.id, kind: b.kind, armed: b.armed, slots, hours: slots ? slots.join(' · ') : (hrs || ''), cyc: toMin(start) };
+      return { ...p, ...(hrs !== p.hrs ? { hrs } : {}), ...(b.hkCol ? { hkCol: b.hkCol } : {}), block: b.id, kind: b.kind, armed: b.armed, slots, hours: slots ? slots.join(' · ') : (hrs || ''), cyc: toMin(start) };
     });
   });
 }

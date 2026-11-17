@@ -7,7 +7,7 @@
 import { ADIK_IN, TYPES, TYPE_KEYS, kolColName, type AppState, type Person, type Status } from './domain';
 import { dm, type ISODate } from './dates';
 import { hasTimes } from './hours';
-import { activePeople, kolView, statusesAt, type KolRow } from './rules';
+import { activePeople, dutyColsOn, hasSvcAway, kolView, statusesAt, svcAwayOf, type KolRow } from './rules';
 import { leaveBack, outHeldBy, retLine, returnOf, type Ret } from './returns';
 import { isAway, leaveMode, statusLbl } from './ranks';
 import { collator, norm } from './text';
@@ -20,6 +20,8 @@ export interface SvCatView { cat: SvCat; label: string; n: number; groups: SvGro
 export interface StrengthView { date: ISODate; at: number; time: string; total: number; present: number; kol: number; absent: number; cats: Record<SvCat, SvCatView>; line: string }
 
 export const hhmm = (m: number) => String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+// υπηρεσία εκτός στρατοπέδου (BlockDef.hkCol σε στήλη απόντων): ξεχωριστή υποομάδα των απόντων
+export const SVC_AWAY_KEY = 'svc';
 const AWAY_LBL: Record<string, string> = { NOS: 'Νοσοκομείο', LEAVE: 'Άδειες', HON: 'Τιμητική άδεια', SICK: 'Αναρρωτικές', OUT: 'Εξοδούχοι', DN: 'ΔΝ', ...ADIK_IN };
 // υποομάδες των παρόντων, με τη σειρά που φαίνονται· ο καθένας μπαίνει στην πρώτη που ταιριάζει (σαν τη στήλη της ΗΚΑΙ)
 const PRESENT_SUBS: [string, string, string?][] = [
@@ -55,6 +57,7 @@ export function strengthView(s: AppState, date: ISODate, at: number): StrengthVi
   const away = new Map<string, { row: SvRow; key: string }[]>(), kolG = new Map<string, { label: string; rows: SvRow[] }>(), keepG = new Map<string, { label: string; rows: SvRow[] }>(), pres = new Map<string, SvRow[]>(), plLbl = new Map<string, string>();
   const push = <T>(m: Map<string, T[]>, k: string, v: T) => { const l = m.get(k); if (l) l.push(v); else m.set(k, [v]); };
   let total = 0, present = 0, kol = 0, absent = 0;
+  const svcRows: SvRow[] = [], dmap = dutyColsOn(s, date), awaySvc = hasSvcAway(s.settings);
   for (const p of activePeople(s)) {
     total++;
     const ss = statusesAt(s, p.id, date, at), a = ss.find(x => isAway(x, s.settings.lists));
@@ -75,11 +78,16 @@ export function strengthView(s: AppState, date: ISODate, at: number): StrengthVi
       g.rows.push({ p, what: step ? [STEP_LBL, m.st.note?.trim()].filter(Boolean).join(' · ') : lv ? what(s, m.st) : m.st.note?.trim() || 'Κωλυόμενος', tone: TYPES.KOL.tone, range: spanTxt(m.st), ret: '', retBad: false, tag: m.col ? kolColName(m.col) : undefined }); kolG.set(k, g);
       continue;
     }
+    if (awaySvc && svcAwayOf(s, ss, dmap.get(p.id), date, at)) {
+      absent++; const du = dutyAt(s, date, p.id);
+      svcRows.push({ p, what: du ? du.label + (du.time ? ' ' + du.time : '') : 'Υπηρεσία εκτός στρατοπέδου', tone: TYPES.KOL.tone, range: '', ret: '', retBad: false });
+      continue;
+    }
     present++;
     const duty = dutyAt(s, date, p.id), c = col.get(p.id), kp = keep.get(p.id);
     // άδεια δικού σου είδους «Πουθενά» (παρών): υποομάδα «Με <είδος>» πριν από τους υπόλοιπους (Michael, 3/11)
     const pl = ss.find(x => x.type === 'LEAVE' && leaveMode(x, s.settings.lists) === 'present');
-    const sub = kp ? 'keep' : c === 'yp' || c === 'mag' ? 'duty' : c === 'ey' ? 'ey' : c === 'tim' ? 'pun'
+    const sub = kp ? 'keep' : c === 'yp' || c === 'mag' || (c && c === dmap.get(p.id)?.col) ? 'duty' : c === 'ey' ? 'ey' : c === 'tim' ? 'pun'
       : ss.some(x => TYPES[x.type].cat === 'med') ? 'med' : pl ? 'pl:' + norm(statusLbl(pl, s.settings.lists)) : 'rest';
     if (sub.startsWith('pl:')) plLbl.set(sub, 'Με ' + statusLbl(pl!, s.settings.lists));
     // τι έχει: όλες οι καταστάσεις του και η υπηρεσία του· το πρώτο δίνει το χρώμα
@@ -91,6 +99,7 @@ export function strengthView(s: AppState, date: ISODate, at: number): StrengthVi
   const sorted = (rows: SvRow[]) => rows.sort((x, y) => cmp(x.p, y.p));
   const grp = (cat: SvCat, label: string, groups: SvGroup[]): SvCatView => ({ cat, label, n: groups.reduce((n, g) => n + g.rows.length, 0), groups });
   const awayG: SvGroup[] = TYPE_KEYS.filter(k => away.has(k)).map(k => ({ key: k, label: AWAY_LBL[k] || TYPES[k].label, rows: away.get(k)!.sort((x, y) => x.key.localeCompare(y.key) || cmp(x.row.p, y.row.p)).map(x => x.row) }));
+  if (svcRows.length) awayG.push({ key: SVC_AWAY_KEY, label: 'Υπηρεσία εκτός στρατοπέδου', rows: sorted(svcRows) });
   const kolGroups = bySvc(kolG).map(g => ({ ...g, rows: sorted(g.rows) }));
   const presG: SvGroup[] = PRESENT_SUBS.flatMap(([key, label, tip]): SvGroup[] => key === 'keep'
     ? bySvc(keepG, label + ': ').map(g => ({ ...g, key: 'keep:' + g.key, tip, rows: sorted(g.rows) }))
