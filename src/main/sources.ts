@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { Workbook, colName, toSerial, type Sheet } from './xlsx';
 import { writeAll, writeJson, LockedError } from './files';
+import { convertXls, type XlsConverter } from './xlsConvert';
 import { widthChars } from './textfit';
 import { upper } from '../shared/text';
 import { isPersonRow, type RawSheet } from '../shared/roster';
@@ -102,8 +103,16 @@ async function countifOf(wb: Workbook, name: string): Promise<string[]> {
   return out;
 }
 export class OldFormatError extends Error {}
-export async function readBook(file: string, maxRows = 2000, maxCols = MAX_COLS): Promise<{ sheets: RawSheet[]; mtime: number; size: number }> {
-  if (/\.xls$/i.test(file)) throw new OldFormatError('Το «' + path.basename(file) + '» είναι παλιό .xls. Άνοιξέ το στο Excel και κάνε «Αποθήκευση ως» .xlsx (ή .xlsm αν έχει μακροεντολές).');
+export const oldFormatError = (file: string) => new OldFormatError('Το «' + path.basename(file) + '» είναι παλιό .xls. Άνοιξέ το στο Excel και κάνε «Αποθήκευση ως» .xlsx (ή .xlsm αν έχει μακροεντολές).');
+// xls: μετατροπείς για παλιά .xls (xlsConvert.ts). Χωρίς αυτούς το .xls δεν διαβάζεται, όπως πάντα. Η ώρα και το μέγεθος που
+// γυρνά είναι του αρχικού αρχείου (το αντίγραφο στον προσωρινό φάκελο σβήνεται μετά την ανάγνωση).
+export async function readBook(file: string, maxRows = 2000, maxCols = MAX_COLS, xls?: XlsConverter[]): Promise<{ sheets: RawSheet[]; mtime: number; size: number }> {
+  if (/\.xls$/i.test(file)) {
+    if (!xls) throw oldFormatError(file);
+    const st0 = fs.statSync(file); const conv = await convertXls(file, xls);
+    if (!conv) throw oldFormatError(file);
+    try { const r = await readBook(conv.file, maxRows, maxCols); return { ...r, mtime: Math.round(st0.mtimeMs), size: st0.size }; } finally { conv.cleanup(); }
+  }
   // ώρα και μέγεθος πριν και μετά την ανάγνωση: αν το έσωσε κάποιος στο μεταξύ, ξανά (αλλιώς θα κρατούσαμε την ώρα
   // του νέου αρχείου με το περιεχόμενο του παλιού, και η αλλαγή του δεν θα φαινόταν ποτέ)
   let buf: Buffer, st: fs.Stats;
