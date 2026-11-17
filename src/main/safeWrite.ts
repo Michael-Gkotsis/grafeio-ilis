@@ -8,7 +8,8 @@ import { Workbook, colName, type Sheet } from './xlsx';
 import { upper } from '../shared/text';
 
 // exact: the text is a word the template's own formulas compare with (COUNTIF criteria): written as it is, not turned into capitals
-export interface PlannedWrite { sheet: string; r: number; c: number; value: string | number | null; exact?: boolean }
+// over: the text the cell holds in the template; a cell whose label has BLANK parts (a title «ΗΜΕΡΗΣΙΑ ΑΝΑΦΟΡΑ ΤΗΣ ____») may be written when it still holds exactly this
+export interface PlannedWrite { sheet: string; r: number; c: number; value: string | number | null; exact?: boolean; over?: string }
 export type Refusal = 'formula' | 'label' | 'merge-child' | 'outside' | 'no-sheet' | 'bad-value' | 'conflict';
 export interface WriteResult { sheet: string; r: number; c: number; ref: string; value: string | number | null }
 export interface Refused extends WriteResult { reason: Refusal; detail: string }
@@ -51,7 +52,7 @@ export async function safeWrite(wb: Workbook, plan: PlannedWrite[], o: SafeOpts 
     if (m && (m.r1 !== w.r + 1 || m.c1 !== w.c + 1)) { no('merge-child', 'μέσα σε συγχώνευση, όχι πάνω αριστερά'); continue; }
     if (ws.hasFormula(ref)) { no('formula', 'το κελί έχει τύπο'); continue; }
     const cur = cellText(ws, ref);
-    if (!box && cur && cur !== (ours[k] ?? null)) { no('label', 'το κελί έχει κείμενο που δεν γράφτηκε από την εφαρμογή'); continue; }
+    if (!box && cur && cur !== (ours[k] ?? null) && !(w.over != null && cur === w.over.trim())) { no('label', 'το κελί έχει κείμενο που δεν γράφτηκε από την εφαρμογή'); continue; }
     planned.set(k, ref);
     const text = typeof w.value === 'string' ? (w.exact ? w.value.trim() : upper(w.value)) : null;
     if (!o.dryRun) ws.set(ref, w.value, !!w.exact);

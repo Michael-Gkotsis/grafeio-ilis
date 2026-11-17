@@ -21,6 +21,8 @@ import { hkOn, type AppState } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
 import { ABS_KEYS, expectedCells, HkEngine, KOL_KEYS, mapMatrix, pickFront, unplaced, type FrontMap, type RuleCtx } from '../shared/hkRules';
 import { critMatches, Evaluator, UNSUPPORTED } from '../shared/sheetEval';
+import { emptyBack, planExtras, type BackReport } from './backFill';
+import type { Sig } from '../shared/sigs';
 
 export interface FillOpts {
   dryRun?: boolean;
@@ -28,6 +30,8 @@ export interface FillOpts {
   lexicon?: Lexicon;
   ours?: Record<string, string>;          // TplProfile.ours
   cross?: boolean;                        // recompute the template's formulas afterwards (default true)
+  sigs?: Sig[] | null;                    // the signatures given for this output (else the unit's own of the settings)
+  extras?: boolean;                       // the title, date, signatures and the back side (default true)
 }
 export interface Mismatch { sheet: string; ref: string; expected: number; got: number | string | boolean | null }
 export interface FillReport {
@@ -45,8 +49,9 @@ export interface FillReport {
   cross: { checked: number; matched: number; unevaluated: number; mismatches: Mismatch[] };
   warnings: string[];
   ours: Record<string, string>;
+  back: BackReport;                       // the back side: sections found, lines placed, lines that continue on another page, what was not written
 }
-const emptyReport = (dryRun: boolean): FillReport => ({ dryRun, front: null, written: [], refused: [], kept: 0, unmappedCols: [], unmappedRows: [], unplacedRows: [], unplacedStates: [], totalsSkipped: [], data: null, cross: { checked: 0, matched: 0, unevaluated: 0, mismatches: [] }, warnings: [], ours: {} });
+const emptyReport = (dryRun: boolean): FillReport => ({ dryRun, front: null, written: [], refused: [], kept: 0, unmappedCols: [], unmappedRows: [], unplacedRows: [], unplacedStates: [], totalsSkipped: [], data: null, cross: { checked: 0, matched: 0, unevaluated: 0, mismatches: [] }, warnings: [], ours: {}, back: emptyBack() });
 
 // ------------------------------------------------------------------ choosing the front table (hkRules.ts)
 export { pickFront };
@@ -209,13 +214,17 @@ export async function fillAdaptive(tpl: Buffer, s: AppState, date: ISODate, prof
     if (dp) { plan.push(...dp.plan); if (dp.box) dataBoxes = [dp.box]; rep.data = dp.info; rep.warnings.push(...dp.warnings); }
   }
   const wb = await Workbook.open(tpl);
+  if (opts.extras !== false) {
+    const ex = await planExtras(wb, sheets, sh.name, lex, s, date, profile, { sigs: opts.sigs });
+    plan.push(...ex.plan.filter(w => !ex.blocked(w))); rep.warnings.push(...ex.warnings); rep.back = ex.report;
+  }
   const wr = await safeWrite(wb, plan, { dryRun: opts.dryRun, ours: opts.ours ?? profile?.ours, dataBoxes });
   rep.written = wr.written; rep.refused = wr.refused; rep.ours = wr.ours;
   if (rep.refused.length) rep.warnings.push(rep.refused.length + ' κελιά δεν γράφτηκαν (τύπος, κείμενο, συγχώνευση)');
   // cross-check: the template's own formulas, recomputed over the filled values, against the numbers the engine expects
   if (opts.cross !== false) {
     const over = sheets.map(x => ({ ...x, rows: x.rows.map(r => (r ? [...r] : r)) }));
-    for (const w of wr.written) { const t = over.find(x => x.name === w.sheet)!; while (t.rows.length <= w.r) t.rows.push([]); if (!t.rows[w.r]) t.rows[w.r] = []; t.rows[w.r][w.c] = w.value; }
+    for (const w of wr.written) { const t = over.find(x => x.name === w.sheet); if (!t) continue; while (t.rows.length <= w.r) t.rows.push([]); if (!t.rows[w.r]) t.rows[w.r] = []; t.rows[w.r][w.c] = w.value; }
     const ev = new Evaluator(over); const fm = over.find(x => x.name === sh.name)!;
     for (const [k, val] of exp) {
       if (val == null) continue; const [r, c] = k.split(':').map(Number);

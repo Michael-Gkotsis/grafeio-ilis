@@ -17,9 +17,9 @@ describe('mapping screen render', () => {
     const model = buildTplModel(sheets, { settings: m.s.settings, kind, posts, vocab: [], driven: null });
     const ch = model.choices || emptyChoices();
     const trial = await tryFill(sheets, m.buf, m.s, '2026-09-25', { choices: ch, creates: [] });
-    const base = { model, ch, creates: {}, sel: null, trial: null, busy: false, onStep() {}, onSel() {}, setCol() {}, setRow() {}, setWord() {}, setCreate() {}, onTry() {}, onRestore() {} };
+    const base = { model, ch, creates: {}, sel: null, trial: null, busy: false, onStep() {}, onSel() {}, setCol() {}, setRow() {}, setWord() {}, setSkip() {}, setBack() {}, accept() {}, setCreate() {}, onTry() {}, onRestore() {} };
     const out: Record<string, string> = {};
-    for (const step of ['cols', 'rows', 'words', 'try']) out[step] = renderToString(React.createElement(TplMapBody as any, { ...base, step, trial: step === 'try' ? trial : null }));
+    for (const step of ['cols', 'rows', 'words', 'back', 'try']) out[step] = renderToString(React.createElement(TplMapBody as any, { ...base, step, trial: step === 'try' ? trial : null }));
     expect(out.cols).toContain('tm__tbl'); expect(out.cols).toMatch(/Τι σημαίνει/);
     expect(out.rows).toContain('tm__rl');
     expect(out.try).toContain('tm__tbl--num');

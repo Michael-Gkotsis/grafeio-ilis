@@ -178,6 +178,8 @@ export class Sheet {
   // Όλα τα κελιά με τιμή, για έλεγχο χωρητικότητας σε αρχείο που δεν έγραψε το Sheet.set (ExcelJS)
   markAll(): this { for (const row of this.rows) for (const c of row.cells) if (c.inner) this.wrote.add(colName(c.col) + row.r); return this; }
   // Τιμή όπως είναι στο XML: τύπος (t), στυλ και περιεχόμενο· null για κενό
+  // Το στυλ ενός κελιού, ακόμα και άδειου (null: χωρίς στυλ· undefined: το κελί δεν υπάρχει στο αρχείο)
+  styleOf(ref: string): number | null | undefined { const x = this.cell(ref, false); if (!x) return undefined; const s = attr(x.attrs, 's'); return s == null ? null : Number(s); }
   raw(ref: string): { t: string | null; s: number | null; inner: string } | null {
     const x = this.cell(ref, false); if (!x || !x.inner || /^<v\/>$|^<is\/>$/.test(x.inner)) return null;
     const s = attr(x.attrs, 's'); return { t: attr(x.attrs, 't'), s: s == null ? null : Number(s), inner: x.inner };
@@ -1002,6 +1004,22 @@ export class Workbook {
 
   // Οι τιμές του φύλλου ως πίνακας [γραμμή][στήλη] από 0: κείμενο, αριθμός, ημερομηνία (UTC) ή κενό. Οι τύποι δίνουν το αποτέλεσμά τους.
   // fx: εδώ μπαίνουν τα κελιά με τύπο («γραμμή:στήλη» από 0)
+  // Οι σημειώσεις (σχόλια) των κελιών ενός φύλλου: 'r:c' (0-based) → κείμενο. Μόνο ανάγνωση, για υπόδειξη στην οθόνη αντιστοίχισης
+  async commentsOf(name: string): Promise<Record<string, string>> {
+    const e = this.names.find(x => x.name === name); const out: Record<string, string> = {}; if (!e) return out;
+    const dir = e.path.slice(0, e.path.lastIndexOf('/')); const relPath = dir + '/_rels/' + e.path.slice(e.path.lastIndexOf('/') + 1) + '.rels';
+    const rels = this.zip.file(relPath); if (!rels) return out;
+    for (const m of (await rels.async('string')).matchAll(/<Relationship\b[^>]*>/g)) {
+      if (!/\/comments$/.test(attr(m[0], 'Type') || '')) continue;
+      const t = attr(m[0], 'Target') || ''; const part = t.startsWith('/') ? t.slice(1) : (dir + '/' + t).split('/').reduce((a: string[], x) => { if (x === '..') a.pop(); else if (x !== '.') a.push(x); return a; }, []).join('/');
+      const f = this.zip.file(part); if (!f) continue;
+      for (const c of (await f.async('string')).matchAll(/<comment\b([^>]*)>([\s\S]*?)<\/comment>/g)) {
+        const ref = attr(c[1], 'ref'); if (!ref) continue; const { r, c: cc } = splitRef(ref);
+        const text = texts(c[2]).replace(/\s+/g, ' ').trim(); if (text) out[(r - 1) + ':' + (cc - 1)] = text;
+      }
+    }
+    return out;
+  }
   async values(nameOrIndex: string | number, maxRows = 2000, maxCols = 40, fx?: Set<string>): Promise<XlValue[][]> {
     const ws = await this.sheet(nameOrIndex); const sst = await this.sharedStrings(); await this.loadStyles();
     const y1904 = this.date1904;
