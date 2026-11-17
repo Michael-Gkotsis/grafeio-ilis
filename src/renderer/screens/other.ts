@@ -17,7 +17,7 @@ import { noteDue, noteGroups, noteHead, noteSearch, noteWho } from '../../shared
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
 import { HK_SECTIONS, kolColName, dutyStartOf, hkLvOn, hkOn, hkToggle, type HkaiManual, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, coversDay, effects, fullName, shortName, unitOf, isWaiting, type LeaveAsk, type Person, type PersonRequest, type Status, platoonsOf, platoonShort, roomTxt } from '../../shared/domain';
 import { ReturnsList } from './guard';
-import { HK_K, HK_A, HK_MANUAL, approvalPlan, planNeedsOk, awayNow, activePeople, hkaiCounts, kolView, isRecordExpiredOn, personMap, statusesAt, statusesOn, strengthOf, strengthAt, awayText, type StatusPlan } from '../../shared/rules';
+import { HK_MANUAL, approvalPlan, planNeedsOk, awayNow, activePeople, hkaiCounts, kolView, isRecordExpiredOn, personMap, statusesAt, statusesOn, strengthOf, strengthAt, awayText, type StatusPlan } from '../../shared/rules';
 import { addDays, daysBetween, dayName, dm, dmy, dow, nowHM, parseD, DOW_GEN } from '../../shared/dates';
 import { outCountOn } from '../../shared/weaponView';
 import { returnOf } from '../../shared/returns';
@@ -31,7 +31,7 @@ import { GUIDE_TITLES } from '../guideTopic';
 import { SourcesAlert } from './srcStatus';
 import { appTitle } from '../../shared/brand';
 import { LeavesTab } from './leaves';
-import { live, medNote, notesOf, hasNoteKinds, cadreCountRows, hkRowList, isAway, listOf, noDutyOf, rankTxt, statusLbl } from '../../shared/ranks';
+import { absKeysOf, hkColLabel, kolKeysOf, live, medNote, notesOf, hasNoteKinds, cadreCountRows, hkRowList, isAway, listOf, noDutyOf, rankTxt, statusLbl } from '../../shared/ranks';
 import { UNIT, hkRowLabel, HK } from '../../shared/unit';
 import { HkHeadCard, HkRowsButton } from './hkrows';
 import { dutyOfficers, orderedCadre } from '../../shared/cadre';
@@ -345,7 +345,7 @@ function HkaiMain() {
   const front = useMemo(() => hkaiFront(state, date, h), [state, date, h]);
   const back = useMemo(() => hkaiBack(state, date), [state, date]);
   // στρατιώτες και στελέχη (καρτέλα Στελέχη, με τη σειρά της) σε κάθε στήλη
-  const src = [...HK_K, ...HK_A].filter(([k]) => h.cols[k].length || h.cadre[k]?.length);
+  const src = [...kolKeysOf(state.settings.lists), ...absKeysOf(state.settings.lists)].map(k => [k, '', hkColLabel(k, state.settings.lists)] as [string, string, string]).filter(([k]) => h.cols[k].length || h.cadre[k]?.length);
   const cOrd = useMemo(() => new Map(orderedCadre(state.cadreList).map((c, i) => [c.id, i])), [state.cadreList]);
   const cadreOf = (k: string) => [...(h.cadre[k] || [])].sort((a, b) => (cOrd.get(a.id) ?? 0) - (cOrd.get(b.id) ?? 0));
   const cadreSeen = [...new Set(src.flatMap(([k]) => cadreOf(k).map(c => c.id)))];   // ▲▼ στην κάρτα στελέχους: τα στελέχη όπως φαίνονται εδώ, στη σειρά των στηλών

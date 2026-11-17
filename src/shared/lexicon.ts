@@ -5,7 +5,7 @@
 //   sure     the text IS the concept (exact name, inflected form, or a one-letter slip in a long name)
 //   suggest  probably, but the user should confirm (compound header, extra words, typo, weak synonym)
 //   unknown  no idea. The rule of the engine: prefer unknown to a wrong sure.
-import { listOf, type UserLists } from './ranks';
+import { hkColsOf, listOf, type UserLists } from './ranks';
 import { HK_COLS, HK_RANKS, PERSON_FIELDS } from './sources';
 
 export type ConceptKind = 'rank' | 'origin' | 'status' | 'service' | 'post' | 'person' | 'weapon' | 'hkcol' | 'hkrow' | 'label' | 'total' | 'group';
@@ -302,6 +302,8 @@ export class Lexicon {
     const kstat = new Set(STATUSES.flatMap(c => c.names.map(phraseKey)));
     for (const n of listOf(opts.lists, 'leaveKinds')) if (!kstat.has(phraseKey(n))) { add('status:' + phraseKey(n), [n]); kstat.add(phraseKey(n)); }
     for (const n of listOf(opts.lists, 'cadreAbs')) if (!kstat.has(phraseKey(n))) { add('status:' + phraseKey(n), [n]); kstat.add(phraseKey(n)); }
+    // the unit's own columns of the ΗΚΑΙ (Ρυθμίσεις › Δικές μου στήλες): a template column with that name counts that state (the short name is only a guess)
+    for (const o of hkColsOf(opts.lists)) { add('hkcol:' + o.key, [o.name]); if (o.short && phraseKey(o.short).length >= 3 && phraseKey(o.short) !== phraseKey(o.name)) add('hkcol:' + o.key, [o.short], true); }
     for (const n of opts.services || []) add('service:' + phraseKey(n), [n]);
     for (const n of opts.posts || []) add('post:' + phraseKey(n), [n]);
     for (const [id, names] of Object.entries(opts.learned || {})) add(id, names);

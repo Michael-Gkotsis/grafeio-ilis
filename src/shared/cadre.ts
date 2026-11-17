@@ -3,7 +3,7 @@
 import { formText, hkRowLabel } from './unit';
 import { dmy, type ISODate } from './dates';
 import type { AppState, Cadre, CadreAbs } from './domain';
-import { cadreAbsOf, hkRowsOf, rankTxt, type UserLists } from './ranks';
+import { cadreAbsOf, hkColOwn, hkColShortOf, hkRowsOf, isAbsCol, isKolCol, rankTxt, type UserLists } from './ranks';
 import { cadreAbsOn, rosterCol, HK_A, HK_K, HK_NCO, HK_OFFICERS } from './rules';
 import { collator, normGreek } from './text';
 import type { RosterSheet } from './rosterLists';
@@ -29,14 +29,14 @@ export function insertCadre(list: Cadre[], x: Cadre): Cadre[] {
 export type CadreGroup = 'kol' | 'apo' | 'list';
 export const GROUP_NAME: Record<CadreGroup, string> = { kol: 'Κωλυόμενος', apo: 'Απών', list: 'Μόνο στη λίστα' };
 // σε ποια ομάδα της ΗΚΑΙ μετρά μια στήλη (κενή: σε καμία)
-export const groupOfCol = (col: string | undefined): CadreGroup => (col && HK_K.some(x => x[0] === col) ? 'kol' : col && HK_A.some(x => x[0] === col) ? 'apo' : 'list');
+export const groupOfCol = (col: string | undefined, lists?: UserLists): CadreGroup => (isKolCol(col, lists) ? 'kol' : isAbsCol(col, lists) ? 'apo' : 'list');
 // η σύντομη επικεφαλίδα της στήλης στο έντυπο (Υπηρ., Κ.Άδ.…)
-export const colShort = (col: string) => [...HK_K, ...HK_A].find(x => x[0] === col)?.[1] || '';
+export const colShort = (col: string, lists?: UserLists) => (hkColOwn(col, lists) ? hkColShortOf(col, lists) : [...HK_K, ...HK_A].find(x => x[0] === col)?.[1] || '');
 
 export interface CadreStatus { abs: CadreAbs; label: string; col: string; group: CadreGroup }
 export function cadreStatusOf(abs: CadreAbs, lists?: UserLists): CadreStatus {
   const k = cadreAbsOf(abs.kind, lists); const col = k?.[2] || '';
-  return { abs, label: k?.[1] || abs.kind, col, group: groupOfCol(col) };
+  return { abs, label: k?.[1] || abs.kind, col, group: groupOfCol(col, lists) };
 }
 export function cadreStatusOn(s: Pick<AppState, 'cadreAbs' | 'settings'>, cid: string, d: ISODate): CadreStatus | undefined {
   const a = cadreAbsOn(s, cid, d); return a && cadreStatusOf(a, s.settings.lists);
@@ -71,7 +71,7 @@ export const CADRE_COLS = ['Α/Α', 'ΒΑΘΜΟΣ', 'Ο/Σ', 'ΕΠΙΘΕΤΟ', '
 export function cadreSheets(s: AppState, d: ISODate): RosterSheet[] {
   const lists = s.settings.lists; const all = orderedCadre(s.cadreList || []);
   const cells = (c: Cadre) => [rankTxt(c), c.spec || '', c.last, c.first, c.am || '', c.phone || '', c.role || '', hkRowLabel(c.hk, s.settings)];
-  const where = (st: CadreStatus) => (st.group === 'list' ? 'ΜΟΝΟ ΣΤΗ ΛΙΣΤΑ' : (st.group === 'kol' ? 'ΚΩΛΥΟΜΕΝΟΙ' : 'ΑΠΟΝΤΕΣ') + ' · ' + colShort(st.col));
+  const where = (st: CadreStatus) => (st.group === 'list' ? 'ΜΟΝΟ ΣΤΗ ΛΙΣΤΑ' : (st.group === 'kol' ? 'ΚΩΛΥΟΜΕΝΟΙ' : 'ΑΠΟΝΤΕΣ') + ' · ' + colShort(st.col, lists));
   const active = all.filter(c => c.active);
   const now = active.map((c, i) => {
     const st = cadreStatusOn(s, c.id, d);

@@ -7,7 +7,7 @@ import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiAdikLines, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
 import { TYPES, DEFAULT_DUTY_START, isOutsAll, blocksOf, coversDay, dutyStartOf, hkOn, fatherTxt, fullName, groupKey, hasShift, phaseBase, phaseName, PHASE_NAME, type AppState, type Person, type Phase, type Post, type Status } from '../shared/domain';
-import { live, hkRowsOf, isAway, itemKey, rankTxt, statusLbl, type HkRows } from '../shared/ranks';
+import { live, absKeysOf, hkColsOf, hkRowsOf, isAway, itemKey, kolKeysOf, rankTxt, statusLbl, type HkColDef, type HkRows } from '../shared/ranks';
 import { fileNameOf, frouraName } from '../shared/fileNames';
 import { formText, hkRowLabel, reportOf, unitKindOf, unitText } from '../shared/unit';
 import { seatMap, dutyMin, hkaiCounts, outMinOn, postBy, postsOf, statusesFrom } from '../shared/rules';
@@ -434,6 +434,8 @@ async function fillHkaiClassic(tpl: Buffer, s: AppState, d: ISODate, opts: HkaiO
   const m: HkaiMap = { title: c?.title || m0.title, date: c?.date || m0.date, rows: { ...m0.rows, ...(c?.rows || {}) }, cols: { ...m0.cols, ...(c?.cols || {}) } };
   const pm = seatMap(s); const warnings: string[] = [];
   const hk = hkaiCounts(s, d);
+  // δικές σου στήλες (Ρυθμίσεις › Μονάδα και έντυπα): νέα στήλη στο τέλος της ομάδας, πριν από το σύνολό της (πριν από τις γραμμές, για να τις πάρουν και οι νέες γραμμές)
+  const ownCols = addHkCols(fr, m, hkColsOf(s.settings.lists), s, warnings, wb);
   const R = hkRowsOf(s.settings.lists); const ALL = [...R.off, ...R.nco];
   const prov = hkOn(s.settings, 'prov') ? s.settings.hkai?.prov || {} : {};
   addHkRows(wb, fr, m, R, warnings, k => hk.rank[k]?.n > 0 || prov[k] > 0);
@@ -453,9 +455,11 @@ async function fillHkaiClassic(tpl: Buffer, s: AppState, d: ISODate, opts: HkaiO
     if (prov[rank] > 0) { if (m.cols.prov) fr.set(m.cols.prov + r, prov[rank]); else miss.set('prov', (miss.get('prov') || 0) + prov[rank]); }
     if (m.cols.placed) fr.set(m.cols.placed + r, x.n - x.attached);
     if (m.cols.attached) fr.set(m.cols.attached + r, x.attached);
-    for (const k of HK_KEYS) { if (m.cols[k]) fr.set(m.cols[k] + r, x.c[k] || null); else if (x.c[k]) miss.set(k, (miss.get(k) || 0) + x.c[k]); }
+    for (const k of [...HK_KEYS, ...ownCols.placed]) { if (m.cols[k]) fr.set(m.cols[k] + r, x.c[k] || null); else if (x.c[k]) miss.set(k, (miss.get(k) || 0) + x.c[k]); }
+    for (const k of ownCols.lost) if (x.c[k]) ownCols.n[k] = (ownCols.n[k] || 0) + x.c[k];
     if (m.cols.ab && !fr.hasFormula(m.cols.ab + r)) fr.set(m.cols.ab + r, x.c.ab || null);
   }
+  for (const o of ownCols.lost) if (ownCols.n[o]) warnings.push('Η στήλη «' + hkColsOf(s.settings.lists).find(x => x.key === o)!.name + '» δεν μπήκε στο έντυπο: ' + ownCols.n[o] + ' δεν γράφτηκαν στην ' + reportOf(s.settings));
   for (const [k, n] of miss) warnings.push('Το template δεν έχει στήλη «' + (HK_COLS.find(x => x[0] === k)?.[1] || 'Προβλέπονται') + '»: ' + n + ' δεν γράφτηκαν');
   // «Προβλέπονται» στις γραμμές των συνόλων: το έντυπο δεν έχει τύπο εκεί, οπότε γράφεται το άθροισμα
   if (m.cols.prov && Object.values(prov).some(n => n > 0)) {
@@ -506,6 +510,55 @@ async function fillHkaiClassic(tpl: Buffer, s: AppState, d: ISODate, opts: HkaiO
   const back: SheetPart = { ws: bk, key: 'back', designed: !!bdh, more: bdh ? headBlocks(wb, bk, bdh) : [blockOf(bk, 'date', B.date ? [B.date] : [])] };
   const layout = await signSheets(wb, fr === bk ? [front] : [front, back], s, 'hkai', opts.sigs, warnings);
   return { name: fileNameOf(s.settings, 'hkai', d), data: await wb.save(), warnings, layout, sheet: frName };
+}
+
+// Οι δικές σου στήλες της ΗΚΑΙ (UserLists.hkCols): μία νέα στήλη για καθεμία, στο τέλος της ομάδας της, ακριβώς πριν από το σύνολό της
+// (Σύνολο κωλυομένων / Σύνολο απόντων). Επικεφαλίδα = το όνομα με κεφαλαία, με τη μορφή και το πλάτος της διπλανής στήλης (η συγχώνευση της
+// επικεφαλίδας μεγαλώνει), οι τύποι των συνόλων (και του «Σύνολο», «Διαθέσιμοι») τη μετράνε, οι γραμμές των συνόλων παίρνουν τον τύπο της διπλανής
+// στήλης, και ό,τι είναι δεξιά (στήλες, τίτλος, ημερομηνία, περιοχή εκτύπωσης) μετακινείται. m.cols παίρνει το γράμμα της νέας στήλης (κλειδί u1…).
+// placed: οι στήλες που μπήκαν· lost: όσες δεν χώρεσαν (το template δεν έχει σύνολο ομάδας) και ο λόγος γράφεται στις προειδοποιήσεις
+function addHkCols(fr: Sheet, m: HkaiMap, cols: HkColDef[], s: AppState, warnings: string[], wb: Workbook): { placed: string[]; lost: string[]; n: Record<string, number> } {
+  const out = { placed: [] as string[], lost: [] as string[], n: {} as Record<string, number> };
+  if (!cols.length) return out;
+  const lists = s.settings.lists; const ranks = Object.values(m.rows).filter(r => r > 0); const firstRank = ranks.length ? Math.min(...ranks) : 1;
+  const group = (g: 'kol' | 'abs') => (g === 'kol' ? kolKeysOf(lists) : absKeysOf(lists));
+  for (const o of cols) {
+    const label = o.grp === 'kol' ? 'Σύνολο κωλυομένων' : 'Σύνολο απόντων';
+    const totL = o.grp === 'kol' ? m.cols.sumK : m.cols.sumA;
+    const bad = (why: string) => { warnings.push('Η δική σου στήλη «' + o.name + '» δεν μπήκε στην ' + reportOf(s.settings) + ': ' + why); out.lost.push(o.key); };
+    if (!totL) { bad('το template δεν έχει «' + label + '»'); continue; }
+    const at = colNum(totL), prev = at - 1;
+    // η προηγούμενη στήλη πρέπει να είναι της ίδιας ομάδας (αλλιώς το σύνολο δεν είναι αυτό που φαίνεται)
+    if (prev < 1 || !group(o.grp).some(k => m.cols[k] && colNum(m.cols[k]) === prev)) { bad('δεν βρέθηκε η τελευταία στήλη της ομάδας πριν από το «' + label + '»'); continue; }
+    // επικεφαλίδα: οι κάθετες συγχωνεύσεις των στηλών της ομάδας πάνω από τον πρώτο βαθμό· «πρότυπο» η πιο κοντινή με την πιο ψηλή αρχή
+    const mg = fr.merges().filter(x => x.c1 === x.c2 && x.r2 < firstRank && x.r2 - x.r1 >= 2 && group(o.grp).some(k => m.cols[k] && colNum(m.cols[k]) === x.c1));
+    const top = mg.length ? Math.min(...mg.map(x => x.r1)) : 0;
+    const ref = top ? [...mg].filter(x => x.r1 === top && x.c1 <= prev).sort((a, b) => b.c1 - a.c1)[0] : undefined;
+    if (!fr.insertCols(prev, 1, prev, wb)) { bad('το φύλλο έχει πίνακα του Excel'); continue; }
+    const N = colName(at), P = colName(prev);
+    for (const k of Object.keys(m.cols)) if (m.cols[k] && colNum(m.cols[k]) >= at) m.cols[k] = colName(colNum(m.cols[k]) + 1);
+    const mv = (ref: string) => ref.replace(/^([A-Z]+)(\d+)$/, (x, c: string, r: string) => (colNum(c) >= at ? colName(colNum(c) + 1) + r : x));
+    if (m.title) m.title = mv(m.title); if (m.date) m.date = mv(m.date);
+    m.cols[o.key] = N;
+    fr.growCols(at + 1, prev, at);   // Σύνολο κωλυομένων/απόντων: SUM(F17:M17) → SUM(F17:N17)
+    // οι γραμμές με τύπο στη διπλανή στήλη (ΣΥΝΟΛΟ ΑΞΚΩΝ/ΟΠΛΙΤΩΝ, ΓΕΝΙΚΟ ΣΥΝΟΛΟ) παίρνουν τον ίδιο τύπο για τη νέα
+    const re = new RegExp('(?<![A-Za-z])(\\$?)' + P + '(?=\\$?\\d)', 'g');
+    for (const c of [...fr.cells()].filter(x => x.c === prev && x.inner.includes('<f'))) { const f = fr.formula(P + c.r); if (f) fr.setFormula(N + c.r, unesc(f).replace(re, '$1' + N)); }
+    // επικεφαλίδα: συγχώνευση και μορφή από το πρότυπο, ομάδα (ΚΩΛΥΟΜΕΝΟΙ) μεγαλώνει, όνομα με κεφαλαία
+    if (top && ref) {
+      for (const x of fr.merges()) if (x.c1 === x.c2 && x.c1 === at && x.r1 !== top) fr.removeMerge(x);   // η συγχώνευση της διπλανής (π.χ. κάτω από «ΑΠΕΣΠΑΣΜΕΝΟΙ») δεν ταιριάζει
+      if (!fr.merges().some(x => x.c1 === at && x.c2 === at && x.r1 === ref.r1)) fr.addMerge(N + ref.r1 + ':' + N + ref.r2);
+      for (let r = ref.r1; r <= ref.r2; r++) { const st = fr.style(colName(ref.c1) + r); if (st != null) fr.setStyle(N + r, st); }
+      for (const x of fr.merges()) if (x.r1 === x.r2 && x.r1 < top && x.c2 === prev && x.c1 < prev) { fr.removeMerge(x); fr.addMerge(colName(x.c1) + x.r1 + ':' + N + x.r1); }   // ΚΩΛΥΟΜΕΝΟΙ: F6:M6 → F6:N6
+      fr.set(N + top, o.name);
+    } else {
+      // χωρίς συγχωνευμένη επικεφαλίδα: το όνομα μπαίνει εκεί που έχει κείμενο η διπλανή στήλη
+      let r = 1; for (; r < firstRank; r++) if ((fr.get(P + r) || '').trim()) break;
+      fr.set(N + (r < firstRank ? r : firstRank - 1), o.name);
+    }
+    out.placed.push(o.key);
+  }
+  return out;
 }
 
 // Οι δικές σου γραμμές (βαθμοί) που δεν έχει το έντυπο: νέα γραμμή κάτω από αυτήν που διάλεξες, με τη μορφή και τους

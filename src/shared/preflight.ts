@@ -3,10 +3,10 @@
 import { dm, dow, pskDays, type ISODate } from './dates';
 import { KIND_NAME, TYPES, postTxt, shortName, type AppState, type TypeKey } from './domain';
 import {
-  activePeople, alreadyOn, secondDuty, twoMode, seatMap, capBlock, dutyBlock, lastResort, hkaiCounts, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, seatlessOn, statusWarn, statusesOn, statusesFrom, outMinOn, HK_A, HK_K
+  activePeople, alreadyOn, secondDuty, twoMode, seatMap, capBlock, dutyBlock, lastResort, hkaiCounts, outBlock, outRoomsOn, personMap, postsOf, ruleBlock, seatlessOn, statusWarn, statusesOn, statusesFrom, outMinOn
 } from './rules';
 import { hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, paperLines } from './hkaiText';
-import { live, hkRowList, isAway, leavePhrase, rankTxt } from './ranks';
+import { absKeysOf, kolKeysOf, live, hkRowList, isAway, leavePhrase, rankTxt } from './ranks';
 import { HK, hkRowLabel } from './unit';
 import { normGreek } from './text';
 import type { ExportKind } from './api';
@@ -72,7 +72,7 @@ export function hkaiChecks(s: AppState, date: ISODate): Check[] {
   if (both.length) out.push({ level: 'warn', text: 'Και στο Δυναμολόγιο και στα Στελέχη (μετρούν δύο φορές): ' + both.map(c => rankTxt(c) + ' ' + c.last + ' ' + c.first).join(', ') + '. Κράτησέ τους σε ένα από τα δύο.', go: 'cadre' });
   // ανά βαθμό: κωλυόμενοι + απόντες δεν ξεπερνούν τη δύναμη
   for (const r of hkRowList(s.settings.lists)) {
-    const row = h.rank[r]; const used = [...HK_K, ...HK_A].reduce((a, [k]) => a + (row.c[k] || 0), 0);
+    const row = h.rank[r]; const used = [...kolKeysOf(s.settings.lists), ...absKeysOf(s.settings.lists)].reduce((a, k) => a + (row.c[k] || 0), 0);
     if (used > row.n) out.push({ level: 'err', text: hkRowLabel(r, s.settings) + ': κωλυόμενοι και απόντες (' + used + ') περισσότεροι από τη δύναμη (' + row.n + ')' });
   }
   const sum = Object.values(h.rank).reduce((a, r) => a + r.n, 0);

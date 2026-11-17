@@ -83,6 +83,40 @@ const shiftCellFormulas = (inner: string, sheet: string, own: boolean, after: nu
     return body == null ? `<f${a}/>` : `<f${a}>${shiftFormula(body, sheet, own, after, n)}</f>`;
   });
 
+// Το ίδιο για ΣΤΗΛΕΣ (insertCols): κάθε στήλη > after πηγαίνει +n (ως τη μέγιστη, XFD). Η αρχή και το τέλος μιας περιοχής μετακινούνται ξεχωριστά,
+// οπότε μια περιοχή που περιέχει τη θέση της νέας στήλης μεγαλώνει, όπως στο Excel· όσες τελειώνουν ακριβώς πριν από αυτήν μένουν (growColFormulas)
+const MAX_COL = 16384;
+const shiftColRange = (a: string, b: string | undefined, after: number, n: number) => {
+  const at = (x: string) => { const m = /^(\$?)([A-Z]+)(\$?\d+)$/.exec(x); if (!m) return x; const c = colNum(m[2]); return m[1] + colName(c > after ? Math.min(MAX_COL, c + n) : c) + m[3]; };
+  return b == null ? at(a) : at(a) + ':' + at(b);
+};
+const shiftColRef = (ref: string, after: number, n: number) => ref.replace(/(\$?[A-Z]+\$?\d+)(?::(\$?[A-Z]+\$?\d+))?/g, (_m, a: string, b: string | undefined) => shiftColRange(a, b, after, n));
+export function shiftColFormula(f: string, sheet: string, own: boolean, after: number, n: number): string {
+  const name = sheet.toLowerCase();
+  const plain = unesc(f);
+  const out = plain.split(/("(?:[^"]|"")*")/).map((part, i) => i % 2 ? part : part.replace(REF_RE, (m, q: string | undefined, a: string, b: string | undefined) => {
+    if (q ? sheetOf(q) !== name : !own) return m;
+    return (q || '') + shiftColRange(a, b, after, n);
+  })).join('');
+  return out === plain ? f : out.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+// Περιοχές τύπου που τελειώνουν στη στήλη last (και ξεκινούν πριν από αυτήν) φτάνουν ως τη στήλη to: SUM(F17:M17) → SUM(F17:N17)
+export function growColFormula(f: string, sheet: string, own: boolean, last: number, to: number): string {
+  const name = sheet.toLowerCase();
+  const plain = unesc(f);
+  const out = plain.split(/("(?:[^"]|"")*")/).map((part, i) => i % 2 ? part : part.replace(REF_RE, (m, q: string | undefined, a: string, b: string | undefined) => {
+    if (!b || (q ? sheetOf(q) !== name : !own)) return m;
+    const ca = splitRef(a).c, cb = splitRef(b).c;
+    return ca < last && cb === last ? (q || '') + a + ':' + b.replace(/^(\$?)[A-Z]+/, '$1' + colName(to)) : m;
+  })).join('');
+  return out === plain ? f : out.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+const shiftCellFormulasCols = (inner: string, sheet: string, own: boolean, after: number, n: number) =>
+  inner.replace(/<f(\s[^>]*?)?(?:\/>|>([\s\S]*?)<\/f>)/g, (_m, fa = '', body: string | undefined) => {
+    const a = own ? fa.replace(/\sref="([^"]+)"/, (_x: string, r: string) => ` ref="${shiftColRef(r, after, n)}"`) : fa;
+    return body == null ? `<f${a}/>` : `<f${a}>${shiftColFormula(body, sheet, own, after, n)}</f>`;
+  });
+
 // Σειρά των στοιχείων μετά το <sheetData> (το Excel δεν ανοίγει φύλλο με άλλη σειρά)
 const TAIL_ORDER = ['sheetCalcPr', 'sheetProtection', 'protectedRanges', 'scenarios', 'autoFilter', 'sortState', 'dataConsolidate', 'customSheetViews', 'mergeCells', 'phoneticPr', 'conditionalFormatting', 'dataValidations',
   'hyperlinks', 'printOptions', 'pageMargins', 'pageSetup', 'headerFooter', 'rowBreaks', 'colBreaks', 'customProperties', 'cellWatches', 'ignoredErrors', 'smartTags', 'drawing', 'legacyDrawing', 'legacyDrawingHF', 'drawingHF', 'picture', 'oleObjects', 'controls', 'webPublishItems', 'tableParts', 'extLst'];
@@ -483,6 +517,75 @@ export class Sheet {
     }
     return n;
   }
+  // Βάζει n αντίγραφα της στήλης tpl αμέσως μετά τη στήλη after (από 1)· ό,τι είναι δεξιά πηγαίνει n στήλες δεξιά. Όπως το insertRows, για στήλες:
+  // κελιά (μορφή χωρίς τιμές), συγχωνεύσεις (όσες πατούν στη νέα θέση μεγαλώνουν, όσες είναι δεξιά μετακινούνται, όσες είναι μέσα στη στήλη-πρότυπο
+  // αντιγράφονται), τύποι (και σε άλλα φύλλα), πλάτη στηλών, περιοχή εκτύπωσης, ονόματα, μορφοποιήσεις υπό όρους, έλεγχοι δεδομένων.
+  // Οι τύποι δεν μεγαλώνουν μόνοι τους όταν η νέα στήλη μπαίνει ακριβώς μετά το τέλος μιας περιοχής (SUM(F17:M17)): growCols. false = δεν έγινε (πίνακας Excel).
+  insertCols(after: number, n: number, tpl: number, wb: Workbook): boolean {
+    if (n <= 0) return true;
+    if (/<tableParts\b/.test(this.tail)) return false;
+    const width = this.hasColWidth(tpl) ? this.colWidth(tpl) : null;
+    for (const row of this.rows) {
+      for (const c of row.cells) {
+        if (c.col > after) { c.col += n; c.attrs = setAttr(c.attrs, 'r', colName(c.col) + row.r); }
+        if (c.inner.includes('<f')) c.inner = shiftCellFormulasCols(c.inner, this.name, true, after, n);
+      }
+      const src = row.cells.find(c => c.col === tpl);
+      if (src) {
+        const fresh = Array.from({ length: n }, (_, i) => ({ col: after + 1 + i, attrs: setAttr(setAttr(src.attrs, 'r', colName(after + 1 + i) + row.r), 't', null), inner: '', selfClose: true }));
+        row.cells.push(...fresh); row.cells.sort((a, b) => a.col - b.col);
+      }
+    }
+    // πλάτη: τα <col> δεξιά μετακινούνται, όσο πατά στη νέα θέση μεγαλώνει· η νέα στήλη παίρνει το πλάτος της στήλης-πρότυπου
+    this.head = this.head.replace(/<col\b[^>]*?\/>/g, x => {
+      const min = Number(attr(x, 'min')), max = Number(attr(x, 'max'));
+      if (min > after) return setAttr(setAttr(x, 'min', String(Math.min(MAX_COL, min + n))), 'max', String(Math.min(MAX_COL, max + n)));
+      if (max > after) return setAttr(x, 'max', String(Math.min(MAX_COL, max + n)));
+      return x;
+    });
+    this.cwHead = null;
+    if (width) for (let i = 1; i <= n; i++) this.setColWidth(after + i, width);
+    const tplMerges: string[] = [];
+    this.tail = this.tail.replace(/<mergeCell ref="([^"]+)"\/>/g, (_m, ref: string) => {
+      const [a, b] = ref.split(':'); const A = splitRef(a), B = splitRef(b || a);
+      if (A.c === tpl && B.c === tpl) tplMerges.push(ref);
+      return `<mergeCell ref="${shiftColRef(ref, after, n)}"/>`;
+    });
+    if (tplMerges.length) {
+      const extra: string[] = []; for (let i = 1; i <= n; i++) for (const ref of tplMerges) extra.push(`<mergeCell ref="${ref.replace(/[A-Z]+(?=\$?\d)/g, colName(after + i))}"/>`);
+      this.tail = this.tail.replace(/<mergeCells count="(\d+)">/, (_m, c) => `<mergeCells count="${Number(c) + extra.length}">`).replace('</mergeCells>', extra.join('') + '</mergeCells>');
+    }
+    this.head = this.shiftColXml(this.head, after, n);
+    this.tail = this.shiftColXml(this.tail, after, n);
+    wb.shiftNamesCols(this.name, after, n);
+    wb.shiftForeignCols(this, after, n);
+    return true;
+  }
+  private hasColWidth(c: number): boolean { return [...this.head.matchAll(/<col\b[^>]*>/g)].some(m => Number(attr(m[0], 'min')) <= c && c <= Number(attr(m[0], 'max')) && attr(m[0], 'width') != null); }
+  // Οι περιοχές τύπων της στήλης col που τελειώνουν στη στήλη last φτάνουν ως τη στήλη to (το άθροισμα της ομάδας πήρε και τη νέα στήλη). Πόσα κελιά άλλαξαν.
+  growCols(col: number, last: number, to: number): number {
+    let n = 0;
+    for (const row of this.rows) for (const c of row.cells) {
+      if (c.col !== col || !c.inner.includes('<f')) continue;
+      const inner = c.inner.replace(/(<f(?:\s[^>]*)?>)([\s\S]*?)(<\/f>)/g, (_m, o: string, body: string, e: string) => o + growColFormula(body, this.name, true, last, to) + e);
+      if (inner !== c.inner) { c.inner = inner; n++; }
+    }
+    return n;
+  }
+  // Τύποι σε αυτό το φύλλο που δείχνουν σε στήλες ενός άλλου φύλλου που μετακινήθηκαν
+  shiftForeignCols(sheet: string, after: number, n: number) {
+    for (const row of this.rows) for (const c of row.cells) if (c.inner.includes('<f')) c.inner = shiftCellFormulasCols(c.inner, sheet, false, after, n);
+  }
+  private shiftColXml(xml: string, after: number, n: number) {
+    return xml
+      .replace(/<dimension ref="([^"]+)"/, (_m, r) => `<dimension ref="${shiftColRef(r, after, n)}"`)
+      .replace(/(<conditionalFormatting[^>]*sqref=")([^"]+)"/g, (_m, p, r) => p + shiftColRef(r, after, n) + '"')
+      .replace(/(<dataValidation[^>]*sqref=")([^"]+)"/g, (_m, p, r) => p + shiftColRef(r, after, n) + '"')
+      .replace(/(<hyperlink\b[^>]*\sref=")([^"]+)"/g, (_m, p, r) => p + shiftColRef(r, after, n) + '"')
+      .replace(/(<autoFilter\b[^>]*\sref=")([^"]+)"/g, (_m, p, r) => p + shiftColRef(r, after, n) + '"')
+      .replace(/(<xm:sqref>)([^<]+)(<\/xm:sqref>)/g, (_m, a, r, b) => a + shiftColRef(r, after, n) + b)
+      .replace(/<colBreaks\b[\s\S]*?<\/colBreaks>/g, blk => blk.replace(/<brk id="(\d+)"/g, (_m, c) => `<brk id="${Number(c) > after ? Number(c) + n : c}"`));
+  }
   // Τύποι σε αυτό το φύλλο που δείχνουν σε γραμμές ενός άλλου φύλλου που μετακινήθηκαν
   shiftForeign(sheet: string, after: number, n: number) {
     for (const row of this.rows) for (const c of row.cells) if (c.inner.includes('<f')) c.inner = shiftCellFormulas(c.inner, sheet, false, after, n);
@@ -569,11 +672,13 @@ export class Workbook {
     if (!s) {
       s = new Sheet(e.name, e.path, await this.zip.file(e.path)!.async('string')); s.sst = await this.sharedStrings(); this.sheets.set(e.path, s);
       for (const x of this.moved) if (x.sheet !== e.name) s.shiftForeign(x.sheet, x.after, x.n);
+      for (const x of this.movedCols) if (x.sheet !== e.name) s.shiftForeignCols(x.sheet, x.after, x.n);
     }
     return s;
   }
   // Γραμμές που μπήκαν σε φύλλα: οι τύποι των άλλων φύλλων που δείχνουν εκεί ακολουθούν (και όσων φορτωθούν αργότερα)
   private moved: { sheet: string; after: number; n: number }[] = [];
+  private movedCols: { sheet: string; after: number; n: number }[] = [];   // το ίδιο για στήλες (Sheet.insertCols)
   // Εικόνες που θα γραφτούν στην αποθήκευση (xl/drawings): η θέση είναι η τελική, οπότε προστίθενται αφού μπουν όλες οι γραμμές
   private pics: { sheet: Sheet; p: PicIn; rid: string | null }[] = [];
   addPicture(ws: Sheet, p: PicIn) { this.pics.push({ sheet: ws, p, rid: null }); }
@@ -584,6 +689,12 @@ export class Workbook {
     this.moved.push({ sheet: from.name, after, n });
     for (const x of this.pics) if (x.sheet === from && x.p.row0 >= after) x.p.row0 += n;   // γραμμές που μπαίνουν πάνω από εικόνα που περιμένει: κατεβαίνει
     for (const s of this.sheets.values()) if (s !== from) s.shiftForeign(from.name, after, n);
+  }
+  // Στήλες που μπήκαν σε φύλλο: οι τύποι των άλλων φύλλων που δείχνουν εκεί ακολουθούν (και όσων φορτωθούν αργότερα), και οι εικόνες που περιμένουν
+  shiftForeignCols(from: Sheet, after: number, n: number) {
+    this.movedCols.push({ sheet: from.name, after, n });
+    for (const x of this.pics) if (x.sheet === from && x.p.col0 >= after) x.p.col0 += n;
+    for (const s of this.sheets.values()) if (s !== from) s.shiftForeignCols(from.name, after, n);
   }
   // Νέες γραμμές στο τέλος της λίστας του φύλλου ws: οι τύποι (σε αυτό και στα άλλα φύλλα) που μετράνε ως τον
   // τελευταίο της λίστας μετράνε και τους νέους. Πόσοι τύποι άλλαξαν.
@@ -1240,6 +1351,14 @@ export class Workbook {
     return wb;
   }
 
+  // Περιοχή εκτύπωσης και άλλα ονόματα του φύλλου: μετακίνηση για στήλες (Sheet.insertCols)
+  shiftNamesCols(sheet: string, after: number, n: number) {
+    this.workbookXml = this.workbookXml.replace(/(<definedName\b[^>]*>)([^<]*)(<\/definedName>)/g, (_m, a, body: string, c) => {
+      const plain = body.replace(/&apos;/g, "'");
+      if (!plain.includes(sheet + '!') && !plain.includes(sheet.replace(/'/g, "''") + "'!")) return a + body + c;
+      return a + shiftColFormula(body, sheet, false, after, n).replace(/'/g, '&apos;') + c;
+    });
+  }
   // Περιοχή εκτύπωσης και άλλα ονόματα του φύλλου
   shiftNames(sheet: string, after: number, n: number) {
     this.workbookXml = this.workbookXml.replace(/(<definedName\b[^>]*>)([^<]*)(<\/definedName>)/g, (_m, a, body: string, c) => {

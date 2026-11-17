@@ -11,7 +11,7 @@ import { isUnit } from '../../shared/mode';
 import { requestLeave } from '../pending';
 import { collator, normGreek, upper } from '../../shared/text';
 import { CADRE_ABS, TYPES, type Person, type TypeKey } from '../../shared/domain';
-import { LEAVE_COLS, LEAVE_NO_COL, LIST_BASE, LIST_NAME, MED_LIKE, cadreAbsOf, cadreLeaveKey, guessHk, hkCadreRows, hkRowsOf, siUnarmed, itemKey, itemName, leaveCol, leaveEffect, leaveKey, leaveNameKey, listRows, rankTxt, weaponBack, type LeaveText, type ListId, type ListItem, type ListRow, type UserLists } from '../../shared/ranks';
+import { OWN_COL_TAG, hkColsOf, leaveColOpts, LEAVE_NO_COL, LIST_BASE, LIST_NAME, MED_LIKE, cadreAbsOf, cadreLeaveKey, guessHk, hkCadreRows, hkRowsOf, siUnarmed, itemKey, itemName, leaveCol, leaveEffect, leaveKey, leaveNameKey, listRows, rankTxt, weaponBack, type LeaveText, type ListId, type ListItem, type ListRow, type UserLists } from '../../shared/ranks';
 import { cadreLeaveHk, hkRange, leaveDest, leaveHk } from '../../shared/hkaiText';
 import { HK_A, HK_K, hkRankOf, personMap } from '../../shared/rules';
 import { hkRowLabel, HK } from '../../shared/unit';
@@ -36,13 +36,14 @@ const HELP = (): Record<ListId, string> => ({
 type Pick = { f: 'hk' | 'col'; label: string; opts: [string, string][] };
 const rowsOf = (l: string[]): [string, string][] => l.map(x => [x, hkRowLabel(x)]);
 // καταστάσεις στελεχών: κάθε στήλη της ΗΚΑΙ, κωλυόμενοι και απόντες
-const HK_COLS: [string, string][] = [...HK_K.filter(([k]) => k !== 'bl').map(([k, , full]) => [k, 'Κωλ.: ' + full] as [string, string]), ...HK_A.map(([k, , full]) => [k, 'Απ.: ' + full] as [string, string])];
+const hkColsPick = (lists?: UserLists): [string, string][] => [...HK_K.filter(([k]) => k !== 'bl').map(([k, , full]) => [k, 'Κωλ.: ' + full] as [string, string]), ...hkColsOf(lists).filter(x => x.grp === 'kol').map(x => [x.key, 'Κωλ.: ' + x.name + OWN_COL_TAG] as [string, string]),
+  ...HK_A.map(([k, , full]) => [k, 'Απ.: ' + full] as [string, string]), ...hkColsOf(lists).filter(x => x.grp === 'abs').map(x => [x.key, 'Απ.: ' + x.name + OWN_COL_TAG] as [string, string])];
 // οι γραμμές της ΗΚΑΙ μαζί με όσες πρόσθεσες (Ρυθμίσεις › Μονάδα και έντυπα), με το όνομά τους στην ΗΚΑΛ σε λόχο
 const pickOf = (id: ListId, lists?: UserLists): Pick | undefined => (id === 'soldierRanks' ? { f: 'hk', label: 'Γραμμή στην ' + HK(), opts: rowsOf(hkRowsOf(lists).nco) }
-  : id === 'cadreRanks' ? { f: 'hk', label: 'Γραμμή στην ' + HK(), opts: rowsOf(hkCadreRows(lists)) } : PICK()[id]);
-const PICK = (): Partial<Record<ListId, Pick>> => ({
-  leaveKinds: { f: 'col', label: 'Στήλη στην ' + HK(), opts: LEAVE_COLS },
-  cadreAbs: { f: 'col', label: 'Στήλη στην ' + HK(), opts: [['', 'Μόνο στη λίστα (δεν μετρά)'], ...HK_COLS] }
+  : id === 'cadreRanks' ? { f: 'hk', label: 'Γραμμή στην ' + HK(), opts: rowsOf(hkCadreRows(lists)) } : PICK(lists)[id]);
+const PICK = (lists?: UserLists): Partial<Record<ListId, Pick>> => ({
+  leaveKinds: { f: 'col', label: 'Στήλη στην ' + HK(), opts: leaveColOpts(lists) },
+  cadreAbs: { f: 'col', label: 'Στήλη στην ' + HK(), opts: [['', 'Μόνο στη λίστα (δεν μετρά)'], ...hkColsPick(lists)] }
 });
 // ιατρικά: «ΕΛ.ΓΥΜΝ» και «ΕΛ ΓΥΜΝ» είναι το ίδιο, όπως στο Excel
 const keyOf = (id: ListId) => (id === 'medKinds' ? (v: string) => itemKey(v).replace(/[^Α-ΩA-Z0-9]/g, '') : itemKey);

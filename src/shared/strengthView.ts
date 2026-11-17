@@ -75,7 +75,7 @@ export function strengthView(s: AppState, date: ISODate, at: number): StrengthVi
       // άδεια δικού σου είδους με στήλη κωλυομένων: υποομάδα με το όνομα του είδους (Michael, 3/11)
       const step = m.st.type === 'STEP', lv = m.st.type === 'LEAVE', lvl = lv ? statusLbl(m.st, s.settings.lists) : '';
       const k = step ? 'step' : lv ? 'leave:' + norm(lvl) : svcKey(m.st), g = kolG.get(k) || { label: step ? STEP_LBL : lv ? lvl : svcLbl(m.st), rows: [] };
-      g.rows.push({ p, what: step ? [STEP_LBL, m.st.note?.trim()].filter(Boolean).join(' · ') : lv ? what(s, m.st) : m.st.note?.trim() || 'Κωλυόμενος', tone: TYPES.KOL.tone, range: spanTxt(m.st), ret: '', retBad: false, tag: m.col ? kolColName(m.col) : undefined }); kolG.set(k, g);
+      g.rows.push({ p, what: step ? [STEP_LBL, m.st.note?.trim()].filter(Boolean).join(' · ') : lv ? what(s, m.st) : m.st.note?.trim() || 'Κωλυόμενος', tone: TYPES.KOL.tone, range: spanTxt(m.st), ret: '', retBad: false, tag: m.col ? kolColName(m.col, s.settings.lists) : undefined }); kolG.set(k, g);
       continue;
     }
     if (awaySvc && svcAwayOf(s, ss, dmap.get(p.id), date, at)) {

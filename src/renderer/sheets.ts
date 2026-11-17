@@ -2,8 +2,8 @@
 import { E, type Cell, type SheetModel } from './common';
 import { TYPES, coversDay, hkOn, fullName, phaseBase, type AppState, type DutyKind, type Status } from '../shared/domain';
 import { bareOf, codeOf } from '../shared/codes';
-import { HK_K, HK_A, activePeople, cadreSeats, isHol, dutyMin, seatMap, postBy, postsOf, type Hkai } from '../shared/rules';
-import { hkRowsOf, isAway, rankTxt } from '../shared/ranks';
+import { activePeople, cadreSeats, isHol, dutyMin, seatMap, postBy, postsOf, type Hkai } from '../shared/rules';
+import { absKeysOf, hkColShortOf, kolKeysOf, hkRowsOf, isAway, rankTxt } from '../shared/ranks';
 import { formText, hkHeadOf, hkRowLabel } from '../shared/unit';
 import { MON_SHORT, MONTHS, dm, hkDate, parseD, type ISODate } from '../shared/dates';
 import { norm } from '../shared/text';
@@ -100,17 +100,18 @@ export const frouraEmpty = (s: AppState, date: ISODate) => postsOf(s.settings).f
 
 // ΗΚΑΙ μπροστινό (δείγμα 15)
 export function hkaiFront(s: AppState, date: ISODate, h: Hkai): SheetModel {
-  const nK = HK_K.length, nA = HK_A.length, W = 8 + nK + nA;
+  const lists = s.settings.lists, KK = kolKeysOf(lists), AA = absKeysOf(lists);   // οι στήλες της ΗΚΑΙ: βασικές και δικές σου στο τέλος της ομάδας τους
+  const nK = KK.length, nA = AA.length, W = 8 + nK + nA;
   const hd = hkHeadOf(s.settings);
   const rows: (Cell | null)[][] = [[E(hd[0], 'u', 4), E('', '', W - 4)], [E(hd[1], 'u', 4), E('', '', W - 4)],
     [E('ΚΑΤΑΣΤΑΣΗ', 'ttl big', W)], [E('ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ ' + s.settings.unitName + ' ΤΗΣ ' + hkDate(date), 'ttl', W)], [E('', '', W)]];
   const H = (v: string, cs?: number, rs?: number) => E(v, 'b hdr sm', cs, rs);
   rows.push([H('ΒΑΘΜΟΙ', 1, 2), H('Προβλ.', 1, 2), H('ΔΥΝΑΜΗ', 2), H('Σύν.', 1, 2), H('ΚΩΛΥΟΜΕΝΟΙ', nK), H('Σύν. κωλ.', 1, 2), H('ΑΠΟΝΤΕΣ', nA), H('Σύν. απ.', 1, 2), H('Διαθ. εκπ.', 1, 2), H('Μισθοτρ.', 1, 2)]);
-  rows.push([null, null, H('Τοπ.'), H('Προσκ.'), null, ...HK_K.map(x => H(x[1])), null, ...HK_A.map(x => H(x[1])), null, null, null]);
+  rows.push([null, null, H('Τοπ.'), H('Προσκ.'), null, ...KK.map(x => H(hkColShortOf(x, lists))), null, ...AA.map(x => H(hkColShortOf(x, lists))), null, null, null]);
   const pv = hkOn(s.settings, 'prov') ? s.settings.hkai?.prov || {} : {};
   const pvOf = (list: string[]) => list.reduce((a, r) => a + (pv[r] || 0), 0);
   const line = (label: string, n: number, att: number, c: Record<string, number>, bold: boolean, prov = 0) => {
-    const k = HK_K.map(([x]) => c[x] || 0), a = HK_A.map(([x]) => c[x] || 0);
+    const k = KK.map(x => c[x] || 0), a = AA.map(x => c[x] || 0);
     const sk = k.reduce((p, q) => p + q, 0), sa = a.reduce((p, q) => p + q, 0); const st = bold ? 'b c bold' : 'b c';
     return [E(label, 'b' + (bold ? ' bold' : '')), E(prov || '', st), E(n - att, st), E(att, st), E(n, st), ...k.map(v => E(v || '', st)), E(sk, st), ...a.map(v => E(v || '', st)), E(sa, st), E(n - sa, st), E(c.ab || '', st)];
   };
@@ -123,7 +124,7 @@ export function hkaiFront(s: AppState, date: ISODate, h: Hkai): SheetModel {
   x = sum([...R.off, ...R.nco]); rows.push(line('ΓΕΝΙΚΟ ΣΥΝΟΛΟ', x.n, x.att, x.c, true, pvOf([...R.off, ...R.nco])));
   rows.push([E('', '', W)], [E('', '', W - 8), E(s.settings.place + ', ' + hkDate(date), 'c', 8)], [E('', '', W)],
     ...sigRows(s, 'hkai', W, true, [[E('', '', 2), E('-Ο-', 'c', 6), E('', '', W - 16), E('-Ο-', 'c', 8)], [E('', '', 2), E(formText(s.settings, 'ΑΛΧΙΑΣ ΙΛΗΣ'), 'ttl', 6), E('', '', W - 16), E(formText(s.settings, 'ΔΙΟΙΚΗΤΗΣ ΙΛΗΣ'), 'ttl', 8)]]));
-  return { cols: [132, 40, 34, 34, 34, ...HK_K.map(() => 32), 36, ...HK_A.map(() => 32), 36, 36, 40], rows };
+  return { cols: [132, 40, 34, 34, 34, ...KK.map(() => 32), 36, ...AA.map(() => 32), 36, 36, 40], rows };
 }
 // ΗΚΑΙ πίσω: ίδιοι κανόνες με την εξαγωγή (main/exports.ts)
 export function hkaiBack(s: AppState, date: ISODate): SheetModel {

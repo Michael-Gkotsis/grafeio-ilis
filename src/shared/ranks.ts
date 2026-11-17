@@ -50,11 +50,12 @@ export interface ListItem { name: string; hk?: string; col?: string; acc?: strin
 export interface UserList { add?: ListItem[]; hide?: string[] }
 // si: ο πίνακας Σ.Ι. (si.ts) · stat: ο πίνακας καταστάσεων ΕΑ/ΕΥ/ΕΟ… (stat.ts), ό,τι άλλαξες εκεί
 // hkRows: γραμμές της ΗΚΑΙ που πρόσθεσες (Ρυθμίσεις › Μονάδα και έντυπα › Γραμμές της ΗΚΑΙ)
+// hkCols: δικές σου στήλες της ΗΚΑΙ (Ρυθμίσεις › Μονάδα και έντυπα › Δικές μου στήλες, Michael 17/11): μπαίνουν στο τέλος της ομάδας τους, πριν από το «Σύνολο»
 // hkNames: άλλο όνομα για μια γραμμή (κλειδί → όνομα), π.χ. «Ίλαρχοι» → «Ίλαρχοι-Λοχαγοί»· το κλειδί δεν αλλάζει
 // leaveText: «Κείμενο στην ΗΚΑΙ» ανά είδος άδειας (1/11), κλειδί leaveKey: t = πώς γράφεται το είδος στο 3. ΑΔΕΙΕΣ και στο 5. ΑΙΤΗΣΕΙΣ
 // (κενό = αυτόματο), dest = γράφεται και η κατεύθυνση της άδειας («… ΜΕ ΚΑΤΕΥΘΥΝΣΗ ΚΟΡΙΝΘΟ»)
 export interface LeaveText { t?: string; dest?: boolean }
-export type UserLists = Partial<Record<ListId, UserList>> & { si?: SiConfig; stat?: StatConfig; hkRows?: HkRowDef[]; hkNames?: Record<string, string>; leaveText?: Record<string, LeaveText> };
+export type UserLists = Partial<Record<ListId, UserList>> & { si?: SiConfig; stat?: StatConfig; hkRows?: HkRowDef[]; hkCols?: HkColDef[]; hkNames?: Record<string, string>; leaveText?: Record<string, LeaveText> };
 export const LIST_BASE: Record<ListId, readonly string[]> = {
   soldierRanks: SOLDIER_RANKS, cadreRanks: CADRE_RANKS, origins: ORIGINS, specs: SPECS, punKinds: PUN_KINDS, leaveKinds: LEAVE_KINDS,
   cadreAbs: CADRE_ABS.map(x => x[1]),   // στις απουσίες στελεχών οι βασικές έχουν κωδικό (ka, an…)· οι δικές σου το όνομά τους
@@ -200,14 +201,45 @@ export const userItem = (lists: UserLists | undefined, id: ListId, name: string 
 // Στήλες της ΗΚΑΙ: κωλυόμενοι (HK_K) και απόντες (HK_A). Εδώ και όχι στο rules.ts για να τις βλέπουν και οι άδειες (κυκλική εξάρτηση)
 export const HK_K: [string, string, string][] = [['yp', 'Υπηρ.', 'Υπηρεσία εντός στρατοπέδου'], ['ey', 'ΕΥ', 'Ελεύθεροι υπηρεσίας'], ['tim', 'Τιμ.', 'Τιμωρημένοι'], ['bl', '', '(κενή στήλη του εντύπου)'], ['os', 'Ο/Σ', 'Ο/Σ'], ['mag', 'Μαγ.', 'Μαγειρεία'], ['sid', 'Σιδ.', 'Σιδηρουργείο'], ['kin', 'Κίν.', 'Σε κίνηση']];
 export const HK_A: [string, string, string][] = [['ka', 'Κ.Άδ.', 'Κανονικές άδειες / ΑΜΔ / ΥΕΘΑ'], ['an', 'Αναρ.', 'Αναρρωτικές άδειες'], ['eid', 'Ειδ.', 'Ειδικές άδειες'], ['nos', 'Νοσ.', 'Νοσοκομείο / 401 ΓΣΝΑ'], ['prat', 'Πρατ.', 'Πρατήριο'], ['adik', 'Αδικ.', 'Αγνοούμενοι / Αδικαιολογήτως'], ['fp', 'Φ.Πορ.', 'Φύλλα πορείας - μεταβάσεως'], ['fyl', 'Φυλ.', 'Φυλάκια'], ['apal', 'Απαλ.', 'Απαλλαγή'], ['ekp', 'Εκπ.', 'Αποσπασμένοι σε εκπαίδευση'], ['allh', 'Άλλη Μ.', 'Αποσπασμένοι σε άλλη μονάδα']];
-// Στήλη ΗΚΑΙ ανά υπηρεσία (BlockDef.hkCol, Michael 17/11): κλειδί κωλυομένων (εντός στρατοπέδου) ή απόντων (εκτός). Άκυρο/κενό = προεπιλογή του είδους
+// Δικές σου στήλες της ΗΚΑΙ (UserLists.hkCols, Michael 17/11): key = 'u1', 'u2'… (παράγεται, σταθερό, δεν μπερδεύεται με τα βασικά κλειδιά και δεν έχει ':'),
+// grp: 'kol' κωλυόμενοι (εντός στρατοπέδου) ή 'abs' απόντες· short: συντομία για πίνακες (προαιρετικό, αλλιώς το όνομα)
+export interface HkColDef { key: string; name: string; grp: 'kol' | 'abs'; short?: string }
+export const HK_COLS_MAX = 10;
+export const HK_COL_KEY = /^u\d+$/;
+const ownColIdx = new WeakMap<object, HkColDef[]>();
+// οι έγκυρες δικές σου στήλες: με όνομα, γνωστή ομάδα, κλειδί u<n> και χωρίς διπλά (η πρώτη κερδίζει)
+export function hkColsOf(lists?: Pick<UserLists, 'hkCols'> | null): HkColDef[] {
+  const key = lists?.hkCols; if (!key?.length) return NO_OWN_COLS;
+  let r = ownColIdx.get(key); if (r) return r;
+  const seen = new Set<string>(), names = new Set<string>(); r = [];
+  for (const x of key) {
+    const nm = (x?.name || '').trim(); if (!nm || !x.key || !HK_COL_KEY.test(x.key) || seen.has(x.key) || (x.grp !== 'kol' && x.grp !== 'abs')) continue;
+    const nk = itemKey(nm); if (names.has(nk)) continue;
+    seen.add(x.key); names.add(nk); r.push({ key: x.key, name: nm, grp: x.grp, ...(x.short?.trim() ? { short: x.short.trim() } : {}) });
+  }
+  ownColIdx.set(key, r); return r;
+}
+const NO_OWN_COLS: HkColDef[] = [];
+export const hkColOwn = (key: string | undefined | null, lists?: Pick<UserLists, 'hkCols'> | null): HkColDef | undefined => (key && lists?.hkCols?.length ? hkColsOf(lists).find(x => x.key === key) : undefined);
+// στήλη κωλυομένων / απόντων της ΗΚΑΙ: βασική ή δική σου (το 'bl' δεν είναι στήλη)
+export const isKolCol = (key: string | undefined | null, lists?: Pick<UserLists, 'hkCols'> | null): boolean => !!key && (HK_K.some(x => x[0] === key && key !== 'bl') || hkColOwn(key, lists)?.grp === 'kol');
+export const isAbsCol = (key: string | undefined | null, lists?: Pick<UserLists, 'hkCols'> | null): boolean => !!key && (HK_A.some(x => x[0] === key) || hkColOwn(key, lists)?.grp === 'abs');
+// όλες οι στήλες που μετρούν στην ΗΚΑΙ, με τη σειρά της: κωλυόμενοι (βασικές + δικές σου), μετά απόντες (βασικές + δικές σου)
+export const kolKeysOf = (lists?: Pick<UserLists, 'hkCols'> | null): string[] => [...HK_K.map(x => x[0]), ...hkColsOf(lists).filter(x => x.grp === 'kol').map(x => x.key)];
+export const absKeysOf = (lists?: Pick<UserLists, 'hkCols'> | null): string[] => [...HK_A.map(x => x[0]), ...hkColsOf(lists).filter(x => x.grp === 'abs').map(x => x.key)];
+// το όνομα μιας δικής σου στήλης (αλλιώς το ίδιο το κλειδί)
+export const hkColLabel = (key: string, lists?: Pick<UserLists, 'hkCols'> | null): string => hkColOwn(key, lists)?.name || [...HK_K, ...HK_A].find(x => x[0] === key)?.[2] || key;
+export const hkColShortOf = (key: string, lists?: Pick<UserLists, 'hkCols'> | null): string => { const o = hkColOwn(key, lists); return o ? o.short || o.name : [...HK_K, ...HK_A].find(x => x[0] === key)?.[1] || key; };
+export const OWN_COL_TAG = ' (δική σου στήλη)';
+// Στήλη ΗΚΑΙ ανά υπηρεσία (BlockDef.hkCol, Michael 17/11): κλειδί κωλυομένων (εντός στρατοπέδου) ή απόντων (εκτός). Άκυρο/κενό = προεπιλογή του είδους.
+// Δική σου στήλη (lists.hkCols) δεκτή μόνο όσο υπάρχει στις ρυθμίσεις· αν σβηστεί, η υπηρεσία γυρνά στην προεπιλογή
 export const SVC_KOL_COLS = HK_K.filter(([k]) => k !== 'bl');
-export const svcColOk = (c: unknown): string | undefined => (typeof c === 'string' && (SVC_KOL_COLS.some(x => x[0] === c) || HK_A.some(x => x[0] === c)) ? c : undefined);
-export const svcAbsent = (c: string | undefined | null): boolean => !!c && HK_A.some(x => x[0] === c);
+export const svcColOk = (c: unknown, lists?: Pick<UserLists, 'hkCols'> | null): string | undefined => (typeof c === 'string' && (SVC_KOL_COLS.some(x => x[0] === c) || HK_A.some(x => x[0] === c) || !!hkColOwn(c, lists)) ? c : undefined);
+export const svcAbsent = (c: string | undefined | null, lists?: Pick<UserLists, 'hkCols'> | null): boolean => isAbsCol(c, lists);
 // η προεπιλεγμένη στήλη του είδους (όπως πάντα: μαγειρεία 'mag', όλες οι άλλες 'yp')
 export const svcDefault = (kind: string): string => (kind === 'mg' ? 'mag' : 'yp');
 // η στήλη της ΗΚΑΙ ενός ατόμου σε υπηρεσία του είδους kind με hkCol
-export const svcColOf = (kind: string, hkCol?: string): string => svcColOk(hkCol) || svcDefault(kind);
+export const svcColOf = (kind: string, hkCol?: string, lists?: Pick<UserLists, 'hkCols'> | null): string => svcColOk(hkCol, lists) || svcDefault(kind);
 // Άδεια → στήλη της ΗΚΑΙ: η «Ειδική» στις Ειδικές (Michael, 13/10), οι άλλες βασικές στις Κανονικές. Τα δικά σου είδη διαλέγουν μόνα τους (Michael, 3/11):
 // στήλη απόντων (απών παντού), στήλη κωλυομένων (κωλυόμενος: αφαιρείται από τους παρόντες, χωρίς υπηρεσία και έξοδο) ή '-' (LEAVE_NO_COL, «Πουθενά»:
 // παρών παντού, δεν μετρά σε στήλη· υπηρεσίες και έξοδος μόνο αν το ζητήσεις: ListItem.duty / out)
@@ -220,6 +252,13 @@ export const LEAVE_COLS: [string, string][] = [
   [LEAVE_NO_COL, 'Πουθενά στην ΗΚΑΙ (παρών παντού)'],
   [LEAVE_AWAY_NO_COL, 'Πουθενά στην ΗΚΑΙ (απών στην εφαρμογή)']
 ];
+// οι επιλογές της στήλης για τα είδη άδειας: οι βασικές και οι δικές σου στήλες (Απ.: / Κωλ.: ανά ομάδα τους)
+export function leaveColOpts(lists?: Pick<UserLists, 'hkCols'> | null): [string, string][] {
+  const own = hkColsOf(lists); if (!own.length) return LEAVE_COLS;
+  const mine = (g: 'kol' | 'abs') => own.filter(x => x.grp === g).map(x => [x.key, (g === 'abs' ? 'Απ.: ' : 'Κωλ.: ') + x.name + OWN_COL_TAG] as [string, string]);
+  const i = LEAVE_COLS.findIndex(c => c[0] === LEAVE_NO_COL), a = LEAVE_COLS.findIndex(c => c[0] === 'yp');
+  return [...LEAVE_COLS.slice(0, a), ...mine('abs'), ...LEAVE_COLS.slice(a, i), ...mine('kol'), ...LEAVE_COLS.slice(i)];
+}
 export type LeaveMode = 'away' | 'kol' | 'present';
 // το δικό σου είδος άδειας (όχι τα βασικά: Κανονική, Ειδική, ΑΜΔ, ΥΕΘΑ)
 function ownLeave(kind: string | undefined, lists?: UserLists): ListItem | undefined {
@@ -231,19 +270,19 @@ export function leaveCol(kind: string | undefined, lists?: UserLists): string {
   const k = itemKey(kind || '');
   if (k === itemKey('Ειδική') || k === itemKey('Ειδική άδεια')) return 'eid';
   const own = ownLeave(kind, lists)?.col;
-  return own && LEAVE_COLS.some(c => c[0] === own) ? own : 'ka';
+  return own && (LEAVE_COLS.some(c => c[0] === own) || !!hkColOwn(own, lists)) ? own : 'ka';
 }
 // Πώς μετρά μια άδεια (Michael, 3/11): 'away' απών (τα βασικά και όσα έχουν στήλη απόντων), 'kol' κωλυόμενος, 'present' παρών. undefined: δεν είναι άδεια.
 // Ρωτιέται για κάθε άτομο σε κάθε μέτρηση: κρατιέται ανά είδος και ανά τις δικές σου Λίστες
-const modeIdx = new WeakMap<object, Map<string, LeaveMode>>();
+const modeIdx = new WeakMap<object, { cols: unknown; m: Map<string, LeaveMode> }>();   // cols: ποιες δικές σου στήλες (hkCols) ίσχυαν όταν κρατήθηκε
 export function leaveMode(st: Pick<Status, 'type' | 'kind'>, lists?: UserLists): LeaveMode | undefined {
   if (st.type !== 'LEAVE') return undefined;
   const add = lists?.leaveKinds?.add; if (!add?.length) return 'away';
-  let m = modeIdx.get(add); if (!m) { m = new Map(); modeIdx.set(add, m); }
-  const key = st.kind || ''; let r = m.get(key);
+  let e = modeIdx.get(add); if (!e || e.cols !== lists?.hkCols) { e = { cols: lists?.hkCols, m: new Map() }; modeIdx.set(add, e); }
+  const m = e.m, key = st.kind || ''; let r = m.get(key);
   if (r === undefined) {
     const c = ownLeave(key, lists)?.col;
-    r = !c ? 'away' : c === LEAVE_NO_COL ? 'present' : HK_K.some(x => x[0] === c && c !== 'bl') ? 'kol' : 'away';
+    r = !c ? 'away' : c === LEAVE_NO_COL ? 'present' : isKolCol(c, lists) ? 'kol' : 'away';
     m.set(key, r);
   }
   return r;
@@ -258,7 +297,7 @@ export const noOutOf = (st: Pick<Status, 'type' | 'kind'>, lists?: UserLists): b
   !!TYPES[st.type].noOut && !(st.type === 'LEAVE' && leaveMode(st, lists) === 'present' && ownLeave(st.kind, lists)?.out);
 // Τι κάνει ένα είδος άδειας, σε μία γραμμή (Λίστες › Είδη άδειας): hk = το όνομα της ΗΚΑΙ στη μονάδα
 export function leaveEffect(kind: string | undefined, lists?: UserLists, hk = 'ΗΚΑΙ'): string {
-  const m = leaveMode({ type: 'LEAVE', kind }, lists), col = leaveCol(kind, lists), short = [...HK_K, ...HK_A].find(x => x[0] === col)?.[1] || col;
+  const m = leaveMode({ type: 'LEAVE', kind }, lists), col = leaveCol(kind, lists), short = hkColShortOf(col, lists);
   if (m === 'kol') return 'Κωλυόμενος: αφαιρείται από τους παρόντες, στην ' + hk + ' στη στήλη ' + short + ', χωρίς υπηρεσία και έξοδο';
   if (m === 'away' && col === LEAVE_AWAY_NO_COL) return 'Απών στην εφαρμογή, δεν μετρά σε στήλη της ' + hk + ' (εκεί μετρά στους παρόντες)';
   if (m === 'present') {

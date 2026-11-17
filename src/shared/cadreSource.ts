@@ -142,7 +142,7 @@ export const absCode = (kind: string, s: Cfg) => cadreAbsOf(kind, s.settings.lis
 const absKey = (cid: string, from: string, to: string, code: string) => [cid, from, to, code].join('|');
 const keyOf = (a: CadreAbs, s: Cfg) => absKey(a.cid, a.from, a.to, absCode(a.kind, s));
 const absNote = (v: CellValue) => cellText(v).trim();
-const where = (a: CadreAbs, s: Cfg) => { const st = cadreStatusOf(a, s.settings.lists); return st.group === 'list' ? 'ΜΟΝΟ ΣΤΗ ΛΙΣΤΑ' : (st.group === 'kol' ? 'ΚΩΛΥΟΜΕΝΟΙ' : 'ΑΠΟΝΤΕΣ') + ' · ' + colShort(st.col); };
+const where = (a: CadreAbs, s: Cfg) => { const st = cadreStatusOf(a, s.settings.lists); return st.group === 'list' ? 'ΜΟΝΟ ΣΤΗ ΛΙΣΤΑ' : (st.group === 'kol' ? 'ΚΩΛΥΟΜΕΝΟΙ' : 'ΑΠΟΝΤΕΣ') + ' · ' + colShort(st.col, s.settings.lists); };
 const absLabel = (a: CadreAbs, s: Cfg) => upper(cadreAbsOf(a.kind, s.settings.lists)?.[1] || a.kind);
 const absIdent = (code: string, from: string, to: string, last: string, first: string) => [code, from, to, nk(last, first)].join('|');
 // Οι εγγραφές που κρατά το base (για να βρεθεί η γραμμή ακόμα κι αν άλλαξε το όνομα του στελέχους ή σβήστηκε)

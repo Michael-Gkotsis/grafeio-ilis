@@ -3,13 +3,13 @@ import { HK } from './unit';
 import { isUnit } from './mode';
 import { collator, upper } from './text';
 import { addDays, daysBetween, dm, greekHolidays, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
-import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, HK_A, HK_K, isAway, svcAbsent, svcColOf, svcDefault, isEpopOrigin, LEAVE_AWAY_NO_COL, LEAVE_NO_COL, leaveCol, leaveMode, leaveNameKey, live, medNote, medNoteXl, medWarns, notesOf, noDutyOf, originRow, statusLbl, type UserLists } from './ranks';
+import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, HK_A, HK_COL_KEY, absKeysOf, hkColsOf, isAbsCol, isKolCol, kolKeysOf, isAway, svcAbsent, svcColOf, svcDefault, isEpopOrigin, LEAVE_AWAY_NO_COL, LEAVE_NO_COL, leaveCol, leaveMode, leaveNameKey, live, medNote, medNoteXl, medWarns, notesOf, noDutyOf, originRow, statusLbl, type UserLists } from './ranks';
 import { siAllows, siIsUnarmed, siOf } from './si';
 import { STAT_ROWS, statDefault, statIsUnarmed, statNoOut, statOn, type StatCell } from './stat';
 import { backBy, hasTimes, mins } from './hours';
 import { dayTimes, leaveOut, outHeld } from './returns';   // κυκλική εξάρτηση: καλείται μέσα σε συναρτήσεις (returns.ts)
 import {
-  ADIK_TYPES, TYPES, TYPE_KEYS, RECORD_CATS, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, KOL_COLS, STEP_COL, kolColName, kolColOf, kolHk, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
+  ADIK_TYPES, TYPES, TYPE_KEYS, RECORD_CATS, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, STEP_COL, kolColName, kolColOf, kolColsOf, kolHk, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
   KIND_NAME, type AppState, type CapKey, type Caps, type Phase, type Baseline, type Cadre, type CadreAbs, type CadreDuty, type DutyLog, type Person, type PersonRequest, type Post, type Skip, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
 } from './domain';
 
@@ -1471,11 +1471,11 @@ export const cadreAbsOn = (s: Pick<AppState, 'cadreAbs'>, cid: string, date: ISO
 export interface DutyCol { col: string; def: string }
 // Όπως πάντα, ο τελευταίος γράφει (δύο υπηρεσίες την ίδια μέρα)· μόνο η υπηρεσία εκτός στρατοπέδου δεν χάνεται από άλλη
 export function dutyColsOn(s: AppState, date: ISODate): Map<number, DutyCol> {
-  const g = s.guards[date] || {}; const m = new Map<number, DutyCol>();
+  const g = s.guards[date] || {}; const m = new Map<number, DutyCol>(); const lists = s.settings.lists;   // lists: οι δικές σου στήλες (hkCols)
   for (const k in g) {
     const p = postBy(s, k); if (!p) continue;
-    const def = svcDefault(p.kind), col = svcColOf(p.kind, p.hkCol), prev = m.get(g[k]);
-    if (prev && svcAbsent(prev.col) && !svcAbsent(col)) continue;
+    const def = svcDefault(p.kind), col = svcColOf(p.kind, p.hkCol, lists), prev = m.get(g[k]);
+    if (prev && svcAbsent(prev.col, lists) && !svcAbsent(col, lists)) continue;
     m.set(g[k], { col, def });
   }
   return m;
@@ -1483,12 +1483,12 @@ export function dutyColsOn(s: AppState, date: ISODate): Map<number, DutyCol> {
 const absIdx = new WeakMap<Settings, boolean>();
 // Έχει η μονάδα έστω μία υπηρεσία εκτός στρατοπέδου; (αλλιώς η Δύναμη/Σήμερα δεν χρειάζεται να ψάξει)
 export function hasSvcAway(st: Settings): boolean {
-  let r = absIdx.get(st); if (r === undefined) { r = allBlocks(st).some(b => svcAbsent(svcColOf(b.kind, b.hkCol))); absIdx.set(st, r); }
+  let r = absIdx.get(st); if (r === undefined) { r = allBlocks(st).some(b => svcAbsent(svcColOf(b.kind, b.hkCol, st.lists), st.lists)); absIdx.set(st, r); }
   return r;
 }
 // Η στήλη απόντων αν το άτομο μετρά απών λόγω υπηρεσίας εκτός στρατοπέδου εκείνη τη στιγμή (ss: οι καταστάσεις του εκείνη τη στιγμή), αλλιώς null
 export function svcAwayOf(s: AppState, ss: Status[], dc: DutyCol | undefined, date: ISODate, at: number): string | null {
-  if (!dc || !svcAbsent(dc.col)) return null;
+  if (!dc || !svcAbsent(dc.col, s.settings.lists)) return null;
   return soldierCol(s, ss, dc, date, at) === dc.col ? dc.col : null;
 }
 function soldierCol(s: AppState, ss: Status[], dc: DutyCol | undefined, date: ISODate, at: number, noCol?: Status[]): string | null {
@@ -1496,9 +1496,9 @@ function soldierCol(s: AppState, ss: Status[], dc: DutyCol | undefined, date: IS
   const abs = ss.find(x => isAway(x, lists) && TYPES[x.type].hkai);
   if (abs) { const lc = abs.type === 'LEAVE' ? leaveCol(abs.kind, lists) : TYPES[abs.type].hkai!; if (lc === LEAVE_AWAY_NO_COL) noCol?.push(abs);   // απών στην εφαρμογή, σε καμία στήλη (Michael, 3/11)
     return lc === LEAVE_NO_COL || lc === LEAVE_AWAY_NO_COL ? null : lc; }
-  const kol = kolMinus(ss, date, at, lists), kc = kol && (kol.type === 'LEAVE' ? leaveCol(kol.kind, lists) : kolHk(kol));   // άδεια δικού σου είδους με στήλη κωλυομένων: σαν δήλωση κωλυόμενου με αφαίρεση (Michael, 3/11)   // hkCol '-' (Michael, 29/10): σαν να μην υπήρχε η δήλωση ως προς τη στήλη
+  const kol = kolMinus(ss, date, at, lists), kc = kol && (kol.type === 'LEAVE' ? leaveCol(kol.kind, lists) : kolHk(kol, lists));   // άδεια δικού σου είδους με στήλη κωλυομένων: σαν δήλωση κωλυόμενου με αφαίρεση (Michael, 3/11)   // hkCol '-' (Michael, 29/10): σαν να μην υπήρχε η δήλωση ως προς τη στήλη
   // υπηρεσία εκτός στρατοπέδου: μετρά απούσα μόνο αν δεν υπερισχύει κάτι άλλο (απουσία: επάνω, κωλυόμενος, ΣΤΕΠ)· αλλιώς όπως πάντα. Η έξοδος/ΔΝ δεν μετρά στην ΗΚΑΙ
-  const duty = dc ? (svcAbsent(dc.col) && (kol || stepOn(ss, date, at)) ? dc.def : dc.col) : undefined;
+  const duty = dc ? (svcAbsent(dc.col, lists) && (kol || stepOn(ss, date, at)) ? dc.def : dc.col) : undefined;
   return kc ? kc : STEP_COL && stepOn(ss, date, at) ? STEP_COL : duty ? duty : ss.find(x => x.type === 'EY') ? 'ey' : ss.find(x => x.type === 'PUN') ? 'tim' : null;
 }
 // Ε1 (Michael, 1/11: «παρών ως να φύγει»): άδεια, αναρρωτική ή τιμητική που ξεκινά τη μέρα με ώρα αναχώρησης μετά τη στιγμή m δεν μετρά ακόμα.
@@ -1513,7 +1513,9 @@ export interface Hkai { cols: Record<string, Person[]>; cadre: Record<string, Ca
 // Who is in which row and which column of the ΗΚΑΙ at 08:00: ONE classification, shared by hkaiCounts (the numbers of the bundled form)
 // and the adaptive rule engine (src/shared/hkRules.ts). col = the key of the column the person counts in (null = nowhere).
 export interface HkWho { kind: 'soldier' | 'cadre'; p?: Person; c?: Cadre; row: string; col: string | null; attached: boolean; origin: string; rank: string }
-export interface HkClass { who: HkWho[]; rows: string[]; fixed: Record<string, number>; manual: Record<string, Record<string, number>>; noCol: { p: Person; kind: string }[] }
+export interface HkClass { who: HkWho[]; rows: string[]; absKeys: string[]; fixed: Record<string, number>; manual: Record<string, Record<string, number>>; noCol: { p: Person; kind: string }[] }
+// μια στήλη στελέχους (υπηρεσία ή απουσία): αν ήταν δική σου στήλη που σβήστηκε, μετρά στην προεπιλογή ώστε να μη χαθεί από την ΗΚΑΙ (Κωλυόμενοι: 'yp', Απόντες: 'ka')
+const hkColOk = (col: string, lists?: UserLists): string => (HK_COL_KEY.test(col) && !hkColsOf(lists).some(x => x.key === col) ? 'yp' : col);
 export function hkaiClassify(s: AppState, date: ISODate): HkClass {
   const onDuty = dutyColsOn(s, date);
   // στελέχη: από τη λίστα με ονόματα αν υπάρχει, αλλιώς οι αριθμοί των Ρυθμίσεων
@@ -1529,7 +1531,7 @@ export function hkaiClassify(s: AppState, date: ISODate): HkClass {
     // ΕΠΟΠ/ΟΒΑ με υπηρεσίες: η κατάσταση που έγραψες, αλλιώς η θέση της μέρας στις Υπηρεσίες (η απαλλαγή μόνο με το χέρι)
     const dk = c.pid != null ? onDuty.get(c.pid) : undefined;
     const col = (a && cadreAbsOf(a.kind, s.settings.lists)?.[2]) || rosterCol(s, c.id, date) || dk?.col;
-    who.push({ kind: 'cadre', c, row: r, col: col || null, attached: false, origin: c.origin || '', rank: c.rank });
+    who.push({ kind: 'cadre', c, row: r, col: col ? hkColOk(col, lists) : null, attached: false, origin: c.origin || '', rank: c.rank });
   }
   const at = hkMin(s.rules); const noCol: { p: Person; kind: string }[] = [], nc: Status[] = [];
   for (const p of activePeople(s)) {
@@ -1540,15 +1542,16 @@ export function hkaiClassify(s: AppState, date: ISODate): HkClass {
     if (nc.length) noCol.push({ p, kind: upper(nc[0].kind || '') });
     who.push({ kind: 'soldier', p, row: r, col, attached: !!p.attached, origin: p.origin || '', rank: p.rank });
   }
-  return { who, rows, fixed, manual: s.hkaiManual?.[date]?.cells || {}, noCol };
+  return { who, rows, absKeys: absKeysOf(lists), fixed, manual: s.hkaiManual?.[date]?.cells || {}, noCol };
 }
 export function hkaiCounts(s: AppState, date: ISODate): Hkai {
   const g = s.guards[date] || {};
   const cls = hkaiClassify(s, date);
   const cols: Record<string, Person[]> = {};
-  [...HK_K, ...HK_A].forEach(([k]) => (cols[k] = []));
+  const lists = s.settings.lists, kolK = kolKeysOf(lists), absK = absKeysOf(lists);
+  [...kolK, ...absK].forEach(k => (cols[k] = []));
   const rank: Record<string, HkaiRow> = {};
-  const lists = s.settings.lists; const cl = (s.cadreList || []).filter(c => c.active);
+  const cl = (s.cadreList || []).filter(c => c.active);
   cls.rows.forEach(r => (rank[r] = { n: cls.fixed[r], attached: 0, c: {} }));
   let cadreKol = 0, cadreAway = 0; const cadreCols: Record<string, Cadre[]> = {};
   let soldiers = 0;
@@ -1556,14 +1559,14 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
     rank[w.row].n++;
     if (w.kind === 'cadre') {
       const col = w.col;
-      if (col) { rank[w.row].c[col] = (rank[w.row].c[col] || 0) + 1; (cadreCols[col] ||= []).push(w.c!); if (HK_K.some(x => x[0] === col)) cadreKol++; else cadreAway++; }
+      if (col) { rank[w.row].c[col] = (rank[w.row].c[col] || 0) + 1; (cadreCols[col] ||= []).push(w.c!); if (isKolCol(col, lists)) cadreKol++; else cadreAway++; }
     } else {
       soldiers++; if (w.attached) rank[w.row].attached++;
       if (w.col) { cols[w.col].push(w.p!); rank[w.row].c[w.col] = (rank[w.row].c[w.col] || 0) + 1; }
     }
   }
   const noCol = cls.noCol;
-  let kol = HK_K.reduce((a, [k]) => a + cols[k].length, 0) + cadreKol, apo = HK_A.reduce((a, [k]) => a + cols[k].length, 0) + cadreAway;
+  let kol = kolK.reduce((a, k) => a + cols[k].length, 0) + cadreKol, apo = absK.reduce((a, k) => a + cols[k].length, 0) + cadreAway;
   // ό,τι γράφει ο χρήστης με το χέρι (σιδηρουργείο, πρατήριο, φυλάκια, αποσπασμένοι…, μισθοτροφοδοτηθέντες «ab»)
   const man = cls.manual;
   for (const r of Object.keys(man)) {
@@ -1571,7 +1574,7 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
     for (const [k, v] of Object.entries(man[r])) {
       if (!v) continue;
       rank[r].c[k] = (rank[r].c[k] || 0) + v;
-      if (HK_K.some(x => x[0] === k)) kol += v; else if (HK_A.some(x => x[0] === k)) apo += v;
+      if (isKolCol(k, lists)) kol += v; else if (isAbsCol(k, lists)) apo += v;
     }
   }
   const cadre = cl.length || hkRowList(lists).reduce((a, r) => a + (s.settings.cadre[r] || 0), 0);
@@ -1594,7 +1597,7 @@ export interface KolRow { p: Person; st: Status; col: string; minus: boolean }
 export interface KolView { cols: Record<string, Person[]>; n: number; man: KolRow[]; minus: KolRow[]; keep: KolRow[] }
 export function kolView(s: AppState, date: ISODate, at = hkMin(s.rules)): KolView {
   const onDuty = dutyColsOn(s, date);
-  const cols: Record<string, Person[]> = {}; KOL_COLS.forEach(([k]) => (cols[k] = []));
+  const cols: Record<string, Person[]> = {}; kolColsOf(s.settings.lists).forEach(([k]) => (cols[k] = []));
   const man: KolRow[] = []; let n = 0;
   for (const p of activePeople(s)) {
     const ss = statusesAt(s, p.id, date, at);
@@ -1603,7 +1606,7 @@ export function kolView(s: AppState, date: ISODate, at = hkMin(s.rules)): KolVie
     if (col && cols[col]) { cols[col].push(p); n++; }
     const km = kolMinus(ss, date, at, s.settings.lists), sp = km ? undefined : stepOn(ss, date, at);
     const k = km || sp || ss.find(x => x.type === 'KOL' && kolStarted(x, date, at));
-    if (k) man.push({ p, st: k, col: sp ? STEP_COL || '' : k.type === 'LEAVE' ? leaveCol(k.kind, s.settings.lists) : kolColOf(k), minus: !!(k.minus || sp || k.type === 'LEAVE') });
+    if (k) man.push({ p, st: k, col: sp ? STEP_COL || '' : k.type === 'LEAVE' ? leaveCol(k.kind, s.settings.lists) : kolColOf(k, s.settings.lists), minus: !!(k.minus || sp || k.type === 'LEAVE') });
   }
   return { cols, n, man, minus: man.filter(x => x.minus), keep: man.filter(x => !x.minus) };
 }

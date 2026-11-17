@@ -6,7 +6,7 @@ import { html, Alert, Button, Card, Segmented, useToast, Badge } from '../ui';
 import { Select } from '../select';
 import { useStore } from '../store';
 import { usePending } from '../pending';
-import { cadreAbsKinds } from '../../shared/ranks';
+import { OWN_COL_TAG, cadreAbsKinds, hkColShortOf, hkColsOf } from '../../shared/ranks';
 import { colShort } from '../../shared/cadre';
 import { HK } from '../../shared/unit';
 import { DOW_INI, DOW_ORDER, dutyCfgOf, newDutyId } from '../../shared/cadreDuty';
@@ -20,7 +20,9 @@ export function CadreDutyCard() {
   const [f, setF] = useState(fromState);
   const dirty = JSON.stringify(f) !== JSON.stringify(fromState());
   // οι στήλες της ΗΚΑΙ που παίρνουν οι καταστάσεις στελεχών (μία φορά η κάθε στήλη)
-  const cols = useMemo(() => { const seen = new Map<string, string>(); for (const k of cadreAbsKinds(state.settings.lists)) if (k[2] && !seen.has(k[2])) seen.set(k[2], colShort(k[2]) || k[1]); return [...seen]; }, [state.settings.lists]);
+  const cols = useMemo(() => { const seen = new Map<string, string>(); for (const k of cadreAbsKinds(state.settings.lists)) if (k[2] && !seen.has(k[2])) seen.set(k[2], colShort(k[2], state.settings.lists) || k[1]);
+    for (const o of hkColsOf(state.settings.lists)) if (!seen.has(o.key)) seen.set(o.key, hkColShortOf(o.key, state.settings.lists) + OWN_COL_TAG);   // δικές σου στήλες: πάντα διαθέσιμες
+    return [...seen]; }, [state.settings.lists]);
   const members = (id: string) => Object.values(state.cadreDutyOf || {}).filter(p => p.group === id).length;
   const ids = (k: 'g' | 's') => f.groups.flatMap(g => (k === 'g' ? [g.id] : g.services.map(v => v.id)));
   const bad = f.groups.some(g => !g.name.trim() || g.services.some(v => !v.name.trim() || !v.short.trim() || !(v.perDay >= 1))) || [f.offBase, f.offExtra, f.ncoBase, f.ncoExtra, f.rest].some(v => isNaN(Number(String(v).replace(',', '.'))) || Number(String(v).replace(',', '.')) < 0);
