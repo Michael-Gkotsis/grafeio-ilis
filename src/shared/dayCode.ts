@@ -2,7 +2,7 @@
 // και (αργότερα) το Ημερολόγιο. Προτεραιότητα: άδεια/νοσοκομείο, ΣΤΕΠ, ιατρικό (Ε.Υ, Ε.Α…), ΑΟΠΛΟΣ· κενό = κανονικός.
 // Οι κωδικοί είναι των TYPES (Κ.Α, ΑΝ.ΑΔ, Ε.Υ, Ε.Α) ή το όνομα (δικά σου είδη άδειας/ιατρικού, Τ.Α = τιμητική, ΝΟΣ, ΣΤΕΠ).
 import type { ISODate } from './dates';
-import { TYPES, type AppState, type Person, type Status } from './domain';
+import { ADIK_TYPES, TYPES, type AppState, type Person, type Status } from './domain';
 import { statusesOn } from './rules';
 import { live, statusLbl } from './ranks';
 import { weaponInfo } from './weapons';
@@ -22,7 +22,7 @@ const unarmedOf = (s: AppState, d: ISODate): Set<number> => {
   let u = m.get(s.settings); if (!u) { u = weaponInfo(s, d).unarmed; m.set(s.settings, u); }
   return u;
 };
-const RANK = (st: Status): number => (TYPES[st.type].cat === 'abs' || st.type === 'NOS' ? 0 : st.type === 'STEP' ? 1 : TYPES[st.type].cat === 'med' ? 2 : 9);
+const RANK = (st: Status): number => (TYPES[st.type].cat === 'abs' || st.type === 'NOS' || ADIK_TYPES.includes(st.type) ? 0 : st.type === 'STEP' ? 1 : TYPES[st.type].cat === 'med' ? 2 : 9);
 // η κατάσταση που κερδίζει τη μέρα d (άδεια/νοσοκομείο, ΣΤΕΠ, ιατρικό) ή undefined· το Ημερολόγιο κωλυομένων (imer.ts) τη χρησιμοποιεί χωρίς τον ΑΟΠΛΟΣ
 export function dayStatus(s: AppState, p: Person, d: ISODate): Status | undefined {
   return statusesOn(live(s), p.id, d).filter(x => RANK(x) < 9).sort((a, b) => RANK(a) - RANK(b))[0];

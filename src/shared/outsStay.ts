@@ -1,7 +1,7 @@
 // Εξοδούχοι και παραμένοντες μιας μέρας (δείγμα 10, Excel «Εξοδούχοι / Παραμένοντες»): στη Δύναμη των εντύπων (shared/values.ts) μετρούν οι ίδιοι.
 // Ώρα εξόδου: όποιος γύρισε ως τότε μετρά σαν να ήταν μέσα.
 import type { ISODate } from './dates';
-import { TYPES, coversDay, type AppState, type Person, type Status } from './domain';
+import { ADIK_IN, TYPES, coversDay, type AppState, type Person, type Status } from './domain';
 import { activePeople, outMinOn, postOf, statusesFrom } from './rules';
 import { byName } from './hkaiText';
 import { live, isAway, leavePhrase, statusLbl, type UserLists } from './ranks';
@@ -29,7 +29,7 @@ export const awayIn = (ss: Status[], lists?: UserLists): Status | null => {
 };
 export const awayAtOut = (s: AppState, d: ISODate, pid: number): Status | null => awayIn(statusesFrom(live(s), pid, d, outMinOn(s, d)), s.settings.lists);
 // Το πρώτο κουμπί των Εξοδούχων για όποιον είναι σε άδεια: στη θέση του «Μένει»
-export const awayName = (st: Pick<Status, 'type'>) => (st.type === 'NOS' ? 'Νοσοκομείο' : 'Σε άδεια');
+export const awayName = (st: Pick<Status, 'type'>) => (st.type === 'NOS' ? 'Νοσοκομείο' : ADIK_IN[st.type] || 'Σε άδεια');
 // «Κανονική άδεια ως 05/11 · γυρνά Πέμ 06/11 πρωί»: ουδέτερη σημείωση στη γραμμή του (όχι προειδοποίηση)
 export function awayNote(s: AppState, d: ISODate, pid: number, st: Status): string {
   const lbl = statusLbl(st, s.settings.lists), long = st.type === 'LEAVE' ? leavePhrase(st) : lbl === TYPES[st.type].label ? TYPES[st.type].long : lbl;   // άδεια: με το είδος της, όχι «ΚΑ»

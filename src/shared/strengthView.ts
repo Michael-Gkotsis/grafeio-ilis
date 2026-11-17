@@ -4,7 +4,7 @@
 // κωλυόμενο χωρίς αφαίρεση μένουν Παρόντες, με δική τους υποομάδα. Η εισαγωγή ΣΤΕΠ είναι κωλυόμενος αυτόματα (Michael, 29/10): στους Κωλυόμενους,
 // στη δική της υποομάδα «Εισαγωγή ΣΤΕΠ» (όχι ανά σημείωση), με τη στήλη STEP_COL της ΗΚΑΙ μόνο αν έχει (τώρα πουθενά, χωρίς ετικέτα). Η ΗΚΑΙ κρατά τον δικό της ορισμό κωλυομένων (hkaiCounts, kolView.cols).
 // Ίδια στιγμή και ίδιοι κανόνες με το strengthOf (statusesAt), ώστε τα νούμερα να βγαίνουν ίδια με το «Σήμερα».
-import { TYPES, TYPE_KEYS, kolColName, type AppState, type Person, type Status } from './domain';
+import { ADIK_IN, TYPES, TYPE_KEYS, kolColName, type AppState, type Person, type Status } from './domain';
 import { dm, type ISODate } from './dates';
 import { hasTimes } from './hours';
 import { activePeople, kolView, statusesAt, type KolRow } from './rules';
@@ -20,7 +20,7 @@ export interface SvCatView { cat: SvCat; label: string; n: number; groups: SvGro
 export interface StrengthView { date: ISODate; at: number; time: string; total: number; present: number; kol: number; absent: number; cats: Record<SvCat, SvCatView>; line: string }
 
 export const hhmm = (m: number) => String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
-const AWAY_LBL: Record<string, string> = { NOS: 'Νοσοκομείο', LEAVE: 'Άδειες', HON: 'Τιμητική άδεια', SICK: 'Αναρρωτικές', OUT: 'Εξοδούχοι', DN: 'ΔΝ' };
+const AWAY_LBL: Record<string, string> = { NOS: 'Νοσοκομείο', LEAVE: 'Άδειες', HON: 'Τιμητική άδεια', SICK: 'Αναρρωτικές', OUT: 'Εξοδούχοι', DN: 'ΔΝ', ...ADIK_IN };
 // υποομάδες των παρόντων, με τη σειρά που φαίνονται· ο καθένας μπαίνει στην πρώτη που ταιριάζει (σαν τη στήλη της ΗΚΑΙ)
 const PRESENT_SUBS: [string, string, string?][] = [
   ['keep', 'Κωλυόμενοι (παρόντες)', 'Δηλωμένοι κωλυόμενοι που δεν αφαιρούνται από τους παρόντες'],

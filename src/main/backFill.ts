@@ -15,7 +15,7 @@ import type { TplProfile } from '../shared/tplStore';
 import type { AppState } from '../shared/domain';
 import { fullName, hkOn, type Person } from '../shared/domain';
 import { hkDate, type ISODate } from '../shared/dates';
-import { movesOn, hkOrgans, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, lineText, outReason, personLine } from '../shared/hkaiText';
+import { movesOn, hkOrgans, hkaiAdikLines, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, lineText, outReason, personLine } from '../shared/hkaiText';
 import { hkWho } from '../shared/punish';
 import { postBy, seatMap } from '../shared/rules';
 import { rankTxt } from '../shared/ranks';
@@ -57,6 +57,7 @@ export function backEntries(s: AppState, d: ISODate, f: BackFormat): Entry[] {
   add('leaves', hkaiLeaveLines(s, d), person ? (_i, t) => spaced(t) : undefined);
   add('punish', hkaiPunLines(s, d), person ? (_i, t) => spaced(t) : undefined);
   add('requests', hkaiReqLines(s, d), person ? (_i, t) => spaced(t) : undefined);
+  add('misc', hkaiAdikLines(s, d), person ? (_i, t) => spaced(t) : undefined);
   const pm = new Map(s.people.map(p => [p.id, p] as const));
   for (const x of s.statuses) if (x.type === 'NOS' && x.from === d && pm.get(x.pid)?.active) {
     const t = upper(hkWho(pm.get(x.pid)!)) + (person ? ' : ' : ': ') + 'ΕΙΣΗΧΘΗ ΣΕ ΝΟΣΟΚΟΜΕΙΟ ΤΗΝ ' + hkDate(d) + '.';
