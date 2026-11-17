@@ -1751,3 +1751,46 @@ tbody .mg-tail{background:var(--card)}
 .mg-sw.mg-no{color:var(--bad);background:var(--card);font-weight:800}.mg-sw.mg-we{background:rgba(120,128,100,.17)}.mg-sw.mg-hol{background:rgba(216,178,58,.32)}.mg-sw.mg-clr{background:var(--card)}
 .mg-legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;align-items:center}.mg-legend span{display:inline-flex;align-items:center;gap:6px}
 .mg-hint{margin:0;padding:8px 12px;border-radius:var(--radius);background:var(--info-bg);color:var(--info);font-size:13px;max-width:900px}
+/* Υπηρεσίες στελεχών (Michael, 17/11): πλέγμα + κάρτες δεξιά, ομάδες ως γραμμές-επικεφαλίδες */
+.plan.duty{border:0;border-radius:0;overflow:visible;white-space:normal}
+.duty__main{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:12px;align-items:start}
+.duty__grid{display:flex;flex-direction:column;gap:10px;min-width:0}
+.duty__side{display:flex;flex-direction:column;gap:12px;min-width:0}
+@media (max-width:1180px){.duty__main{grid-template-columns:minmax(0,1fr)}}
+.duty__slot{display:inline-flex;gap:8px}
+.duty__row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.duty__chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0}
+.duty__dow{min-width:30px;justify-content:center}
+.duty__kv{display:grid;grid-template-columns:1fr auto;gap:5px 10px;font-size:13px}.duty__kv span{color:var(--muted-fg)}.duty__kv b{text-align:right;font-weight:600}
+.duty__chk{display:flex;flex-direction:column;gap:6px;font-size:13px}
+.duty__it{padding:6px 8px;border-left:3px solid var(--border);border-radius:var(--radius);background:var(--empty-row)}
+.duty__it.is-warn{border-left-color:var(--warn);background:var(--warn-bg)}.duty__it.is-ok{border-left-color:var(--ok);background:var(--ok-bg)}
+.duty__more{font-size:12px;color:var(--muted-fg)}
+.mg-band th{background:var(--thead);text-align:left!important;padding:0 8px!important;height:24px;font-size:12px;font-weight:400;position:sticky;left:0;white-space:nowrap}
+.mg-band th b{font-weight:700}
+.mg-c.mg-duty,.mg-sw.mg-duty{background:var(--primary);color:var(--primary-fg)}
+.mg-c.mg-duty.mg-part{background:var(--info-bg);color:var(--info)}
+.mg-c.mg-duty.mg-dbl{box-shadow:inset 0 0 0 2px var(--bad)}
+.mg-c.mg-why{text-decoration:underline dotted}
+.mg-c.mg-name3{font-size:9.5px;font-weight:700;letter-spacing:-.3px}
+.mg-c.mg-seat,.mg-sw.mg-seat{background:var(--card);color:var(--primary);box-shadow:inset 0 0 0 2px var(--primary)}
+.mg-c.mg-faint:not(.mg-duty):not(.mg-seat){opacity:.62}
+.mg-c.mg-off{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--border) 4px 5px)}
+.mg-c.mg-empty{background:var(--bad-bg)}
+.mg-sw.mg-faint{opacity:.62}
+.mg-tail--n{width:50px!important;min-width:50px;padding:0 3px!important;text-align:center}
+thead .mg-tail--n{font-size:11px}
+.mg-over{display:block;background:var(--warn-bg);color:var(--warn);font-weight:700;border-radius:3px}
+.mg-over2{display:block;background:var(--bad-bg);color:var(--bad);font-weight:700;border-radius:3px}
+.mg-pos{color:var(--ok);font-weight:700}
+.mg-svc{display:block;overflow:hidden;text-overflow:ellipsis;font-size:12px}
+.mg-menu__grp{display:flex;flex-direction:column;gap:1px}.mg-menu__grp small{padding:4px 8px 0;color:var(--muted-fg);font-weight:700}
+.mg-menu__scroll{max-height:280px;overflow:auto}
+.mg-menu__warn.is-strong{color:var(--bad)}
+.mg-menu__note{padding:4px 8px;font-size:12px;color:var(--muted-fg)}
+.cdset__svc{border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;margin:8px 0;display:flex;flex-direction:column;gap:6px}
+.duty .mg-name{width:150px;min-width:150px;max-width:150px}
+.duty .mg-d,.duty .mg-c{width:21px;min-width:21px}
+.duty .mg-tail--n{width:40px!important;min-width:40px}
+.duty .mg-who{font-size:11.5px}
+.mg-c.mg-s3{font-size:9.5px;letter-spacing:-.3px}.mg-c.mg-s4{font-size:8px;letter-spacing:-.6px}.duty .mg-c{overflow:hidden}

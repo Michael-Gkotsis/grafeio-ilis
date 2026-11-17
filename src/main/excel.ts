@@ -8,6 +8,7 @@ import { W_NUM, weaponSheets } from '../shared/weapons';
 import { cadreSheets } from '../shared/cadre';
 import { leaveSheets } from '../shared/cadreBalance';
 import { planSheet } from '../shared/cadrePlan';
+import { dutySheet } from '../shared/cadreDuty';
 import { norm, collator, upper } from '../shared/text';
 import { everyBlock, fatherTxt, type AppState, type DutyKind } from '../shared/domain';
 import { live, absCode, rankTxt } from '../shared/ranks';
@@ -187,6 +188,58 @@ export async function cadrePlanBook(s: AppState, ym: string, d: ISODate, filter 
   ws.getColumn(W).width = Math.min(30, colWidth(14, 'ΥΠΟΛΟΙΠΟ ΑΔΕΙΩΝ', sh.rows.map(r => r.left)));
   ws.pageSetup.printTitlesRow = '3:3';
   return { name: fileNameOf(s.settings, 'cadrePlan', { text: upper(MONTHS[+ym.slice(5, 7) - 1]) + ' ' + ym.slice(0, 4) }), data: await fitBook(Buffer.from(await wb.xlsx.writeBuffer())), marks: [{ sheet: ws.name, key: 'main', head: [], date: [], title: ['A1'], foot: foot + 1, cols: W }] };
+}
+// Υπηρεσίες στελεχών (Michael, 17/11): ΝΕΟ αρχείο με δύο φύλλα για τον μήνα: «ΑΝΑ ΑΤΟΜΟ» (πλέγμα με κωδικούς, Σ και όριο) και «ΑΝΑ ΗΜΕΡΑ»
+// (ποιος κάνει κάθε υπηρεσία κάθε μέρα). A4 οριζόντια, φάρδος μία σελίδα, γκρι ΣΚ και αργίες. Τα δεδομένα βγαίνουν από το shared/cadreDuty.ts
+export async function cadreDutyBook(s: AppState, ym: string, d: ISODate): Promise<Made> {
+  const wb = newBook(d); const sh = dutySheet(s, ym); const { F, Z, al, colWidth, FT } = lookOf(s);
+  const thin = { style: 'thin' as const }; const border = { top: thin, left: thin, bottom: thin, right: thin };
+  const fill = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } });
+  const GREY = { we: fill('FFD9D9D9'), hol: fill('FFBFBFBF') };
+  const setup = { paperSize: 9, orientation: 'landscape' as const, fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } };
+  const small = { name: F, size: Math.max(7, Z - 2), italic: true };
+  const marks: Made['marks'] = [];
+  // ---- ΑΝΑ ΑΤΟΜΟ ----
+  const nd = sh.days.length; const FIX = 4; const W = FIX + nd + 2;
+  const ws = wb.addWorksheet('ΑΝΑ ΑΤΟΜΟ', { pageSetup: setup, views: [{ state: 'frozen', xSplit: 4, ySplit: 3 }] });
+  ws.mergeCells(1, 1, 1, W); const t = ws.getCell(1, 1); t.value = upper(sh.title + ' · ' + s.settings.unitName); t.font = FT.title; t.alignment = { horizontal: 'center' };
+  ['Α/Α', 'ΒΑΘΜΟΣ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΟΜΑΔΑ', ...sh.days.map(x => x.n + '\n' + x.dow), 'Σ', 'ΟΡΙΟ'].forEach((h, i) => {
+    const c = ws.getRow(3).getCell(i + 1); c.value = upper(h); c.font = FT.head; c.alignment = { ...al, wrapText: true }; c.border = border;
+    const g = i >= FIX && i < FIX + nd ? sh.shade[i - FIX] : ''; if (g) c.fill = GREY[g];
+  });
+  sh.byPerson.forEach((r, j) => {
+    const row = ws.getRow(4 + j);
+    [j + 1, r.rank, r.name, r.group, ...r.cells, r.sum, r.limit].forEach((v, i) => {
+      const c = row.getCell(i + 1); c.value = v; c.border = border; c.font = FT.data; c.alignment = i === 2 || i === 3 ? { ...al, horizontal: 'left' as const } : al;
+      if (i >= FIX && i < FIX + nd) { const g = sh.shade[i - FIX]; if (g) c.fill = GREY[g]; if (v) c.font = { ...FT.data, bold: true }; }
+    });
+  });
+  if (!sh.byPerson.length) { ws.mergeCells(4, 1, 4, W); const c = ws.getCell(4, 1); c.value = 'ΚΑΝΕΝΑΣ'; c.alignment = { horizontal: 'center' }; c.font = { name: F, italic: true, size: Z }; }
+  const foot = 4 + Math.max(1, sh.byPerson.length) + 1;
+  ws.mergeCells(foot, 1, foot, W); ws.getCell(foot, 1).value = sh.legend; ws.getCell(foot, 1).font = small; ws.getCell(foot, 1).alignment = { horizontal: 'left', wrapText: true };
+  ws.getRow(foot).height = Math.max(16, Math.ceil(sh.legend.length / (W * 3)) * 14);
+  ws.mergeCells(foot + 1, 1, foot + 1, W); ws.getCell(foot + 1, 1).value = 'ΑΝΟΙΧΤΟ ΓΚΡΙ: ΣΑΒΒΑΤΟ ΚΑΙ ΚΥΡΙΑΚΗ · ΣΚΟΥΡΟ ΓΚΡΙ: ΑΡΓΙΑ'; ws.getCell(foot + 1, 1).font = small;
+  ws.getColumn(1).width = colWidth(4, 'Α/Α', [sh.byPerson.length]); ws.getColumn(2).width = Math.min(14, colWidth(8, 'ΒΑΘΜΟΣ', sh.byPerson.map(r => r.rank)));
+  ws.getColumn(3).width = Math.min(30, colWidth(18, 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', sh.byPerson.map(r => r.name))); ws.getColumn(4).width = Math.min(18, colWidth(8, 'ΟΜΑΔΑ', sh.byPerson.map(r => r.group)));
+  for (let j = 0; j < nd; j++) ws.getColumn(FIX + 1 + j).width = Math.min(8, colWidth(3.2, String(sh.days[j].n), sh.byPerson.map(r => r.cells[j]), true));
+  ws.getColumn(FIX + nd + 1).width = colWidth(4, 'Σ', sh.byPerson.map(r => r.sum)); ws.getColumn(W).width = Math.min(18, colWidth(7, 'ΟΡΙΟ', sh.byPerson.map(r => r.limit)));
+  ws.pageSetup.printTitlesRow = '3:3';
+  marks.push({ sheet: ws.name, key: 'main', head: [], date: [], title: ['A1'], foot: foot + 1, cols: W });
+  // ---- ΑΝΑ ΗΜΕΡΑ ----
+  const w2 = wb.addWorksheet('ΑΝΑ ΗΜΕΡΑ', { pageSetup: setup, views: [{ state: 'frozen', ySplit: 3 }] });
+  w2.mergeCells(1, 1, 1, 4); const t2 = w2.getCell(1, 1); t2.value = upper(sh.title + ' · ' + s.settings.unitName); t2.font = FT.title; t2.alignment = { horizontal: 'center' };
+  ['ΗΜΕΡΟΜΗΝΙΑ', 'ΗΜΕΡΑ', 'ΥΠΗΡΕΣΙΑ', 'ΒΑΘΜΟΣ ΚΑΙ ΟΝΟΜΑΤΕΠΩΝΥΜΟ'].forEach((h, i) => { const c = w2.getRow(3).getCell(i + 1); c.value = h; c.font = FT.head; c.alignment = { ...al, wrapText: true }; c.border = border; });
+  sh.byDay.forEach((r, j) => {
+    [r.date, r.dow, r.svc, r.who].forEach((v, i) => { const c = w2.getRow(4 + j).getCell(i + 1); c.value = v; c.border = border; c.font = FT.data; c.alignment = i === 3 ? { ...al, horizontal: 'left' as const, wrapText: true } : al; if (r.shade) c.fill = GREY[r.shade]; });
+  });
+  if (!sh.byDay.length) { w2.mergeCells(4, 1, 4, 4); const c = w2.getCell(4, 1); c.value = 'ΔΕΝ ΕΧΟΥΝ ΟΡΙΣΤΕΙ ΥΠΗΡΕΣΙΕΣ ΣΤΕΛΕΧΩΝ'; c.alignment = { horizontal: 'center' }; c.font = { name: F, italic: true, size: Z }; }
+  const f2 = 4 + Math.max(1, sh.byDay.length) + 1;
+  w2.mergeCells(f2, 1, f2, 4); w2.getCell(f2, 1).value = 'ΑΝΟΙΧΤΟ ΓΚΡΙ: ΣΑΒΒΑΤΟ ΚΑΙ ΚΥΡΙΑΚΗ · ΣΚΟΥΡΟ ΓΚΡΙ: ΑΡΓΙΑ'; w2.getCell(f2, 1).font = small;
+  w2.getColumn(1).width = colWidth(12, 'ΗΜΕΡΟΜΗΝΙΑ', sh.byDay.map(r => r.date)); w2.getColumn(2).width = colWidth(6, 'ΗΜΕΡΑ', sh.byDay.map(r => r.dow));
+  w2.getColumn(3).width = Math.min(30, colWidth(14, 'ΥΠΗΡΕΣΙΑ', sh.byDay.map(r => r.svc))); w2.getColumn(4).width = Math.min(60, colWidth(24, 'ΒΑΘΜΟΣ ΚΑΙ ΟΝΟΜΑΤΕΠΩΝΥΜΟ', sh.byDay.map(r => r.who)));
+  w2.pageSetup.printTitlesRow = '3:3';
+  marks.push({ sheet: w2.name, key: 'main', head: [], date: [], title: ['A1'], foot: f2, cols: 4 });
+  return { name: fileNameOf(s.settings, 'cadreDuty', { text: upper(MONTHS[+ym.slice(5, 7) - 1]) + ' ' + ym.slice(0, 4) }), data: await fitBook(Buffer.from(await wb.xlsx.writeBuffer())), marks };
 }
 // Σταθερή ημερομηνία στις ιδιότητες: ίδια δεδομένα, ίδιο αρχείο
 function newBook(d: ISODate) {

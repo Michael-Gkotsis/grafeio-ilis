@@ -17,6 +17,7 @@ const api: Api = {
   exportWeapons: (date, print, sigs, headId) => ipcRenderer.invoke('export:weapons', date, print, sigs, headId),
   exportCadreLeave: (year, cid) => ipcRenderer.invoke('export:cadreLeave', year, cid),
   exportCadrePlan: (ym, print, filter) => ipcRenderer.invoke('export:cadrePlan', ym, print, filter),
+  exportCadreDuty: (ym, print) => ipcRenderer.invoke('export:cadreDuty', ym, print),
   exportCadre: (date, sigs, headId) => ipcRenderer.invoke('export:cadre', date, sigs, headId),
   pickRoster: () => ipcRenderer.invoke('roster:pick'),
   applyRoster: (token, deactivateMissing) => ipcRenderer.invoke('roster:apply', token, deactivateMissing),

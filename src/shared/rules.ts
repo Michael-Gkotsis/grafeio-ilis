@@ -10,7 +10,7 @@ import { backBy, hasTimes, mins } from './hours';
 import { dayTimes, leaveOut, outHeld } from './returns';   // κυκλική εξάρτηση: καλείται μέσα σε συναρτήσεις (returns.ts)
 import {
   TYPES, TYPE_KEYS, RECORD_CATS, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, KOL_COLS, STEP_COL, kolColName, kolColOf, kolHk, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
-  KIND_NAME, type AppState, type CapKey, type Caps, type Phase, type Baseline, type Cadre, type CadreAbs, type DutyLog, type Person, type PersonRequest, type Post, type Skip, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
+  KIND_NAME, type AppState, type CapKey, type Caps, type Phase, type Baseline, type Cadre, type CadreAbs, type CadreDuty, type DutyLog, type Person, type PersonRequest, type Post, type Skip, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
 } from './domain';
 
 // --------------------------- ευρετήρια (cache ανά αντικείμενο) ---------------------------
@@ -1445,6 +1445,21 @@ export function hkRankOf(rank: string, lists?: UserLists, origin?: string): stri
   return originRow(origin) || 'Στρατιώτες';
 }
 // Η κατάσταση ενός στελέχους μια μέρα (η πρώτη, αν κατά λάθος επικαλύπτονται)
+// Υπηρεσίες στελεχών του προγράμματος (shared/cadreDuty.ts): οι εγγραφές μιας μέρας, από ευρετήριο ανά πίνακα (όχι σάρωση σε κάθε στέλεχος της ΗΚΑΙ)
+const rosterIdx = new WeakMap<CadreDuty[], Map<ISODate, CadreDuty[]>>();
+const NO_ROSTER: CadreDuty[] = [];
+export function rosterOn(s: Pick<AppState, 'cadreDuties'>, d: ISODate): CadreDuty[] {
+  const all = s.cadreDuties; if (!all || !all.length) return NO_ROSTER;
+  let m = rosterIdx.get(all); if (!m) { m = new Map(); for (const x of all) { const l = m.get(x.date); if (l) l.push(x); else m.set(x.date, [x]); } rosterIdx.set(all, m); }
+  return m.get(d) || NO_ROSTER;
+}
+// η στήλη της ΗΚΑΙ που μετρά το στέλεχος τη μέρα d από την υπηρεσία του προγράμματος ('' = δεν έχει υπηρεσία ή η υπηρεσία δεν μετρά σε στήλη)
+export function rosterCol(s: Pick<AppState, 'cadreDuties' | 'settings'>, cid: string, d: ISODate): string {
+  const l = rosterOn(s, d); if (!l.length) return '';
+  const groups = s.settings.cadreDuty?.groups || [];
+  for (const x of l) if (x.cid === cid) for (const g of groups) { const v = g.services?.find(y => y.id === x.svc); if (v?.hkCol) return v.hkCol; }
+  return '';
+}
 export const cadreAbsOn = (s: Pick<AppState, 'cadreAbs'>, cid: string, date: ISODate): CadreAbs | undefined => (s.cadreAbs || []).find(x => x.cid === cid && x.from <= date && date <= x.to);
 // Η στήλη της ΗΚΑΙ ενός στρατιώτη (ss: οι καταστάσεις του εκείνη τη στιγμή): πρώτα απουσία, μετά ο κωλυόμενος που αφαιρείται από τους
 // παρόντες (στη στήλη που διάλεξες, αν διάλεξες· Michael 29/10: προαιρετική), μετά ο ΣΤΕΠ (STEP_COL, αν έχει στήλη· Michael 29/10), υπηρεσία, ΕΥ, ποινή· null = καμία. Μία στήλη ανά άτομο.
@@ -1483,7 +1498,7 @@ export function hkaiCounts(s: AppState, date: ISODate): Hkai {
     const a = cadreAbsOn(s, c.id, date);
     // ΕΠΟΠ/ΟΒΑ με υπηρεσίες: η κατάσταση που έγραψες, αλλιώς η θέση της μέρας στις Υπηρεσίες (η απαλλαγή μόνο με το χέρι)
     const dk = c.pid != null ? onDuty.get(c.pid) : undefined;
-    const col = (a && cadreAbsOf(a.kind, s.settings.lists)?.[2]) || (dk ? (dk === 'mg' ? 'mag' : 'yp') : undefined);
+    const col = (a && cadreAbsOf(a.kind, s.settings.lists)?.[2]) || rosterCol(s, c.id, date) || (dk ? (dk === 'mg' ? 'mag' : 'yp') : undefined);
     if (col) { rank[r].c[col] = (rank[r].c[col] || 0) + 1; (cadreCols[col] ||= []).push(c); if (HK_K.some(x => x[0] === col)) cadreKol++; else cadreAway++; }
   }
   let soldiers = 0; const at = hkMin(s.rules); const noCol: { p: Person; kind: string }[] = [], nc: Status[] = [];

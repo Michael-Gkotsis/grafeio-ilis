@@ -4,7 +4,7 @@ import { formText, hkRowLabel } from './unit';
 import { dmy, type ISODate } from './dates';
 import type { AppState, Cadre, CadreAbs } from './domain';
 import { cadreAbsOf, hkRowsOf, rankTxt, type UserLists } from './ranks';
-import { cadreAbsOn, HK_A, HK_K, HK_NCO, HK_OFFICERS } from './rules';
+import { cadreAbsOn, rosterCol, HK_A, HK_K, HK_NCO, HK_OFFICERS } from './rules';
 import { collator, normGreek } from './text';
 import type { RosterSheet } from './rosterLists';
 
@@ -55,12 +55,12 @@ export function cadreMatch(f: CadreFilter, c: Cadre, st: CadreStatus | undefined
 }
 // ΗΚΑΙ, «Όργανα υπηρεσίας › Αξιωματικοί»: ό,τι γράφτηκε στην οθόνη της ΗΚΑΙ, αλλιώς οι αξιωματικοί (αξιωματικοί, ανθυπασπιστές,
 // ΔΕΑ) της καρτέλας Στελέχη που έχουν «Υπηρεσία εντός στρατοπέδου» τη μέρα, με τη σειρά της καρτέλας
-export function dutyOfficers(s: Pick<AppState, 'cadreList' | 'cadreAbs' | 'settings'>, d: ISODate): string {
+export function dutyOfficers(s: Pick<AppState, 'cadreList' | 'cadreAbs' | 'settings' | 'cadreDuties'>, d: ISODate): string {
   const off = hkRowsOf(s.settings.lists).off;
-  return orderedCadre(s.cadreList || []).filter(c => c.active && off.includes(c.hk) && cadreStatusOn(s, c.id, d)?.col === 'yp')
+  return orderedCadre(s.cadreList || []).filter(c => c.active && off.includes(c.hk) && (cadreStatusOn(s, c.id, d)?.col || rosterCol(s, c.id, d)) === 'yp')
     .map(c => [rankTxt(c), c.last, c.first].filter(Boolean).join(' ')).join(', ');
 }
-export const hkOffText = (s: Pick<AppState, 'cadreList' | 'cadreAbs' | 'settings' | 'hkaiManual'>, d: ISODate) => s.hkaiManual?.[d]?.text?.off?.trim() || dutyOfficers(s, d);
+export const hkOffText = (s: Pick<AppState, 'cadreList' | 'cadreAbs' | 'settings' | 'hkaiManual' | 'cadreDuties'>, d: ISODate) => s.hkaiManual?.[d]?.text?.off?.trim() || dutyOfficers(s, d);
 // αναζήτηση χωρίς τόνους: βαθμός, Ο/Σ, όνομα, ΑΜ, θέση, τηλέφωνο
 export const cadreSearch = (c: Cadre, q: string) => { const k = normGreek(q).trim(); return !k || normGreek([c.rank, c.origin, c.spec, c.last, c.first, c.am, c.role, c.phone, c.hk].join(' ')).includes(k); };
 

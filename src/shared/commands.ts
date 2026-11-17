@@ -4,7 +4,7 @@ import { HK } from './unit';
 import { cleanHd, type HdDoc } from './hd';
 import { addDays, dayName, daysBetween, dm, DOW_FULL, weekday, type ISODate } from './dates';
 import { norm, normGreek, upper } from './text';
-import { noPending, TYPES, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, RECORD_CATS, kolColOf, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, blockGroups, blockShape, cleanShift, everyBlock, hasShift, MAX_NUMS, MAX_PER, reshapeBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type CadreGrant, type DutyFix, type Note, type BlockDef, type ShiftDef, type BackFix, type CapKey, type DayPlan, type DutyKind, type HkaiManual, type Move, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
+import { noPending, TYPES, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, RECORD_CATS, kolColOf, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, blockGroups, blockShape, cleanShift, everyBlock, hasShift, MAX_NUMS, MAX_PER, reshapeBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Baseline, type Cadre, type CadreAbs, type CadreGrant, type CadreDuty, type CadreDutyPerson, type DutyFix, type Note, type BlockDef, type ShiftDef, type BackFix, type CapKey, type DayPlan, type DutyKind, type HkaiManual, type Move, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { isUnit } from './mode';
 import { essoPersonTxt, parseEsso } from './esso';
@@ -14,6 +14,7 @@ import { leaveCmdOf, sameLeave, nextCadrePid, seatMap, skipTxt, capBlock, capCel
 import { noNotes, cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, isAway, itemName, leavePhrase, listRows, rankTxt, statusLbl, weaponBack, withOrigin, type HkRowDef, type ListId, type UserLists } from './ranks';
 import { insertCadre, isManualOrder } from './cadre';
 import { clearRange, setNoDuty } from './cadrePlan';
+import { cleanPerson, dutyCfgOf, serviceOf } from './cadreDuty';
 import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
 import { normPos, normRack, normWeapon } from './weapons';
@@ -44,6 +45,11 @@ export type Command =
   | { t: 'setCadreNoDuty'; cid: string; from: ISODate; to: ISODate; note?: string }
   | { t: 'deleteCadreNoDuty'; id: string }
   | { t: 'clearCadrePlan'; cid: string; from: ISODate; to: ISODate }
+  // Υπηρεσίες στελεχών (shared/cadreDuty.ts): μία υπηρεσία του προγράμματος (id: αλλαγή), πολλές μαζί (προσθήκες και διαγραφές, για την αυτόματη συμπλήρωση), στοιχεία ανά στέλεχος (null: καθαρισμός)
+  | { t: 'saveCadreDuty'; duty: Omit<CadreDuty, 'id'> & { id?: string } }
+  | { t: 'deleteCadreDuty'; id: string }
+  | { t: 'setCadreDuties'; add: Omit<CadreDuty, 'id'>[]; del: string[]; text: string }
+  | { t: 'setCadreDutyOf'; cid: string; person: CadreDutyPerson | null }
   // Από το δικό τους Excel (3/11): νέα στελέχη και αλλαγές στοιχείων (με τους ίδιους κανόνες της καρτέλας), και καταστάσεις
   | { t: 'importCadres'; adds: CadreNew[]; updates: { id: string; patch: Partial<Cadre> }[]; source: string }
   | { t: 'importCadreAbs'; adds: AbsNew[]; updates: { id: string; note: string }[]; deletes: string[]; source: string }
@@ -587,7 +593,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const x = s.cadreList.find(y => y.id === c.id); if (!x) throw new Error('Δεν βρέθηκε το στέλεχος');
       if (x.pid != null && (Object.values(s.guards).some(g => Object.values(g || {}).includes(x.pid!)) || Object.values(s.dutyLog || {}).some(l => l.some(e => e.pid === x.pid))))
         throw new Error('Ο ' + rankTxt(x) + ' ' + x.last + ' έχει υπηρεσίες στο ημερολόγιο. Βάλ\' τον «εκτός δύναμης» από τα «Στοιχεία», για να μείνει το ιστορικό.');
-      return { state: { ...s, cadreList: s.cadreList.filter(y => y !== x), cadreAbs: s.cadreAbs.filter(a => a.cid !== x.id), ...(s.cadreGrants?.some(g => g.cid === x.id) ? { cadreGrants: s.cadreGrants.filter(g => g.cid !== x.id) } : {}), ...(s.cadreNoDuty?.some(g => g.cid === x.id) ? { cadreNoDuty: s.cadreNoDuty.filter(g => g.cid !== x.id) } : {}) }, text: 'Διαγράφηκε το στέλεχος ' + rankTxt(x) + ' ' + x.last, files: [HK()] };
+      return { state: { ...s, cadreList: s.cadreList.filter(y => y !== x), cadreAbs: s.cadreAbs.filter(a => a.cid !== x.id), ...(s.cadreGrants?.some(g => g.cid === x.id) ? { cadreGrants: s.cadreGrants.filter(g => g.cid !== x.id) } : {}), ...(s.cadreNoDuty?.some(g => g.cid === x.id) ? { cadreNoDuty: s.cadreNoDuty.filter(g => g.cid !== x.id) } : {}), ...(s.cadreDuties?.some(g => g.cid === x.id) ? { cadreDuties: s.cadreDuties.filter(g => g.cid !== x.id) } : {}), ...(s.cadreDutyOf?.[x.id] ? { cadreDutyOf: Object.fromEntries(Object.entries(s.cadreDutyOf).filter(([k]) => k !== x.id)) } : {}) }, text: 'Διαγράφηκε το στέλεχος ' + rankTxt(x) + ' ' + x.last, files: [HK()] };
     }
     case 'addCadreAbs': {
       const x = s.cadreList.find(y => y.id === c.abs.cid); if (!x) throw new Error('Δεν βρέθηκε το στέλεχος');
@@ -648,6 +654,40 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const r = clearRange(s, x.id, c.from, c.to, () => 'a' + ctx.newId());
       if (!r.changedAbs && !r.changedNoDuty) throw new Error('Δεν υπάρχει κατάσταση σε αυτές τις μέρες');
       return { state: { ...s, ...(r.changedAbs ? { cadreAbs: r.cadreAbs } : {}), ...(r.changedNoDuty ? { cadreNoDuty: r.cadreNoDuty } : {}) }, text: 'Στέλεχος: ' + rankTxt(x) + ' ' + x.last + ', σβήστηκαν οι καταστάσεις ' + range(c.from, c.to), files: r.changedAbs ? [HK()] : [] };
+    }
+    case 'saveCadreDuty': {
+      const d = c.duty; const x = s.cadreList.find(y => y.id === d.cid); if (!x) throw new Error('Δεν βρέθηκε το στέλεχος');
+      const sv = serviceOf(dutyCfgOf(s.settings), d.svc); if (!sv) throw new Error('Δεν βρέθηκε η υπηρεσία (Ρυθμίσεις › Υπηρεσίες στελεχών)');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d.date)) throw new Error('Λάθος ημερομηνία');
+      const list = s.cadreDuties || [];
+      const old = d.id ? list.find(y => y.id === d.id) : list.find(y => y.date === d.date && y.svc === d.svc && y.cid === d.cid);   // ίδιο άτομο, ίδια υπηρεσία, ίδια μέρα: αντικαθίσταται
+      const why = d.why?.trim();
+      const duty: CadreDuty = { id: old?.id || 'd' + ctx.newId(), date: d.date, svc: d.svc, cid: d.cid, ...(d.auto ? { auto: true } : {}), ...(why ? { why } : {}) };
+      return { state: { ...s, cadreDuties: old ? list.map(y => (y === old ? duty : y)) : [...list, duty] }, text: 'Υπηρεσία στελέχους: ' + rankTxt(x) + ' ' + x.last + ', ' + sv.svc.name + ' ' + dm(d.date) + (why ? ' (' + why + ')' : ''), files: sv.svc.hkCol ? [HK()] : [] };
+    }
+    case 'deleteCadreDuty': {
+      const g = (s.cadreDuties || []).find(y => y.id === c.id); if (!g) throw new Error('Δεν βρέθηκε η υπηρεσία');
+      const x = s.cadreList.find(y => y.id === g.cid); const sv = serviceOf(dutyCfgOf(s.settings), g.svc);
+      return { state: { ...s, cadreDuties: (s.cadreDuties || []).filter(y => y !== g) }, text: 'Διαγράφηκε υπηρεσία στελέχους' + (x ? ': ' + rankTxt(x) + ' ' + x.last : '') + ', ' + (sv?.svc.name || g.svc) + ' ' + dm(g.date), files: sv?.svc.hkCol ? [HK()] : [] };
+    }
+    case 'setCadreDuties': {
+      const dels = new Set(c.del); const list = (s.cadreDuties || []).filter(y => !dels.has(y.id));
+      const cfg = dutyCfgOf(s.settings); const ids = new Set(s.cadreList.map(y => y.id));
+      const adds: CadreDuty[] = [];
+      for (const d of c.add) {
+        const sv = serviceOf(cfg, d.svc); if (!sv || !ids.has(d.cid) || !/^\d{4}-\d{2}-\d{2}$/.test(d.date)) throw new Error('Λάθος υπηρεσία, στέλεχος ή ημερομηνία');
+        const dup = [...list, ...adds].findIndex(y => y.date === d.date && y.svc === d.svc && y.cid === d.cid); const why = d.why?.trim();
+        const duty: CadreDuty = { id: 'd' + ctx.newId(), date: d.date, svc: d.svc, cid: d.cid, ...(d.auto ? { auto: true } : {}), ...(why ? { why } : {}) };
+        if (dup >= 0 && dup < list.length) list[dup] = { ...duty, id: list[dup].id }; else if (dup < 0) adds.push(duty);
+      }
+      if (!dels.size && !adds.length) throw new Error('Δεν υπάρχει αλλαγή');
+      const hk = [...c.add.map(d => d.svc), ...(s.cadreDuties || []).filter(y => dels.has(y.id)).map(y => y.svc)].some(id => serviceOf(cfg, id)?.svc.hkCol);
+      return { state: { ...s, cadreDuties: [...list, ...adds] }, text: 'Υπηρεσίες στελεχών: ' + c.text, files: hk ? [HK()] : [] };
+    }
+    case 'setCadreDutyOf': {
+      const x = s.cadreList.find(y => y.id === c.cid); if (!x) throw new Error('Δεν βρέθηκε το στέλεχος');
+      const p = c.person && cleanPerson(c.person); const rest = { ...(s.cadreDutyOf || {}) }; if (p) rest[x.id] = p; else delete rest[x.id];
+      return { state: { ...s, cadreDutyOf: rest }, text: 'Στέλεχος: ' + rankTxt(x) + ' ' + x.last + ', στοιχεία υπηρεσιών' + (p ? '' : ' (καθαρίστηκαν)'), files: [] };
     }
     case 'addRequest': case 'updateRequest': {
       const p = pm.get(c.req.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
