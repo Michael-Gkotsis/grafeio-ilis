@@ -11,7 +11,7 @@ import { fillAdaptive, type FillReport } from '../src/main/fillAdaptive';
 import { fillHkai } from '../src/main/exports';
 import { Workbook } from '../src/main/xlsx';
 import fs from 'fs';
-import { hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, lineText } from '../src/shared/hkaiText';
+import { hkaiAdikLines, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines, lineText } from '../src/shared/hkaiText';
 import { hkWho } from '../src/shared/punish';
 import { hkDate } from '../src/shared/dates';
 import { upper } from '../src/shared/text';
@@ -43,7 +43,10 @@ function expected(m: BackMock): Expect[] {
     { cat: 'punish', entries: conv(hkaiPunLines(s, d)) }, { cat: 'requests', entries: conv(hkaiReqLines(s, d)) }
   ];
   const nos = s.statuses.filter(x => x.type === 'NOS' && x.from === d && s.people.find(p => p.id === x.pid)?.active).map(x => upper(hkWho(s.people.find(p => p.id === x.pid)!)));
-  const misc: string[] = []; let k = 0; for (const w of nos) misc.push(dateIn(number(k++) + ' ' + w + (person ? ' : ' : ': ') + 'ΕΙΣΗΧΘΗ ΣΕ ΝΟΣΟΚΟΜΕΙΟ ΤΗΝ ' + hkDate(d) + '.'));
+  const misc: string[] = []; let k = 0;
+  // Άγνοια / Λιποταξία / Αδικ. απουσία (17/11, #352) come first in ΛΟΙΠΑ, numbered with the hospital lines (sweep 17/11: the generator now makes them, FUZZ_ADIK=1)
+  for (const l of hkaiAdikLines(s, d)) { const t = lineText(l).replace(/^\d+\.\s+/, ''); const i = t.indexOf(': '); misc.push(dateIn(number(k++) + ' ' + (person && i > 0 ? t.slice(0, i) + ' : ' + t.slice(i + 2) : t))); }
+  for (const w of nos) misc.push(dateIn(number(k++) + ' ' + w + (person ? ' : ' : ': ') + 'ΕΙΣΗΧΘΗ ΣΕ ΝΟΣΟΚΟΜΕΙΟ ΤΗΝ ' + hkDate(d) + '.'));
   const loi = s.hkaiManual?.[d]?.text?.loi?.trim(); if (loi) misc.push(loi);
   out.push({ cat: 'misc', entries: misc });
   void person;

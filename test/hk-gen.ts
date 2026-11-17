@@ -12,7 +12,7 @@ const CADRE_RANK: [string, string][] = [['ΤΧΗΣ', 'Επίλαρχοι'], ['Λ
 const CADRE_ABS = ['ka', 'an', 'eid', 'nos', 'yp', 'ey', 'kin', 'mag', 'ekp', 'allh', 'fp'];
 
 // nofixed: nothing that belongs to no person (no hand-written numbers on the rows, no cadre numbers from the settings); noSoldierOwn: no own rank
-export interface HkGenOpts { own?: boolean; lochos?: boolean; cadre?: boolean; attached?: boolean; nofixed?: boolean; plainRanks?: boolean }
+export interface HkGenOpts { own?: boolean; lochos?: boolean; cadre?: boolean; attached?: boolean; nofixed?: boolean; plainRanks?: boolean; adik?: boolean }   // adik: Άγνοια/Λιποταξία/Αδικ. απουσία (sweep 17/11), own random stream: other seeds unchanged
 export function genHkState(seed: number, o: HkGenOpts = {}): AppState {
   const r = rng(seed * 31 + 7); const pick = <T,>(a: readonly T[]) => a[Math.floor(r() * a.length)];
   let s = genState(seed * 7919 + 3, r() < 0.5, 12 + Math.floor(r() * 14));
@@ -38,6 +38,16 @@ export function genHkState(seed: number, o: HkGenOpts = {}): AppState {
   const hkaiManual: AppState['hkaiManual'] = {};
   for (const d of DAYS) if (r() < 0.5 && !o.nofixed) hkaiManual[d] = { cells: { 'Στρατιώτες': { sid: Math.floor(r() * 3), ab: Math.floor(r() * 4), prat: Math.floor(r() * 2) }, ...(r() < 0.4 ? { 'Λοχίες': { allh: 1 } } : {}) } } as unknown as AppState['hkaiManual'][ISODate];
   s = { ...s, people, cadreList, cadreAbs, settings, hkaiManual };
+  if (o.adik) {
+    const q = rng(seed * 97 + 13); const types = ['AGN', 'LIP', 'ADK'] as const; const add: AppState['statuses'] = [];
+    for (const p of people) if (q() < 0.2) {
+      const i = Math.floor(q() * DAYS.length); const from = DAYS[i]; const to = DAYS[Math.min(DAYS.length - 1, i + Math.floor(q() * 4))];
+      // it replaces what that person had on those days (one state at a time, as the declare dialog does)
+      s = { ...s, statuses: s.statuses.filter(x => x.pid !== p.id || x.to < from || x.from > to) };
+      add.push({ id: 'adk' + p.id, pid: p.id, type: types[Math.floor(q() * 3)], from, to, ...(q() < 0.3 ? { open: true } : {}), ...(q() < 0.4 ? { note: 'διότι δεν επέστρεψε' } : {}) } as AppState['statuses'][number]);
+    }
+    s = { ...s, statuses: [...s.statuses, ...add] };
+  }
   return s;
 }
 export { DAYS };

@@ -15,6 +15,7 @@ import { Evaluator, UNSUPPORTED, critMatches } from '../src/shared/sheetEval';
 import { detectBook } from '../src/shared/shape';
 import { colLetter, key as cellKey } from '../src/shared/sheetModel';
 import { genFillMock } from './mockgen';
+import { hkaiClassify } from '../src/shared/rules';
 
 // ------------------------------------------------------------------ the evaluator
 const sheet = (name: string, rows: (string | number | null)[][], formulas: Record<string, string> = {}) => ({
@@ -110,6 +111,35 @@ describe('totals without formulas', () => {
         for (const f of fx) { const v = lo[0].rows[f.r]?.[f.c]; const was = filled[0].rows[f.r]?.[f.c]; const t = m.truth.get(f.r + ':' + f.c); if (t != null && !m.s.settings.hkai) expect(v ?? 0, 'seed ' + seed + ' ' + f.ref + ' ' + f.formula + ' was ' + was).toBe(t); }
       }
     }
+  }, 300000);
+  // 17/11 (#352): Άγνοια / Λιποταξία / Αδικαιολόγητη απουσία count in the «Αγνοούμενοι / αδικαιολόγητα» column. A unit's template without that
+  // column: the people are reported in plain words (not the key «adik»), and a Σύνολο απόντων written as a number still counts them
+  it('a template with no column for the new statuses: plain-words warning; a total written as a number still counts them', async () => {
+    let numbers = 0, formulas = 0;
+    for (let seed = 1; seed <= 150 && (numbers < 3 || formulas < 3); seed++) {
+      for (const totals of ['numbers', 'formulas'] as const) {
+        const m = await genFillMock(seed, { ...calm, drop: 8, adik: true, totals });
+        const n = hkaiClassify(m.s, m.date).who.filter(w => w.col === 'adik').length; if (!n) continue;
+        const { buffer, report } = await fillAdaptive(m.buf, m.s, m.date, m.profile);
+        const lost = report.unplacedStates.find(x => x.key === 'adik'); if (!lost) continue;
+        expect(lost.n).toBeLessThanOrEqual(n);
+        const w = report.warnings.filter(x => x.includes('Αγνοούμενοι / αδικαιολόγητα')); expect(w.length, 'seed ' + seed).toBe(1);
+        expect(w[0]).toMatch(lost.n === 1 ? /^1 άτομο .* δεν έχει στήλη/ : new RegExp('^' + lost.n + ' άτομα .* δεν έχουν στήλη'));
+        expect(report.warnings.join(' ')).not.toMatch(/«adik»/);
+        if (totals === 'numbers') {
+          // nothing is a formula: every total the engine wrote is the true number, the missing column's people included
+          const back = (await modelOfBuffer(buffer))[0];
+          for (const [k, t] of m.truth) { const [r, c] = k.split(':').map(Number); const v = back.rows[r]?.[c]; if (typeof v === 'number' || v == null) expect(v ?? 0, 'seed ' + seed + ' ' + k).toBe(t); }
+          numbers++;
+        } else {
+          // the template's own Σύνολο απόντων sums its columns: the cross-check says so instead of hiding it
+          expect(report.cross.mismatches.length, 'seed ' + seed).toBeGreaterThan(0);
+          expect(report.warnings.some(x => /Έλεγχος με τους τύπους του εντύπου/.test(x))).toBe(true);
+          formulas++;
+        }
+      }
+    }
+    expect(numbers).toBeGreaterThanOrEqual(3); expect(formulas).toBeGreaterThanOrEqual(3);
   }, 300000);
   it('a cell that has a formula is never proposed, never rewritten', async () => {
     const m = await genFillMock(2, calm);

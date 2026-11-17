@@ -23,6 +23,7 @@ import { ABS_KEYS, expectedCells, HkEngine, KOL_KEYS, mapMatrix, pickFront, unpl
 import { critMatches, Evaluator, UNSUPPORTED } from '../shared/sheetEval';
 import { emptyBack, planExtras, type BackReport } from './backFill';
 import type { Sig } from '../shared/sigs';
+import { HK_COLS } from '../shared/sources';
 
 export interface FillOpts {
   dryRun?: boolean;
@@ -206,7 +207,11 @@ export async function fillAdaptive(tpl: Buffer, s: AppState, date: ISODate, prof
   for (const x of rep.unmappedCols.filter(x => x.hasData)) rep.warnings.push('Η στήλη «' + x.text + '» (' + x.ref + ') έχει στοιχεία και δεν έχει αντιστοιχιστεί: δεν γράφτηκε (' + x.why + ')');
   for (const x of rep.unmappedRows.filter(x => x.hasData)) rep.warnings.push('Η γραμμή «' + x.text + '» (' + x.ref + ') έχει στοιχεία και δεν αναγνωρίζεται: δεν γράφτηκε (' + x.why + ')');
   for (const x of un.rows) rep.warnings.push(x.n + ' άτομα της γραμμής «' + x.key + '» δεν μετριούνται σε καμία γραμμή του εντύπου');
-  for (const x of un.states) rep.warnings.push(x.n + ' άτομα στην κατάσταση «' + x.key + '» δεν έχουν στήλη στο έντυπο');
+  // in the user's words: the column's name, not the key; a total with a formula cannot count them either
+  for (const x of un.states) {
+    const name = HK_COLS.find(c => c[0] === x.key)?.[1] ?? x.key; const kolA = KOL_KEYS.includes(x.key) ? 'Σύνολο κωλυομένων' : 'Σύνολο απόντων';
+    rep.warnings.push((x.n === 1 ? '1 άτομο' : x.n + ' άτομα') + ' στην κατάσταση «' + name + '» δεν ' + (x.n === 1 ? 'έχει' : 'έχουν') + ' στήλη στο έντυπο: δεν ' + (x.n === 1 ? 'φαίνεται' : 'φαίνονται') + ' σε καμία στήλη, και αν το «' + kolA + '» του εντύπου έχει τύπο, δεν ' + (x.n === 1 ? 'μετριέται' : 'μετριούνται') + ' ούτε εκεί');
+  }
   // the data sheet that the template's own formulas count
   let dataBoxes: { sheet: string; r1: number; c1: number; r2: number; c2: number }[] = [];
   if (region.driven) {
