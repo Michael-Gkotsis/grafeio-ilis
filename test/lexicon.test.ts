@@ -38,7 +38,7 @@ describe('lexicon matching', () => {
   it('a typo or a qualifier gives at most suggest', () => {
     expect(m('Σύνολο κωλιωμένων', COL).confidence).toBe('suggest');
     expect(m('Λχίες (ΕΠΟΠ)', ROW).confidence).toBe('suggest');
-    expect(m('Φυλάκιο Γιαννούλη-126', COL).confidence).not.toBe('sure');
+    expect(m('Φυλάκιο Κορυφή-900', COL).confidence).not.toBe('sure');
   });
   it('unit words nobody knows stay unknown', () => {
     for (const s of ['Ξένη γλώσσα', 'Στήλη1', 'Χ', '', '   ']) expect(m(s).confidence, s).toBe('unknown');

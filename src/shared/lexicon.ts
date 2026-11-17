@@ -411,7 +411,7 @@ export class Lexicon {
         if (m) return { ...m, confidence: bestD === 1 && L >= 12 && ids.size === 1 && !m.alts?.length && m.confidence !== 'unknown' && !cands[0].weak ? 'sure' : 'suggest', why: 'μικρό ορθογραφικό λάθος του «' + this.label(m.concept) + '»' };
       }
     }
-    // 4. the name inside a longer text («Φυλάκιο Γιαννούλη-126», «Κανονικές Άδειες ΑΜΔ»)
+    // 4. the name inside a longer text («Φυλάκιο Κορυφή-900», «Κανονικές Άδειες ΑΜΔ»)
     if (words.length <= 8) {
       const padded = ' ' + key + ' '; let best: Entry | null = null;
       for (const [k, es] of this.exact) {

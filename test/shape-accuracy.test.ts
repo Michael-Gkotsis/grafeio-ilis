@@ -59,7 +59,7 @@ describe('accuracy on mock files', () => {
 // minimal % of items (sure + suggested) per kind; set from measured results with a margin
 const THRESH: Record<MockKind, number> = {
   hkai: 85, hkal: 85, 'hkal-countifs': 85, 'duty-grid': 85, 'service-list': 80, roster: 85, weapons: 85,
-  'real-hkai-2509': 90, 'real-hkai-50ema': 70, 'real-hkal-80': 85, 'real-ypiresies': 85, 'real-ypiresies-kath': 80, 'real-dynamologio': 85, 'real-oplismos': 85
+  'real-hkai-2509': 90, 'real-hkai-own-cols': 70, 'real-hkal-countifs': 85, 'real-ypiresies': 85, 'real-ypiresies-kath': 80, 'real-dynamologio': 85, 'real-oplismos': 85
 };
 
 describe('hard files', () => {
@@ -93,7 +93,7 @@ describe('hard files', () => {
 
 const soffice = findSoffice();
 describe.skipIf(!soffice)('.xls through LibreOffice', () => {
-  for (const [kind, seed] of [['hkai', 3], ['roster', 5], ['real-hkal-80', 1], ['duty-grid', 2]] as [MockKind, number][]) {
+  for (const [kind, seed] of [['hkai', 3], ['roster', 5], ['real-hkal-countifs', 1], ['duty-grid', 2]] as [MockKind, number][]) {
     it(kind + ' saved as .xls reads back with the same truth', async () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'grafeio-xlstest-'));
       try {
