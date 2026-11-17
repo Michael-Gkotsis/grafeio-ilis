@@ -209,6 +209,14 @@ export class Sheet {
   merges(): { c1: number; r1: number; c2: number; r2: number }[] {
     return [...this.tail.matchAll(/<mergeCell ref="([^"]+)"\/>/g)].map(m => { const [a, b] = m[1].split(':'); const A = splitRef(a), B = splitRef(b || a); return { c1: A.c, r1: A.r, c2: B.c, r2: B.r }; });
   }
+  // Έλεγχοι δεδομένων όπως είναι γραμμένοι (λίστες επιλογής): περιοχές κελιών, τύπος και formula1 (σκέτη τιμή, "Α,Β" ή αναφορά)
+  validations(): { sqref: string; type: string; f1: string }[] {
+    return [...this.tail.matchAll(/<dataValidation\b([^>]*?)(?:\/>|>([\s\S]*?)<\/dataValidation>)/g)]
+      .map(m => ({ sqref: attr(m[1], 'sqref') || '', type: attr(m[1], 'type') || '', f1: unesc(/<formula1>([\s\S]*?)<\/formula1>/.exec(m[2] || '')?.[1] || '') }))
+      // Excel 2010+ γράφει τις λίστες που δείχνουν σε άλλο φύλλο στο extLst (x14:dataValidation, με xm:f και xm:sqref)
+      .concat([...this.tail.matchAll(/<x14:dataValidation\b([^>]*?)(?:\/>|>([\s\S]*?)<\/x14:dataValidation>)/g)]
+        .map(m => ({ sqref: unesc(/<xm:sqref>([\s\S]*?)<\/xm:sqref>/.exec(m[2] || '')?.[1] || ''), type: attr(m[1], 'type') || '', f1: unesc(/<x14:formula1>\s*<xm:f>([\s\S]*?)<\/xm:f>/.exec(m[2] || '')?.[1] || '') })));
+  }
   // Νέα συγχώνευση (π.χ. τίτλος A1:K1)
   addMerge(ref: string): this {
     if (/<mergeCells\b[^>]*>/.test(this.tail)) {
@@ -605,6 +613,21 @@ export class Workbook {
       n += todo.length;
     }
     return n;
+  }
+  // Κατάσταση κάθε φύλλου: ορατό, κρυφό ή «πολύ κρυφό» (δεν ανοίγει από το Excel χωρίς μακροεντολή)
+  sheetStates(): Record<string, 'visible' | 'hidden' | 'veryHidden'> {
+    const out: Record<string, 'visible' | 'hidden' | 'veryHidden'> = {};
+    for (const m of this.workbookXml.matchAll(/<sheet\b[^>]*>/g)) {
+      const name = unesc(attr(m[0], 'name') || ''); const st = attr(m[0], 'state');
+      out[name] = st === 'hidden' ? 'hidden' : st === 'veryHidden' ? 'veryHidden' : 'visible';
+    }
+    return out;
+  }
+  // Ονόματα του βιβλίου (π.χ. λίστες που χρησιμοποιούν οι έλεγχοι δεδομένων): όνομα → αναφορά
+  definedNameMap(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const m of this.workbookXml.matchAll(/<definedName\b([^>]*)>([^<]*)<\/definedName>/g)) { const n = attr(m[1], 'name'); if (n && !/^_xlnm\./.test(n) && attr(m[1], 'localSheetId') == null) out[n] = unesc(m[2]); }
+    return out;
   }
   sheetNames() { return this.names.map(x => x.name); }
   get date1904() { return /<workbookPr\b[^>]*date1904="(1|true)"/.test(this.workbookXml); }
