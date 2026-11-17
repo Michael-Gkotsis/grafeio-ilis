@@ -78,6 +78,9 @@ export interface BackForm {
   continuation: string | null;
 }
 const DECISION = /^(ΕΙΣΗΓΗΣΗ|ΑΠΟΦΑΣΗ|ΕΛΑΒΑ ΓΝΩΣΗ|ΕΙΣΗΓΗΣΗ\s*\(.*\)|ΑΠΟΦΑΣΗ\s*\(.*\)|ΕΙΣΗΓΗΣΗ\s*[-/]\s*ΑΠΟΦΑΣΗ.*|ΥΔΚΤΟΥ|ΔΚΤΟΥ|ΕΙΣΗΓΗΣΗ ΥΔΚΤΟΥ|ΑΠΟΦΑΣΗ ΔΚΤΟΥ)$/;
+// the lines of a signature block / the end of a form: a section's rows never run into them
+const STOP_TEXT = /^ΥΠΟΓΡΑΦ|^ΕΛΑΒΑ ΓΝΩΣΗ|^(Ο|Η|ΤΟ)\s+(ΑΛΧΙΑΣ|ΛΟΧΙΑΣ|ΔΚΤΗΣ|ΔΙΟΙΚΗΤΗΣ|ΥΔΚΤΗΣ|ΑΞΚΟΣ|ΑΞΙΩΜΑΤΙΚΟΣ|ΟΥΛΑΜΟΣ|ΕΠΟΠΤΗΣ)/;
+const isStopText = (t: string) => !!t && t.length < 80 && STOP_TEXT.test(upper(t).replace(/\s+/g, ' ').trim());
 export const isDecision = (t: string) => DECISION.test(upper(t).replace(/\s+/g, ' ').trim());
 const GROUP = /^ΟΜΑΔΑ\s+([ΑΒA-B])\s*['΄’`´]?\s*[-–:.]?\s*(.*)$/;
 // «ΟΜΑΔΑ Α΄ ΣΤΡΑΤΟΛΟΓΙΚΕΣ: ΕΓΓΡΑΦΕΣ» → group Α + «ΕΓΓΡΑΦΕΣ»; «1. ΕΓΓΡΑΦΕΣ:» → «ΕΓΓΡΑΦΕΣ»
@@ -123,23 +126,28 @@ export function locateBack(sh: SheetModel, o: BackOpts, cont?: string | null): B
   for (const d of decision) { const m = g.mergeOf(d.r, d.c); for (let c = m?.c1 ?? d.c; c <= (m?.c2 ?? d.c); c++) protectedCols.add(c); }
   // the rows of a section end where the next section / group begins
   const stops = [...found.map(x => x.r), ...groups].sort((a, b) => a - b);
-  const stopAfter = (r: number) => stops.find(x => x > r) ?? g.nRows + 60;
-  const blockRows = (() => { const rows: number[] = []; for (let r = 0; r < g.nRows; r++) for (let c = 0; c < (sh.rows[r]?.length ?? 0); c++) { const t = upper(valueText(sh.rows[r][c])).replace(/\s+/g, ' ').trim(); if (t && t.length < 80 && (BLOCK.vehicles.test(t) || BLOCK.meal.test(t) || BLOCK.arms.test(t) || /^ΥΠΟΓΡΑΦ|^ΕΛΑΒΑ ΓΝΩΣΗ/.test(t))) rows.push(r); } return rows; })();
+  const stopAfter = (r: number) => stops.find(x => x > r) ?? g.nRows;
+  const blockCells = (() => { const rows: { r: number; c: number }[] = []; for (let r = 0; r < g.nRows; r++) for (let c = 0; c < (sh.rows[r]?.length ?? 0); c++) { const t = upper(valueText(sh.rows[r][c])).replace(/\s+/g, ' ').trim(); if (t && t.length < 80 && (BLOCK.vehicles.test(t) || BLOCK.meal.test(t) || BLOCK.arms.test(t) || STOP_TEXT.test(t))) rows.push({ r, c }); } return rows; })();
+  const sigRows = (() => { const rows: number[] = []; for (let r = 0; r < g.nRows; r++) for (let c = 0; c < (sh.rows[r]?.length ?? 0); c++) if (isStopText(valueText(sh.rows[r][c]))) { rows.push(r); break; } return rows; })();
   const spanFree = (r: number, c: number) => { const m = g.mergeOf(r, c); const c1 = m?.c1 ?? c, c2 = m?.c2 ?? c; for (let x = c1; x <= c2; x++) if (protectedCols.has(x)) return false; return true; };
   for (const s of found) {
     if (s.state !== 'sure') continue;
-    // right of the label, if that cell is free (the bundled form): one cell. Text there («ΕΙΣΗΓΗΣΗ») or a decision column: the rows under the label
-    const rc = s.c2 + 1;
-    if (freeCell(g, s.r, rc, o.ours, sh.name) && spanFree(s.r, rc) && (g.mergeOf(s.r, rc)?.r2 ?? s.r) >= s.r2 - 0) {
-      const m = g.mergeOf(s.r, rc); s.layout = 'right'; s.slots = [{ r: m?.r1 ?? s.r, c: m?.c1 ?? rc, c2: m?.c2 ?? rc }]; continue;
-    }
-    const end = Math.min(stopAfter(s.r), ...blockRows.filter(x => x > s.r2));
+    const end = Math.min(stopAfter(s.r), ...blockCells.filter(x => x.r > s.r2 && x.c >= s.c).map(x => x.r), ...sigRows.filter(x => x > s.r2));
+    const below: Slot[] = [];
     for (let r = s.r2 + 1; r < end; r++) {
       const m = g.mergeOf(r, s.c); if (m && (m.r1 !== r || m.c1 !== s.c)) { if (m.c1 <= s.c && m.r1 < r) continue; break; }
       if (!freeCell(g, r, s.c, o.ours, sh.name) || !spanFree(r, s.c)) break;
-      s.slots.push({ r, c: s.c, c2: m?.c2 ?? s.c });
+      below.push({ r, c: s.c, c2: m?.c2 ?? s.c });
       if (m && m.r2 > r) r = m.r2;
     }
+    // right of the label, if that cell is free and is THE place of the section (the bundled form: one wide cell, no rows under the label, or a cell as tall as the section).
+    // Text there («ΕΙΣΗΓΗΣΗ»), a decision column, or free rows under the label: the rows under the label
+    const rc = s.c2 + 1; const rm = g.mergeOf(s.r, rc);
+    const rightFree = freeCell(g, s.r, rc, o.ours, sh.name), rightProt = !spanFree(s.r, rc);
+    if (rightFree && !rightProt && (below.length === 0 || (!!rm && rm.r2 >= end - 1 && rm.r2 > rm.r1))) { s.layout = 'right'; s.slots = [{ r: rm?.r1 ?? s.r, c: rm?.c1 ?? rc, c2: rm?.c2 ?? rc }]; continue; }
+    // any other text next to the label (a note, an old line, an example): the section is not written at all
+    if (!rightFree && !rightProt && !isDecision(g.textThrough(s.r, rc))) { s.slots = []; continue; }
+    s.slots = below;
   }
   const blocks = { vehicles: false, organs: false, meal: false, arms: false };
   for (let r = 0; r < g.nRows; r++) for (let c = 0; c < (sh.rows[r]?.length ?? 0); c++) { const t = upper(valueText(sh.rows[r][c])).replace(/\s+/g, ' ').trim(); if (!t || t.length > 90) continue; for (const k of Object.keys(blocks) as (keyof typeof blocks)[]) if (BLOCK[k].test(t)) blocks[k] = true; }
@@ -180,7 +188,8 @@ export function slotsOfContinuation(sh: SheetModel): Slot[] {
   const left = g.mergeOf(hr, first.c - 1); const tc = left?.c1 ?? first.c - 1; if (tc < 0) return out;
   const prot = new Set<number>(); for (const d of dec) { const m = g.mergeOf(d.r, d.c); for (let c = m?.c1 ?? d.c; c <= (m?.c2 ?? d.c); c++) prot.add(c); }
   const hEnd = Math.max(hr, ...dec.filter(d => d.r === hr).map(d => g.mergeOf(d.r, d.c)?.r2 ?? d.r), left?.r2 ?? hr);
-  for (let r = hEnd + 1; r < g.nRows + 40; r++) {
+  const stopRow = (() => { for (let r = hEnd + 1; r < g.nRows; r++) for (let c = 0; c < (sh.rows[r]?.length ?? 0); c++) if (isStopText(valueText(sh.rows[r][c]))) return r; return g.nRows; })();
+  for (let r = hEnd + 1; r < stopRow; r++) {
     const m = g.mergeOf(r, tc); if (m && (m.r1 !== r || m.c1 !== tc)) { if (m.r1 < r) continue; break; }
     const c2 = m?.c2 ?? tc; let bad = false; for (let x = tc; x <= c2; x++) if (prot.has(x)) bad = true;
     if (bad || !freeCell(g, r, tc)) break;
@@ -191,7 +200,7 @@ export function slotsOfContinuation(sh: SheetModel): Slot[] {
 
 // ------------------------------------------------------------------ blanks inside a text: «____», «….», «/ /»
 export const BLANK_RUN = /[_…]{2,}|\.{3,}/g;
-const DATE_SLASH = /(\d{1,2}|[_….]*)[ \t]*\/[ \t]*(\d{1,2}|[_….]*)[ \t]*\/[ \t]*(\d{4}|\d{2}|20[_….]+|[_….]*)/;
+const DATE_SLASH = /(\d{1,2}|[_….]*)[ \t]*\/[ \t]*(\d{1,2}|[_….]*)[ \t]*\/([ \t]*)(\d{4}|20[_….]+|\d{2}|[_….]*)/;
 const DATE_WORD = new RegExp('(?<![\\p{L}\\d])\\d{1,2}\\s+(?:' + HK_MON.join('|') + '|ΜΑΪ|ΙΟΥΝ|ΙΟΥΛ)\\s+\\d{2,4}(?![\\p{L}\\d])', 'iu');
 export interface FillResult { text: string; unit: boolean; date: boolean; skipped: string[] }
 // Fills the blank parts of a title / date line. Everything outside the filled parts is returned unchanged (the caller compares them).
@@ -200,10 +209,11 @@ export function fillTitle(t: string, o: { unit: string; d: ISODate; fmt: BackFor
   const dm = DATE_SLASH.exec(text);
   let dateAt = -1, dateLen = 0;
   if (dm) {
-    const y4 = /^\d{4}$/.test(dm[3]) || /^20[_….]+$/.test(dm[3]) || (!/\d/.test(dm[3]) && o.fmt === 'slash4');
+    const y = dm[4]; const y4 = /^\d{4}$/.test(y) || /^20[_….]+$/.test(y) || (!/\d/.test(y) && o.fmt === 'slash4');
     const repl = fmtDate(o.d, y4 ? 'slash4' : 'slash');
-    // the blank / typed digits right before the first slash belong to the date: spaces in front stay
-    dateAt = dm.index; dateLen = dm[0].length; text = text.slice(0, dateAt) + repl + text.slice(dateAt + dateLen); date = true;
+    // blanks that are only spaces (« / / ») keep the spaces in front of and after the date: only the slashes and what is between them are replaced
+    const lead = dm[1] === '' ? /^[ \t]*/.exec(dm[0])![0].length : 0; const trail = y === '' ? dm[3].length : 0;
+    dateAt = dm.index + lead; dateLen = dm[0].length - lead - trail; text = text.slice(0, dateAt) + repl + text.slice(dateAt + dateLen); date = true;
   } else {
     const wm = DATE_WORD.exec(text);
     if (wm) { dateAt = wm.index; dateLen = wm[0].length; text = text.slice(0, dateAt) + fmtDate(o.d, 'hk') + text.slice(dateAt + dateLen); date = true; }
@@ -220,14 +230,14 @@ export function fillTitle(t: string, o: { unit: string; d: ISODate; fmt: BackFor
   return { text, unit, date, skipped };
 }
 // what remains of a text when its blanks, digits and the filled words are cut out: equal before and after = only blanks were filled
-export const frame = (t: string, filled: string[] = []) => { let x = t; for (const f of filled) if (f) x = x.split(f).join(''); return x.replace(BLANK_RUN, '').replace(/[\s_…./\d]+/g, '').toUpperCase(); };
+export const frame = (t: string, filled: string[] = []) => { let x = t; for (const f of filled) if (f) x = x.split(f).join(''); return x.replace(BLANK_RUN, '').toUpperCase().replace(new RegExp('(?<![\\p{L}])(?:' + HK_MON.join('|') + '|ΜΑΪ)(?![\\p{L}])', 'gu'), '').replace(/[\s_…./\d]+/g, ''); };
 
 // ------------------------------------------------------------------ the loose texts of the front
-export interface FrontPlan { writes: { sheet: string; r: number; c: number; value: string; over: string }[]; warnings: string[]; found: { title: boolean; date: boolean; sigs: number } }
+export interface FrontPlan { writes: { sheet: string; r: number; c: number; value: string; over: string }[]; warnings: string[]; found: { title: boolean; date: boolean; sigs: number }; sigsDone: string[]; sigsLost: string[] }
 const SIGROLE = /^(Ο|Η|ΤΟ|ΟΙ)\s+(?!ΑΠΟ\b)[Α-Ω0-9ΆΈΉΊΌΎΏ][^:]{2,40}$/;
 const NAMELINE = /^[\s_…\-–.]*(?:[_…]{3,}|\.{4,})[\s_…\-–.]*$/;
 export function frontTexts(sh: SheetModel, o: { unit: string; place: string; d: ISODate; fmt: BackFormat['date']; sigs: { art: string; title: string; name?: string }[]; skipRows?: (r: number, c: number) => boolean }): FrontPlan {
-  const g = new Grid(sh); const plan: FrontPlan = { writes: [], warnings: [], found: { title: false, date: false, sigs: 0 } };
+  const g = new Grid(sh); const plan: FrontPlan = { writes: [], warnings: [], found: { title: false, date: false, sigs: 0 }, sigsDone: [], sigsLost: [] };
   const put = (r: number, c: number, over: string, value: string) => { if (value !== over) plan.writes.push({ sheet: sh.name, r, c, value, over }); };
   for (let r = 0; r < g.nRows; r++) {
     const row = sh.rows[r]; if (!row) continue;
@@ -265,7 +275,7 @@ export function frontTexts(sh: SheetModel, o: { unit: string; place: string; d: 
   for (const s of o.sigs) {
     if (!s.name) continue; const want = upper(s.title).replace(/\s+/g, ' ').trim(); if (!want) continue;
     const role = roles.find(x => x.n.includes(want)) ; 
-    if (!role) { plan.warnings.push('Η υπογραφή «' + [s.art, s.title].filter(Boolean).join(' ') + '» δεν βρέθηκε στο έντυπο: το όνομα δεν γράφτηκε'); continue; }
+    if (!role) { plan.sigsLost.push(s.title); continue; }
     const rm = g.mergeOf(role.r, role.c); const c1 = rm?.c1 ?? role.c, c2 = rm?.c2 ?? role.c;
     let hit: { r: number; c: number; t: string } | null = null;
     for (let r = (rm?.r2 ?? role.r) + 1; r <= (rm?.r2 ?? role.r) + 5 && !hit; r++) {
@@ -275,7 +285,7 @@ export function frontTexts(sh: SheetModel, o: { unit: string; place: string; d: 
     }
     void c2;
     if (!hit) { plan.warnings.push('Δεν βρέθηκε γραμμή για το όνομα κάτω από «' + role.n + '»: δεν γράφτηκε'); continue; }
-    put(hit.r, hit.c, hit.t, upper(s.name));
+    put(hit.r, hit.c, hit.t, upper(s.name)); plan.sigsDone.push(s.title);
   }
   return plan;
 }

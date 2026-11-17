@@ -82,17 +82,23 @@ export async function planExtras(wb: Workbook, sheets: SheetModel[], front: stri
   const sigsIn = o.sigs ?? (sigsCustom(s.settings, 'hkai') ? sigsSaved(s.settings, 'hkai') : null);
   const sigs = sigsIn ? sigsFor(s.settings, sigsIn) : [];
   const texts = new Set<string>([front]); if (pick) texts.add(pick.sheet.name);
+  const sigFound = new Set<string>();
   for (const name of texts) {
     const sh = sheets.find(x => x.name === name)!;
     const fp = frontTexts(sh, { unit: s.settings.unitName || '', place: s.settings.place || '', d, fmt: fmt.date, sigs });
     for (const w of fp.writes) plan.push({ sheet: w.sheet, r: w.r, c: w.c, value: w.value, exact: true, over: w.over });
-    warnings.push(...fp.warnings);
+    warnings.push(...fp.warnings); for (const t of fp.sigsDone) sigFound.add(t);
     rep.front.title ||= fp.found.title; rep.front.date ||= fp.found.date; rep.front.sigs = Math.max(rep.front.sigs, fp.found.sigs);
     if (name === front && !fp.found.title) warnings.push('Δεν βρέθηκε τίτλος «Ημερήσια αναφορά…» στο έντυπο: η ημερομηνία δεν γράφτηκε στον τίτλο');
   }
+  for (const x of sigs) if (x.name && x.title && !sigFound.has(x.title)) warnings.push('Η υπογραφή «' + [x.art, x.title].filter(Boolean).join(' ') + '» δεν βρέθηκε στο έντυπο (ή δεν έχει γραμμή για το όνομα): το όνομα δεν γράφτηκε');
   if (!pick) { if (entries.length) warnings.push('Δεν βρέθηκε πίσω όψη με ενότητες (Εγγραφές, Διαγραφές, Αιτήσεις…): ' + entries.length + ' γραμμές δεν γράφτηκαν'); return { plan, warnings, report: rep, blocked }; }
   const { form } = pick; rep.sheet = form.sheet; rep.blocks = form.blocks;
   const ws = await wb.sheet(form.sheet);
+  // the rows of a section are the rows of the printed form: cells that carry a style (borders). A first row that has none = a form without formatting: nothing is cut.
+  const styled = (w: typeof ws, sl: Slot) => { const x = w.styleOf(ref0(sl.r, sl.c)); return x != null && x !== 0; };
+  const trim = (w: typeof ws, slots: Slot[]) => { if (!slots.length || !styled(w, slots[0])) return slots; const i = slots.findIndex(x => !styled(w, x)); return i < 0 ? slots : slots.slice(0, i); };
+  for (const sec of form.sections) if (sec.layout === 'below') sec.slots = trim(ws, sec.slots);
   const widthOf = (sl: Slot, w: Sheet0) => { let px = 0; for (let c = sl.c; c <= sl.c2; c++) px += Math.floor(w.colWidth(c + 1) * MDW); return Math.max(40, px - 8); };
   type Sheet0 = typeof ws;
   // ---- which section gets which category
@@ -129,8 +135,8 @@ export async function planExtras(wb: Workbook, sheets: SheetModel[], front: stri
   // ---- the rest on copies of the continuation sheet
   const cont = form.continuation; const pages: string[] = []; const left = new Map<SecId, number>();
   if (over.length) {
-    const csh = cont ? sheets.find(x => x.name === cont) : null; const cslots = csh ? slotsOfContinuation(csh) : [];
-    const cws = cont ? await wb.sheet(cont) : null;
+    const csh = cont ? sheets.find(x => x.name === cont) : null; const cws = cont ? await wb.sheet(cont) : null;
+    const cslots = csh && cws ? trim(cws, slotsOfContinuation(csh)) : [];
     if (csh && cws && cslots.length >= 2) {
       let page: string | null = null; let at = 0; const cap = cslots.length;
       const newPage = async () => { const nm = (cont!.length > 20 ? cont!.slice(0, 20) : cont!) + ' (' + (pages.length + 1) + ')'; const w = await wb.cloneSheet(cont!, nm); pages.push(w.name); page = w.name; at = 0; };

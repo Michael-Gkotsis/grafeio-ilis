@@ -178,6 +178,8 @@ export class Sheet {
   // Όλα τα κελιά με τιμή, για έλεγχο χωρητικότητας σε αρχείο που δεν έγραψε το Sheet.set (ExcelJS)
   markAll(): this { for (const row of this.rows) for (const c of row.cells) if (c.inner) this.wrote.add(colName(c.col) + row.r); return this; }
   // Τιμή όπως είναι στο XML: τύπος (t), στυλ και περιεχόμενο· null για κενό
+  // Το στυλ ενός κελιού, ακόμα και άδειου (null: χωρίς στυλ· undefined: το κελί δεν υπάρχει στο αρχείο)
+  styleOf(ref: string): number | null | undefined { const x = this.cell(ref, false); if (!x) return undefined; const s = attr(x.attrs, 's'); return s == null ? null : Number(s); }
   raw(ref: string): { t: string | null; s: number | null; inner: string } | null {
     const x = this.cell(ref, false); if (!x || !x.inner || /^<v\/>$|^<is\/>$/.test(x.inner)) return null;
     const s = attr(x.attrs, 's'); return { t: attr(x.attrs, 't'), s: s == null ? null : Number(s), inner: x.inner };

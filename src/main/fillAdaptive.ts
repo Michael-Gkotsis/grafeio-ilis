@@ -224,7 +224,7 @@ export async function fillAdaptive(tpl: Buffer, s: AppState, date: ISODate, prof
   // cross-check: the template's own formulas, recomputed over the filled values, against the numbers the engine expects
   if (opts.cross !== false) {
     const over = sheets.map(x => ({ ...x, rows: x.rows.map(r => (r ? [...r] : r)) }));
-    for (const w of wr.written) { const t = over.find(x => x.name === w.sheet)!; while (t.rows.length <= w.r) t.rows.push([]); if (!t.rows[w.r]) t.rows[w.r] = []; t.rows[w.r][w.c] = w.value; }
+    for (const w of wr.written) { const t = over.find(x => x.name === w.sheet); if (!t) continue; while (t.rows.length <= w.r) t.rows.push([]); if (!t.rows[w.r]) t.rows[w.r] = []; t.rows[w.r][w.c] = w.value; }
     const ev = new Evaluator(over); const fm = over.find(x => x.name === sh.name)!;
     for (const [k, val] of exp) {
       if (val == null) continue; const [r, c] = k.split(':').map(Number);
