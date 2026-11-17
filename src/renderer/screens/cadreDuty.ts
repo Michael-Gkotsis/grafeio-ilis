@@ -13,8 +13,8 @@ import { HK } from '../../shared/unit';
 import { MONTHS, dm, dmy, type ISODate } from '../../shared/dates';
 import { monthIndex, monthLabel, planFilters, rangeTxt, shiftMonth } from '../../shared/cadrePlan';
 import {
-  DOW_INI, DOW_ORDER, carryText, catOf, cellCode, dutyCfgOf, dutySections, eligibility, limitText, monthCheck, monthLimit, nameOf, personCells, personOf, runsOn, serviceOf, threeOf, duByDay,
-  type DutyCell, type Reason
+  DOW_INI, DOW_ORDER, autoFill, carryText, catOf, cellCode, dutyCfgOf, dutySections, eligibility, limitText, monthCheck, monthLimit, nameOf, personCells, personOf, runsOn, serviceOf, threeOf, duByDay,
+  type AutoFillResult, type DutyCell, type Reason
 } from '../../shared/cadreDuty';
 import type { AppState, Cadre, CadreService } from '../../shared/domain';
 
@@ -78,6 +78,22 @@ function WhyDialog({ ask, onClose, onSave }: { ask: Ask; onClose: () => void; on
   <//>`;
 }
 
+// ---- προεπισκόπηση της αυτόματης συμπλήρωσης ----
+function FillDialog({ fill, ym, onClose, onApply }: { fill: AutoFillResult; ym: string; onClose: () => void; onApply: () => void }) {
+  const { state } = useStore(); const cfg = dutyCfgOf(state.settings); const pm = new Map(state.cadreList.map(c => [c.id, c]));
+  const emptyBy = new Map<string, ISODate[]>(); for (const e of fill.empty) { const l = emptyBy.get(e.svc); if (l) l.push(e.date); else emptyBy.set(e.svc, [e.date]); }
+  const cnt = new Map<string, number>(); for (const x of fill.add) cnt.set(x.cid, (cnt.get(x.cid) || 0) + 1);
+  return html`<${Dialog} title=${'Αυτόματη συμπλήρωση · ' + monthLabel(ym)} onClose=${onClose}
+    footer=${html`<${Why} text=${!fill.add.length && 'Δεν υπάρχει τίποτα να μπει'}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!fill.add.length} why="Δεν υπάρχει τίποτα να μπει" onClick=${onApply}>Εφαρμογή<//>`}>
+    <p style=${{ margin: '0 0 8px' }}><b>${fill.add.length}</b> ${fill.add.length === 1 ? 'υπηρεσία θα μπει' : 'υπηρεσίες θα μπουν'} σε ${cnt.size} ${cnt.size === 1 ? 'στέλεχος' : 'στελέχη'}. Ό,τι υπάρχει ήδη μένει όπως είναι. Αναιρείται με ένα κλικ.</p>
+    ${fill.extra.length > 0 && html`<${Alert} tone="warn"><span><b>«+1» (πάνω από το όριο, μέσα στο έξτρα):</b> ${fill.extra.map(e => nameOf(pm.get(e.cid)) + ' ' + dm(e.date)).join(', ')}</span><//>`}
+    ${fill.empty.length > 0 ? html`<${Alert} tone="warn"><span><b>Θα μείνουν κενές ${fill.empty.length}:</b> δεν υπάρχει κανείς που να μπορεί (άδεια, περιορισμός, ανάπαυση ή όριο).
+      ${[...emptyBy].map(([id, ds]) => html`<span key=${id} style=${{ display: 'block' }}>${serviceOf(cfg, id)?.svc.name || id}: ${ds.map(d => dm(d)).join(', ')}</span>`)}</span><//>`
+      : html`<${Alert} tone="ok"><span>Όλες οι κενές υπηρεσίες του μήνα γεμίζουν.</span><//>`}
+    <p className="note" style=${{ margin: '8px 0 0' }}>Σειρά: όποιος έχει κάνει λιγότερες τον μήνα (μαζί με τις θέσεις στρατιωτών), σε ΣΚ/αργίες όποιος έκανε λιγότερες τους τελευταίους 3 μήνες, μετά όποιος έχει να κάνει περισσότερο καιρό. Αν δεν φτάνουν, μπαίνει «+1» ως το έξτρα.</p>
+  <//>`;
+}
+
 // το κελί ενός στελέχους μιας μέρας: υπηρεσία προγράμματος (γεμάτο), υπηρεσία στρατιωτών (περίγραμμα «Σ»), κατάσταση (αχνό), «δεν θέλει» (✕)
 function cellOf(x: DutyCell): GridCell {
   const tips: string[] = [];
@@ -104,6 +120,8 @@ export function CadreDutyView({ onInfo }: { onInfo: (c: Cadre) => void }) {
   const check = useMemo(() => monthCheck(state, ym), [...dep, ym]);   // eslint-disable-line react-hooks/exhaustive-deps
   const [xl, setXl] = useState<'' | 'xl' | 'print'>('');
   const [ask, setAsk] = useState<Ask | null>(null);
+  const [fill, setFill] = useState<AutoFillResult | null>(null);
+  const [clr, setClr] = useState<string[] | null>(null);
   const days = index.days.map(d => d.d);
   const filters = useMemo(() => planFilters(state.settings).filter(f => f.id.startsWith('g:')), [state.settings]);
   const visibleSecs = secs.filter(x => gf === 'all' || x.id === gf.slice(2));
@@ -130,7 +148,7 @@ export function CadreDutyView({ onInfo }: { onInfo: (c: Cadre) => void }) {
           tails: [
             html`<span className=${over} data-tip=${lim.roster + ' πρόγραμμα + ' + lim.seat + ' θέσεις στρατιωτών' + (lim.hol ? ' · ΣΚ/αργίες: ' + lim.hol : '')} data-tip-side="left"><b>${lim.done || ''}</b></span>`,
             html`<span data-tip=${'Όριο ' + lim.base + (lim.carry ? (lim.carry > 0 ? ' + ' : ' − ') + Math.abs(lim.carry) + ' από ' + monthLabel(shiftMonth(ym, -1)) : '') + (lim.extra ? ' · έξτρα ' + lim.extra : '')} data-tip-side="left">${lt}</span>`,
-            html`<span className=${lim.nextCarry < 0 ? 'mg-neg' : lim.nextCarry > 0 ? 'mg-pos' : undefined} data-tip=${lim.nextCarry ? 'Μεταφέρεται στον επόμενο μήνα (όριο ' + (lim.base + lim.nextCarry) + ')' : undefined} data-tip-side="left">${carryText(ym, lim.nextCarry)}</span>`
+            html`<span className=${lim.nextCarry < 0 ? 'mg-neg' : lim.nextCarry > 0 ? 'mg-pos' : undefined} data-tip=${lim.nextCarry ? carryText(ym, lim.nextCarry) + ' · Μεταφέρεται στον επόμενο μήνα (όριο ' + (lim.base + lim.nextCarry) + ')' : undefined} data-tip-side="left">${(lim.nextCarry ? (lim.nextCarry > 0 ? '+' : '−') + Math.abs(lim.nextCarry) : '—')}</span>`
           ]
         };
         next.set(c.id + '|' + sec.id, { sig, row }); out.push(row);
@@ -187,6 +205,16 @@ export function CadreDutyView({ onInfo }: { onInfo: (c: Cadre) => void }) {
     const v = serviceOf(cfg, sel.row)?.svc; if (!v) return null;
     return html`<${SvcMenu} key=${v.id + ds[0] + ds.length} svc=${v} days=${ds} onPick=${(c: Cadre, r: Reason[]) => choose(c, v, ds, r, close)} onRemove=${(ids: string[]) => { close(); removeIds(ids, v.name + ': βγήκαν υπηρεσίες'); }}/>`;
   };
+  // αυτόματη συμπλήρωση μήνα: πρώτα προεπισκόπηση, μετά μία εντολή (ένα undo)
+  const autoIds = useMemo(() => (state.cadreDuties || []).filter(x => x.auto && x.date.startsWith(ym)).map(x => x.id), [state.cadreDuties, ym]);
+  const applyFill = async () => {
+    const f = fill; setFill(null); if (!f || !f.add.length) return;
+    if (await run({ t: 'setCadreDuties', add: f.add, del: [], text: 'αυτόματη συμπλήρωση ' + monthLabel(ym).toLowerCase() + ' (' + f.add.length + ')' }, false)) toast({ text: 'Μπήκαν ' + f.add.length + ' υπηρεσίες' + (f.empty.length ? ', έμειναν ' + f.empty.length + ' κενές' : ''), actions: [undoMark()] });
+  };
+  const clearAuto = async () => {
+    const ids = clr; setClr(null); if (!ids?.length) return;
+    if (await run({ t: 'setCadreDuties', add: [], del: ids, text: 'σβήστηκαν οι αυτόματες ' + monthLabel(ym).toLowerCase() + ' (' + ids.length + ')' }, false)) toast({ text: 'Σβήστηκαν ' + ids.length + ' αυτόματες υπηρεσίες', actions: [undoMark()] });
+  };
   const exportXl = async (print: boolean) => {
     setXl(print ? 'print' : 'xl');
     try {
@@ -206,8 +234,10 @@ export function CadreDutyView({ onInfo }: { onInfo: (c: Cadre) => void }) {
         ${ym !== today.slice(0, 7) && html`<${Button} variant="ghost" size="sm" onClick=${() => nav.set({ cmonth: undefined })}>Σήμερα<//>`}</div>
       <${Segmented} small=${true} label="Προβολή" value=${mode} onChange=${(v: string) => nav.set({ cdm: v === 'svc' ? 'svc' : undefined })} items=${[{ value: 'person', label: 'Ανά άτομο' }, { value: 'svc', label: 'Ανά υπηρεσία' }]}/>
       <span style=${{ flex: 1 }}></span>
-      <span className="duty__slot" data-slot="autofill"></span>
-      <${Button} variant="outline" disabled=${!!xl || none} why=${none ? 'Δεν υπάρχουν υπηρεσίες στελεχών' : undefined} onClick=${() => exportXl(false)} data-tip="Νέο Excel: ο μήνας ανά άτομο και ανά ημέρα">${xl === 'xl' ? 'Δημιουργία…' : 'Βγάλε Excel'}<//>
+      <span className="duty__slot" data-slot="autofill">
+        <${Button} disabled=${none} why=${none ? 'Δεν υπάρχουν υπηρεσίες στελεχών' : undefined} onClick=${() => setFill(autoFill(state, ym))} data-tip="Γεμίζει μόνο τις κενές υπηρεσίες του μήνα· δεν αλλάζει ό,τι υπάρχει. Πρώτα δείχνει τι θα γίνει.">Αυτόματη συμπλήρωση<//>
+        <${Button} variant="outline" disabled=${!autoIds.length} why=${autoIds.length ? undefined : 'Δεν υπάρχουν αυτόματες υπηρεσίες αυτόν τον μήνα'} onClick=${() => setClr(autoIds)} data-tip="Σβήνει μόνο όσες μπήκαν αυτόματα· οι δικές σου μένουν">Σβήσε αυτόματα<//></span>
+      <${Button} variant="outline" disabled=${!!xl || none} why=${none ? 'Δεν υπάρχουν υπηρεσίες στελεχών' : undefined} onClick=${() => exportXl(false)} data-tip="Νέο Excel: ο μήνας ανά άτομο και ανά ημέρα">${xl === 'xl' ? 'Δημιουργία…' : 'Excel'}<//>
       <${Button} variant="outline" disabled=${!!xl || none} why=${none ? 'Δεν υπάρχουν υπηρεσίες στελεχών' : undefined} onClick=${() => exportXl(true)} data-tip="Άνοιγμα της εκτύπωσης (A4 οριζόντια, μία σελίδα φάρδος)">${xl === 'print' ? 'Άνοιγμα…' : 'Εκτύπωση'}<//>
     </div>
     ${filters.length > 1 && !none && html`<div className="plan__bar" style=${{ marginTop: '-4px' }}>${filters.length > 1 && html`<${Strip} role="group" aria-label="Ομάδες"><button type="button" className="ui-chip" aria-pressed=${gf === 'all'} onClick=${() => nav.set({ cdg: undefined })}>Όλες</button>${filters.map(f => html`<button key=${f.id} type="button" className="ui-chip" aria-pressed=${gf === f.id} onClick=${() => nav.set({ cdg: f.id })}>${f.label}</button>`)}<//>`}</div>`}
@@ -238,6 +268,10 @@ export function CadreDutyView({ onInfo }: { onInfo: (c: Cadre) => void }) {
             ${!issues && !check.under.length && html`<p className="note" style=${{ margin: 0 }}>Δεν βρέθηκε κάτι.</p>`}
             <p className="note" style=${{ margin: '6px 0 0' }}>Κάθε υπηρεσία δίνει και μία απαλλαγή στην καρτέλα του στελέχους.</p></div><//>
       </aside></div>`}
+    ${fill && html`<${FillDialog} fill=${fill} ym=${ym} onClose=${() => setFill(null)} onApply=${applyFill}/>`}
+    ${clr && html`<${Dialog} title="Σβήσιμο αυτόματων υπηρεσιών" onClose=${() => setClr(null)}
+      footer=${html`<${Button} variant="outline" onClick=${() => setClr(null)}>Άκυρο<//><${Button} variant="destructive" onClick=${clearAuto}>Σβήσε ${clr.length}<//>`}>
+      <p>Θα σβηστούν ${clr.length} υπηρεσίες που μπήκαν αυτόματα τον ${acc(ym)}. Όσες έβαλες ή άλλαξες με το χέρι μένουν. Μπορείς να το αναιρέσεις.</p><//>`}
     ${ask && html`<${WhyDialog} ask=${ask} onClose=${() => setAsk(null)} onSave=${(why: string) => { const a = ask; setAsk(null); assign(a.c, a.svc, a.days, why); }}/>`}
   </div>`;
 }
