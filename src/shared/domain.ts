@@ -13,6 +13,7 @@ import type { ImerSettings } from './imer';
 import type { HdDoc } from './hd';
 import type { FileNames } from './fileNames';
 import type { XlLook } from './xlLook';
+import { sanitizeProfiles, type TplProfile } from './tplStore';
 
 // ---------------------------------------------------------------------------
 // Πρόσωπα
@@ -485,6 +486,7 @@ export interface Settings {
   hdLeft?: boolean;                     // true: κεφαλίδα πάνω αριστερά και ημερομηνία πάνω δεξιά (παλιά διάταξη)· κενό = ημερομηνία αριστερά, κεφαλίδα δεξιά (layout.ts swapHeadDate)· η ΗΚΑΙ δεν αλλάζει ποτέ (κεφαλίδα αριστερά)
   heads?: DocHead[];                     // επικεφαλίδες εγγράφων που σχεδίασες (χωρίς την «Όπως σήμερα»), docHead.ts
   headUse?: Partial<Record<SigForm, HeadUse>>;   // ανά έγγραφο: διαθέσιμες επικεφαλίδες + αρχική· λείπει = μόνο η «Όπως σήμερα»
+  tplProfiles?: TplProfile[];            // μηχανή προσαρμογής: τι έμαθε η εφαρμογή για το αρχείο-πρότυπο της μονάδας (tplProfile.ts)· λείπει = []
   xl?: Partial<XlLook>;                  // γράμματα και στοίχιση σε ό,τι φτιάχνει η εφαρμογή στο Excel (κενό = Arial 12, κέντρο), xlLook.ts
 }
 // Τίτλος και λογότυπο (Michael, 17/10): ανάλογα με τον βαθμό όποιου τη χρησιμοποιεί, ή δικά σου.
@@ -532,6 +534,8 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 // Αλλαγές προεπιλογών σε ρυθμίσεις που έχουν ήδη αποθηκευτεί
 export function migrateSettings(st: Settings): Settings {
+  // προφίλ προτύπων (μηχανή προσαρμογής): ό,τι είναι χαλασμένο ή από νεότερη έκδοση φεύγει· χωρίς προφίλ δεν προστίθεται τίποτα
+  if (st.tplProfiles) st = { ...st, tplProfiles: sanitizeProfiles(st.tplProfiles) };
   if ((st.rev || 0) < 2) {
     // rev 2: η ΤΑΕ είναι ένοπλη και χωρίς ώρες (λοχίας, 10/10)
     const blocksSpen = (st.blocksSpen || DEFAULT_BLOCKS_SPEN).map(b => (b.id === 'tae' ? { ...b, armed: true, posts: b.posts.map(p => ({ ...p, hrs: '' })) } : b));

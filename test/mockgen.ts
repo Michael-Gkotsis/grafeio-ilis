@@ -4,6 +4,7 @@
 // look-alikes in the labels, missing and duplicate headers, unknown extra columns. Plus structure-faithful SYNTHETIC replicas of the
 // seven real unit files (same headers, layout, formulas; fake names, no unit identifiers). The truth is checked by test/shape-accuracy.test.ts.
 import ExcelJS from 'exceljs';
+import type { SheetModel } from '../src/shared/sheetModel';
 import { rng, int, pick, chance, shuffle, col as colName, type Rnd } from './tplgen';
 
 export type MockKind = 'hkai' | 'hkal' | 'hkal-countifs' | 'duty-grid' | 'service-list' | 'roster' | 'weapons'
@@ -518,4 +519,70 @@ export async function bigRoster(rows: number): Promise<{ buf: Buffer; first: num
   ['Α/Α', 'ΒΑΘΜΟΣ', 'ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'ΠΑΤΡΩΝΥΜΟ', 'ΑΣΜ', 'ΤΗΛΕΦΩΝΟ', 'ΘΑΛΑΜΟΣ', 'ΠΑΡΑΤΗΡΗΣΕΙΣ'].forEach((t, i) => s.put(2, i, t, { b: true }));
   for (let i = 0; i < rows; i++) { const y = 3 + i; s.put(y, 0, i + 1); s.put(y, 1, pick(r, RANKV)); s.put(y, 2, pick(r, LAST)); s.put(y, 3, pick(r, FIRST)); s.put(y, 4, pick(r, FIRST)); s.put(y, 5, '2' + i); s.put(y, 6, '69' + int(r, 10000000, 99999999)); s.put(y, 7, int(r, 1, 12)); }
   return { buf: Buffer.from(await wb.xlsx.writeBuffer()), first: 3, last: 2 + rows };
+}
+
+// ================================================================== PR 2: profiles, safe writes, roster edge cases
+// ---- a modified copy of the same template (pure data on the sheet model): rows added above, a column added, a sheet renamed
+export interface Mod { sheet: string; rowAt: number; rows: number; colAt: number; cols: number; rename?: string; extra?: { r: number; c: number; text: string } }   // extra: a new column next to the table (original coordinates)
+const shiftKey = (k: string, m: Mod) => { const [r, c] = k.split(':').map(Number); return (r >= m.rowAt ? r + m.rows : r) + ':' + (c >= m.colAt ? c + m.cols : c); };
+export function modifyModel(sheets: SheetModel[], m: Mod): SheetModel[] {
+  return sheets.map(s => {
+    if (s.name !== m.sheet) return s;
+    const base = s.rows.map(row => [...(row || [])]);
+    if (m.extra) { while (base.length <= m.extra.r) base.push([]); base[m.extra.r][m.extra.c] = m.extra.text; }
+    const rows = base.map(row => { const x = row; if (m.cols && x.length > m.colAt) x.splice(m.colAt, 0, ...Array(m.cols).fill(undefined)); return x; });
+    rows.splice(Math.min(m.rowAt, rows.length), 0, ...Array.from({ length: m.rows }, () => [] as never[]));
+    const sr = (r: number) => (r >= m.rowAt ? r + m.rows : r), sc = (c: number) => (c >= m.colAt ? c + m.cols : c);
+    return {
+      ...s, name: m.rename || s.name, rows,
+      fx: new Set([...s.fx].map(k => shiftKey(k, m))), formulas: new Map([...s.formulas].map(([k, v]) => [shiftKey(k, m), v])),
+      merges: s.merges.map(x => ({ r1: sr(x.r1), r2: sr(x.r2), c1: sc(x.c1), c2: x.c2 >= m.colAt ? x.c2 + m.cols : x.c2 })),
+      validations: s.validations.map(x => ({ ...x, r1: sr(x.r1), r2: sr(x.r2), c1: sc(x.c1), c2: x.c2 >= m.colAt ? x.c2 + m.cols : x.c2 }))
+    };
+  });
+}
+// where a truth item is after the modification
+export const movedItem = (it: Item, m: Mod): { sheet: string; r?: number; c?: number } => ({ sheet: it.sheet, ...(it.r != null ? { r: it.r >= m.rowAt ? it.r + m.rows : it.r } : {}), ...(it.c != null ? { c: it.c >= m.colAt ? it.c + m.cols : it.c } : {}) });
+// the concepts a mock file really contains (columns, rows, labels with one known concept): two files with a different set are different templates
+export const conceptSet = (items: Item[]): Set<string> => new Set(items.filter(i => (i.what === 'col' || i.what === 'row' || i.what === 'labelConcept') && typeof i.concept === 'string').map(i => i.concept as string));
+
+// ---- roster edge cases with ground truth
+export interface EdgePerson { r: number; asm: string; kind: 'cadre' | 'soldier' | 'ask'; group?: string }
+export interface EdgeRoster { buf: Buffer; people: EdgePerson[]; vacant: number; mode: string; desc: string[] }
+const E_CADRE = ['ΤΧΗΣ', 'ΛΓΟΣ', 'ΥΠΛΓΟΣ', 'ΑΝΘΛΓΟΣ', 'ΑΝΘΣΤΗΣ', 'ΑΛΧΙΑΣ', 'ΕΠΧΙΑΣ', 'ΕΠΟΠ ΔΝΕΑΣ'], E_SOLD = ['ΣΤΡΤΗΣ', 'ΣΤΡΤΗΣ', 'ΥΔΝΕΑΣ'], E_ASK = ['ΛΧΙΑΣ', 'ΔΝΕΑΣ', 'ΞΧΖ'];
+export async function genRosterEdge(seed: number): Promise<EdgeRoster> {
+  const r = rng(seed * 6007 + 41); const wb = new ExcelJS.Workbook(); const s = new S(wb.addWorksheet(pick(r, ['ΔΥΝΑΜΟΛΟΓΙΟ', 'Φύλλο1', 'ΣΥΝΟΛΙΚΟ'])));
+  const mode = pick(r, ['split3', 'split2', 'one', 'dash'] as const); const asmH = pick(r, ['ΑΣΜ', 'ΑΜ', 'Α.Σ.Μ.']);
+  const heads: string[] = ['Α/Α', 'ΒΑΘΜΟΣ'];
+  if (mode === 'split3') heads.push('ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'ΠΑΤΡΩΝΥΜΟ'); else if (mode === 'split2') heads.push('ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ'); else if (mode === 'one') heads.push('ΟΝΟΜΑΤΕΠΩΝΥΜΟ'); else heads.push('ΕΠΩΝΥΜΟ - ΟΝΟΜΑ');
+  heads.push(asmH); if (chance(r, 0.5)) heads.push('ΤΗΛΕΦΩΝΟ');
+  const left = int(r, 0, 2); let y = int(r, 0, 3); const w = heads.length;
+  const desc: string[] = [mode, asmH];
+  if (chance(r, 0.5)) { s.put(y, left, 'ΚΑΤΑΣΤΑΣΗ ΠΡΟΣΩΠΙΚΟΥ'); s.merge(y, left, y, left + w - 1); y += 1; desc.push('τίτλος'); }
+  const header = () => { heads.forEach((t, i) => s.put(y, left + i, t, { b: true, box: true })); y++; };
+  header();
+  const page = chance(r, 0.6) ? int(r, 10, 22) : 0; const groups = chance(r, 0.5); const gsize = int(r, 6, 15);
+  const n = int(r, 25, 70); const people: EdgePerson[] = []; let vacant = 0; let group: string | undefined; let onPage = 0; let k = 0; let inGroup = 0; let gi = 0;
+  if (page) desc.push('επικεφαλίδα ανά σελίδα'); if (groups) desc.push('τίτλοι ομάδων');
+  while (k < n) {
+    if (groups && inGroup === 0) {
+      if (gi > 0 && chance(r, 0.5)) { s.put(y, left + 1, 'ΣΥΝΟΛΟ ΟΜΑΔΑΣ'); s.put(y, left + w - 1, gsize); y++; }
+      group = pick(r, ['ΙΛΗ ', 'ΟΥΛΑΜΟΣ ', 'ΛΟΧΟΣ ']) + (gi + 1); gi++; s.put(y, left, group); s.merge(y, left, y, left + w - 1); y++;
+    }
+    if (page && onPage >= page) { if (chance(r, 0.5)) y++; if (chance(r, 0.4)) { s.put(y, left, 'ΣΕΛΙΔΑ ' + int(r, 2, 9)); s.merge(y, left, y, left + w - 1); y++; } header(); onPage = 0; }
+    if (chance(r, 0.07)) { y++; continue; }                                                     // blank separator row
+    k++; onPage++; inGroup = groups ? (inGroup + 1) % gsize : 0;
+    const roll = r(); const rank = roll < 0.4 ? pick(r, E_CADRE) : roll < 0.8 ? pick(r, E_SOLD) : pick(r, E_ASK);
+    const kind: EdgePerson['kind'] = E_CADRE.includes(rank) ? 'cadre' : E_SOLD.includes(rank) ? 'soldier' : 'ask';
+    const asm = '2' + int(r, 10, 99) + '/' + (1000 + k) + '/2' + int(r, 0, 6);
+    if (chance(r, 0.08)) { s.put(y, left, k); s.put(y, left + 1, pick(r, E_SOLD)); s.put(y, left + 2 + (mode.startsWith('split') ? 0 : 0), null); vacant++; y++; continue; }   // a position without a name
+    const L = pick(r, LAST), F = pick(r, FIRST); let c = left;
+    s.put(y, c++, k); s.put(y, c++, rank);
+    if (mode === 'split3') { s.put(y, c++, L); s.put(y, c++, F); s.put(y, c++, pick(r, FIRST)); } else if (mode === 'split2') { s.put(y, c++, L); s.put(y, c++, F); } else if (mode === 'one') s.put(y, c++, F + ' ' + L); else s.put(y, c++, L + ' ' + F);
+    s.put(y, c++, asm); if (heads.length > c - left) s.put(y, c++, '69' + int(r, 10000000, 99999999));
+    people.push({ r: y, asm, kind, ...(group ? { group } : {}) }); y++;
+  }
+  if (chance(r, 0.8)) { y += int(r, 0, 2); s.put(y, left + 1, 'ΣΥΝΟΛΟ ΑΤΟΜΩΝ'); s.put(y, left + w - 1, people.length); y++; desc.push('υποσέλιδο ΣΥΝΟΛΟ'); }
+  if (chance(r, 0.5)) { y += 2; s.put(y, left, 'ΥΠΟΜΝΗΜΑ'); s.put(y + 1, left, 'ΕΠΙΛΟΓΗ ΚΑΤΑΣΤΑΣΗΣ'); s.put(y + 2, left, 'ΘΑΛΑΜΟΣ 1'); s.put(y + 2, left + 1, 4); desc.push('πίνακας μετά το σύνολο'); }
+  return { buf: Buffer.from(await wb.xlsx.writeBuffer()), people, vacant, mode, desc };
 }
