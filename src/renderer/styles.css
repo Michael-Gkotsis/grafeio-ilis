@@ -1752,7 +1752,8 @@ tbody .mg-tail{background:var(--card)}
 .mg-legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;align-items:center}.mg-legend span{display:inline-flex;align-items:center;gap:6px}
 .mg-hint{margin:0;padding:8px 12px;border-radius:var(--radius);background:var(--info-bg);color:var(--info);font-size:13px;max-width:900px}
 /* Υπηρεσίες στελεχών (Michael, 17/11): πλέγμα + κάρτες δεξιά, ομάδες ως γραμμές-επικεφαλίδες */
-.plan.duty{border:0;border-radius:0;overflow:visible;white-space:normal}
+.plan.duty{border:0;border-radius:0;overflow:visible;white-space:normal;font-family:inherit;font-size:inherit;color:inherit}
+.plan.duty .mg-d,.plan.duty .mg-c,.plan.duty .mg-tail{font-variant-numeric:tabular-nums}
 .duty__main{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:12px;align-items:start}
 .duty__grid{display:flex;flex-direction:column;gap:10px;min-width:0}
 .duty__side{display:flex;flex-direction:column;gap:12px;min-width:0}

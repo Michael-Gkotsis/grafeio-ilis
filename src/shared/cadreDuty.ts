@@ -281,3 +281,86 @@ export function dutySheet(s: AppState, ym: string): DutySheet {
   const legend = 'ΥΠΟΜΝΗΜΑ: ' + upper(cfg.groups.flatMap(g => g.services.map(v => v.short + ' = ' + v.name)).concat(['Σ = ΥΠΗΡΕΣΙΑ ΣΤΡΑΤΙΩΤΩΝ (ΜΕ ΤΟ ΧΕΡΙ)', 'X = ΔΕΝ ΘΕΛΕΙ ΥΠΗΡΕΣΙΑ']).join(' · '));
   return { title: upper('ΥΠΗΡΕΣΙΕΣ ΣΤΕΛΕΧΩΝ ' + MONTHS[+ym.slice(5, 7) - 1] + ' ' + ym.slice(0, 4)), days, shade, byPerson, byDay, legend };
 }
+
+// ---- Αυτόματη συμπλήρωση μήνα (φάση 3β) ----
+// Γεμίζει ΜΟΝΟ τις κενές θέσεις υπηρεσιών του μήνα, μέρα με τη μέρα· κρατά ό,τι υπάρχει (με το χέρι ή αυτόματο) και δεν αγγίζει τις υπηρεσίες των
+// στρατιωτών (rules.ts). Υποψήφιος = μέλος της ομάδας που περνά ΟΛΟΥΣ τους περιορισμούς (ίδιοι κανόνες με το eligibility, χωρίς σκληρούς λόγους).
+// 1ο πέρασμα: μόνο όσοι είναι κάτω από το όριό τους (με μεταφορά)· 2ο: ως όριο+έξτρα («+1 αν χρειαστεί»)· αλλιώς μένει κενή και αναφέρεται.
+// Σειρά επιλογής: λιγότερες υπηρεσίες τον μήνα (και θέσεις στρατιωτών) → σε ΣΚ/αργία: λιγότερες ΣΚ/αργίες 3 μηνών και όχι όποιος έκανε
+// ΣΚ/αργία την προηγούμενη εβδομάδα → περισσότερος καιρός από την τελευταία υπηρεσία → σειρά ιεραρχίας. Ντετερμινιστικό· ευρετήρια μία φορά ανά εκτέλεση.
+export interface AutoFillResult { add: Omit<CadreDuty, 'id'>[]; empty: { date: ISODate; svc: string }[]; extra: { cid: string; date: ISODate }[] }
+export function autoFill(s: AppState, ym: string, opts: { fairHol?: boolean } = {}): AutoFillResult {
+  const cfg = dutyCfgOf(s.settings); const fairHol = opts.fairHol ?? cfg.fairHol;
+  const add: AutoFillResult['add'] = [], empty: AutoFillResult['empty'] = [], extra: AutoFillResult['extra'] = [];
+  const people = orderedCadre(s.cadreList || []).filter(c => c.active);
+  const ord = new Map(people.map((c, i) => [c.id, i]));
+  const idx = dutyIndex(s); const by = duByDay(s, ym); const index = monthIndex(s, ym); const N = index.days.length;
+  const picked = new Map<string, Set<ISODate>>();
+  const busy = (cid: string, d: ISODate) => { const x = idx.get(cid)?.get(d); return !!(x && (x.roster.length || x.seat.length)) || !!picked.get(cid)?.has(d); };
+  const holMemo = new Map<ISODate, boolean>();
+  const hol = (d: ISODate) => { let v = holMemo.get(d); if (v === undefined) { v = isHol(s.settings, d); holMemo.set(d, v); } return v; };
+  interface St { c: Cadre; p: CadreDutyPerson; off: boolean; done: number; hol: number; hol3: number | null; lim: number; extra: number; last: ISODate | '' }
+  const st = new Map<string, St>();
+  let cur: ISODate = ym + '-01';
+  const stOf = (c: Cadre): St => {
+    let x = st.get(c.id); if (x) return x;
+    const l = monthLimit(s, c, ym); let last: ISODate | '' = '';
+    for (let k = 1; k <= 60 && !last; k++) if (busy(c.id, addDays(cur, -k))) last = addDays(cur, -k);
+    x = { c, p: personOf(s, c.id), off: isOff(s, c), done: l.done, hol: l.hol, hol3: null, lim: l.effBase, extra: l.extra, last };
+    st.set(c.id, x); return x;
+  };
+  const hol3Of = (x: St) => {
+    if (x.hol3 == null) {
+      let n = 0; const m = idx.get(x.c.id);
+      if (m) for (let k = 1; k <= 3; k++) { const pm = shiftMonth(ym, -k); for (let i = 1; i <= daysOfMonth(pm); i++) { const d = pm + '-' + String(i).padStart(2, '0'); const e = m.get(d); if (e && hol(d)) n += e.roster.length + e.seat.length; } }
+      x.hol3 = n;
+    }
+    return x.hol3 + x.hol;
+  };
+  const recentHol = (cid: string, d: ISODate) => { for (let k = 1; k <= 7; k++) { const e = addDays(d, -k); if (hol(e) && busy(cid, e)) return true; } return false; };
+  const members = new Map<string, Cadre[]>();
+  for (const c of people) { const g = personOf(s, c.id).group; if (g) { const l = members.get(g); if (l) l.push(c); else members.set(g, [c]); } }
+  const pad = (i: number) => ym + '-' + String(i).padStart(2, '0');
+  const cmp = (a: St, b: St, h: boolean, d: ISODate) => {
+    if (a.done !== b.done) return a.done - b.done;
+    if (h) { const x = hol3Of(a), y = hol3Of(b); if (x !== y) return x - y; const r = recentHol(a.c.id, d), q = recentHol(b.c.id, d); if (r !== q) return r ? 1 : -1; }
+    if (a.last !== b.last) return a.last < b.last ? -1 : 1;
+    return ord.get(a.c.id)! - ord.get(b.c.id)!;
+  };
+  for (let i = 1; i <= N; i++) {
+    const d = pad(i); const h = fairHol && hol(d); const dow = weekday(d);
+    if (i > 1) { const pd = pad(i - 1); for (const x of st.values()) if (busy(x.c.id, pd)) x.last = pd; }
+    cur = d;
+    for (const g of cfg.groups) {
+      const mem = members.get(g.id) || [];
+      for (const v of g.services) {
+        if (!runsOn(v, d)) continue;
+        const missing = v.perDay - (by.get(d + '|' + v.id)?.length || 0);
+        for (let slot = 0; slot < missing; slot++) {
+          const ok: St[] = [];
+          for (const c of mem) {
+            if (v.offOnly && !isOff(s, c)) continue;
+            const x = stOf(c); const p = x.p;
+            if (p.noDow?.includes(dow) || (p.none && live(p.none, d)) || (p.only && live(p.only, d) && !p.only.services.includes(v.id)) || (p.no24 && live(p.no24, d) && v.h24)) continue;
+            if (index.noDuty.get(c.id)?.[i - 1]) continue;
+            if (index.cells.get(c.id)?.[i - 1]) { const sa = cadreStatusOn(s, c.id, d); if (sa && sa.col !== 'yp') continue; }
+            if (busy(c.id, d)) continue;
+            let rest = false;
+            for (let k = 1; k <= cfg.rest && !rest; k++) if (busy(c.id, addDays(d, -k)) || busy(c.id, addDays(d, k))) rest = true;
+            if (rest) continue;
+            ok.push(x);
+          }
+          let best: St | undefined, isExtra = false;
+          for (const x of ok) if (x.done < x.lim && (!best || cmp(x, best, h, d) < 0)) best = x;
+          if (!best) { isExtra = true; for (const x of ok) if (x.done < x.lim + x.extra && (!best || cmp(x, best, h, d) < 0)) best = x; }
+          if (!best) { empty.push({ date: d, svc: v.id }); continue; }
+          add.push({ date: d, svc: v.id, cid: best.c.id, auto: true });
+          if (isExtra) extra.push({ cid: best.c.id, date: d });
+          best.done++; if (hol(d)) best.hol++;
+          let ps = picked.get(best.c.id); if (!ps) { ps = new Set(); picked.set(best.c.id, ps); } ps.add(d);
+        }
+      }
+    }
+  }
+  return { add, empty, extra };
+}
