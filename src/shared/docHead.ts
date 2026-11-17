@@ -177,3 +177,14 @@ export function cleanHeadUse(raw: unknown, heads: DocHead[] | undefined): Settin
   }
   return Object.keys(out).length ? out : undefined;
 }
+
+// Επιλογέας «Επικεφαλίδα:» τη στιγμή που βγαίνει ένα έγγραφο: οι διαθέσιμες του εγγράφου και η αρχική (★).
+// Στα Έντυπα η αρχική είναι η δική του επικεφαλίδα (Report.hdId, αλλιώς «Όπως σήμερα») και οι διαθέσιμες είναι αυτή και όσες επιτρέπονται για τα Έντυπα.
+// Λιγότερες από δύο επιλογές = δεν δείχνεται τίποτα.
+export function headPickOf(st: Heads & Pick<Settings, 'headUse'>, form: SigForm, own?: string): HeadUse {
+  if (form !== 'reports') return headUseOf(st, form);
+  const known = (id?: string) => (id && (id === TODAY || st.heads?.some(h => h.id === id)) ? id : TODAY);
+  const def = known(own); const u = headUseOf(st, 'reports');
+  return { on: [def, ...u.on.filter(x => x !== def)], def };
+}
+export const headPickShown = (u: HeadUse) => u.on.length > 1;

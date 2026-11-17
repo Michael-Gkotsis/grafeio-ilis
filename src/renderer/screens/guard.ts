@@ -9,6 +9,7 @@ import { ARM_MAX, armMargin } from '../../shared/armed';
 import { RULE_TXT, strictOrderTxt, strictTxt } from '../../shared/rulesText';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
 import { ActiveFilter, DateBar, ExcelSheet, ExportButton, GoLink, PersonPicker, PrintButton, SigsButton, TemplateNote, TimeField, MonthField, useExport, useExportBusy } from '../common';
+import { useHeadPick } from '../headPick';
 import { mins, normTime } from '../../shared/hours';
 import { frouraSheet, checkSheet } from '../sheets';
 import { fileNameOf, frouraName } from '../../shared/fileNames';
@@ -283,7 +284,7 @@ function RoomsDialog({ value, onSave, onClose }: { value: number[]; onSave: (v: 
 
 export function GuardScreen() {
   const { state, run, today, tomorrow, undoMark } = useStore(); const toast = useToast(); const nav = useNav(); const mobile = useMedia('(max-width: 767px)');
-  const ex = useExport(); const xb = useExportBusy();
+  const ex = useExport(); const xb = useExportBusy(); const hpF = useHeadPick('froura');
   const date = nav.params.guardDate || tomorrow; const setDate = (d: string) => nav.set({ guardDate: d });
   const [tab, setTab] = useState('posts'); const [rules, setRules] = useState(false);
   // θάλαμοι μόνο για την επόμενη αυτόματη συμπλήρωση (κενό = όλοι)· μετά τη συμπλήρωση ξαναγυρίζει σε όλους
@@ -364,7 +365,7 @@ export function GuardScreen() {
     setSkipped({ ...skipped, [k]: skip });
     await assign(k, pid, cur);
   }, [date, state, skipped]);
-  const exportX = () => ex('froura', date, 'η κατάσταση υπηρεσιών');
+  const exportX = () => ex('froura', date, 'η κατάσταση υπηρεσιών', false, undefined, hpF.take());
   // ΠΣΚ: όταν η μέρα είναι Παρασκευή, Σάββατο ή Κυριακή
   const psk = [5, 6, 0].includes(parseD(date).getDay()) ? pskDays(date) : null;
   const pskEmpty = (d: string) => posts.filter(x => !(state.guards[d] || {})[x.k]).length;
@@ -470,12 +471,13 @@ export function GuardScreen() {
       <h2 className="xlcard__hd">Excel</h2>
       <p><span className="mono">${fileName}</span> · A4 οριζόντιο. ${empty.length ? 'Με ' + empty.length + (empty.length === 1 ? ' κενή γράφεται' : ' κενές γράφεται') + ' «ΚΕΝΗ».' : 'Πλήρες.'}</p>
       <${Button} variant="outline" onClick=${() => setPreview(true)}>Προεπισκόπηση<//>
-      <${PrintButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών"/>
-      <${SigsButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών"/>
+      ${hpF.node}
+      <${PrintButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών" take=${hpF.take}/>
+      <${SigsButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών" headId=${hpF.headId} take=${hpF.take}/>
       <${TemplateNote} ids=${['froura', 'check']}/>
     </section>
   </div>`;
-  const xl = html`<div className="guard__xl">${sheet()}<div className="toolbar" style=${{ marginTop: '10px' }}><${Button} disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//><${PrintButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών" variant="outline"/><${SigsButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών"/></div><${TemplateNote} ids=${['froura', 'check']}/></div>`;
+  const xl = html`<div className="guard__xl">${sheet()}<div className="toolbar" style=${{ marginTop: '10px' }}>${hpF.node}<${Button} disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//><${PrintButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών" variant="outline" take=${hpF.take}/><${SigsButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών" headId=${hpF.headId} take=${hpF.take}/></div><${TemplateNote} ids=${['froura', 'check']}/></div>`;
   const check = html`<${DutyCheck} onOpen=${nav.openPerson} m=${mon}/>`;
   const skipN = useMemo(() => state.people.reduce((n, p) => n + (p.skips?.filter(k => k.to >= today).length || 0), 0), [state.people, today]);   // ισχύουν τώρα ή έρχονται
   const whoTab = html`<${WhoDoes} key=${who.n} date=${date} pid=${who.pid}/>`;

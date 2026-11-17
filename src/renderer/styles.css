@@ -1670,3 +1670,12 @@ div[style*="center"] > .hd-img{margin:0 auto}div[style*="right"] > .hd-img{margi
 .lay-row{display:flex;gap:14px;align-items:flex-start}.lay-row>.lay-pv{flex:1;min-width:0}.lay-side{flex:0 0 260px;display:flex;flex-direction:column;gap:10px;font-size:13px}
 .lay-side__l{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}.lay-side__l li{padding:3px 6px;border-radius:4px}.lay-side__l li.on{background:#fbf1d3;font-weight:600}
 .lay-card{border:1px solid var(--border);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px}.lay-card__r{display:flex;align-items:center;gap:8px}.lay-card__r>span{width:56px;font-weight:600}.lay-card__r input[type=range]{flex:1;min-width:0}
+
+/* «Επικεφαλίδα: X ★» τη στιγμή που βγαίνει ένα έγγραφο */
+.headpick { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; max-width: 100%; }
+.headpick__l { font-size: 12.5px; font-weight: 600; color: var(--muted-fg); white-space: nowrap; }
+.headpick .ui-select { min-width: 0; max-width: 190px; }
+.headpick__h { flex-basis: 100%; font-size: 11.5px; color: var(--muted-fg); }
+.headpick-row { margin: 0 0 12px; }
+.rep-table td > .headpick { margin-top: 4px; }
+.rep-table .headpick .ui-select { max-width: 160px; }

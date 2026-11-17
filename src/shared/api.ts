@@ -86,13 +86,13 @@ export interface Api {
   dayCheck(): Promise<CmdResult>;   // άλλαξε η μέρα με την εφαρμογή ανοιχτή: λήξεις, αντίγραφο της μέρας, και ό,τι άλλαξε   // ό,τι άλλαξε στον main χωρίς εντολή από το UI (εξαγωγή, λήξεις, φάκελος)
   exportFile(kind: ExportKind, date: ISODate, opts?: ExportOpts): Promise<ExportResult>;
   // sigs: υπογραφές μόνο για αυτή τη φορά (αλλιώς Ρυθμίσεις › Υπογραφές)
-  exportLists(date: ISODate, sigs?: Sig[]): Promise<ExportResult>;   // Δυναμολόγιο: ένα Excel με ένα φύλλο ανά φίλτρο (rosterLists.ts), ανοίγει μόλις γραφτεί
+  exportLists(date: ISODate, sigs?: Sig[], headId?: string): Promise<ExportResult>;   // Δυναμολόγιο: ένα Excel με ένα φύλλο ανά φίλτρο (rosterLists.ts), ανοίγει μόλις γραφτεί
   exportHd(req: { date: ISODate; doc: HdDoc; print?: boolean; sigs?: Sig[]; headId?: string }): Promise<ExportResult>;   // Ημερήσια Διαταγή: Word (δικό σου πρότυπο ή το έτοιμο) ή εκτύπωση χωρίς Word
   pickHdTpl(): Promise<{ ok: true; file: string; name: string } | { ok: false; error: string } | null>;   // δικό σου πρότυπο Word με ετικέτες {…}
-  exportImer(req: ImerReq, print?: boolean, sigs?: Sig[]): Promise<ExportResult>;   // Ημερολόγιο κωλυομένων: Excel με φύλλο ανά ουλαμό· print: προεπισκόπηση εκτύπωσης
-  exportRoster(date: ISODate, print?: boolean, sigs?: Sig[]): Promise<ExportResult>;   // Συνολικό Δυναμολόγιο με κεφαλίδα ΗΚΑΙ· print: προεπισκόπηση εκτύπωσης
-  exportWeapons(date: ISODate, print?: boolean, sigs?: Sig[]): Promise<ExportResult>;   // Οπλισμός: ένα Excel με ένα φύλλο ανά φίλτρο (weapons.ts)· print: προεπισκόπηση εκτύπωσης
-  exportCadre(date: ISODate, sigs?: Sig[]): Promise<ExportResult>;   // Στελέχη: ένα Excel (στελέχη, καταστάσεις, εκτός δύναμης), ανοίγει μόλις γραφτεί
+  exportImer(req: ImerReq, print?: boolean, sigs?: Sig[], headId?: string): Promise<ExportResult>;   // Ημερολόγιο κωλυομένων: Excel με φύλλο ανά ουλαμό· print: προεπισκόπηση εκτύπωσης
+  exportRoster(date: ISODate, print?: boolean, sigs?: Sig[], headId?: string): Promise<ExportResult>;   // Συνολικό Δυναμολόγιο με κεφαλίδα ΗΚΑΙ· print: προεπισκόπηση εκτύπωσης
+  exportWeapons(date: ISODate, print?: boolean, sigs?: Sig[], headId?: string): Promise<ExportResult>;   // Οπλισμός: ένα Excel με ένα φύλλο ανά φίλτρο (weapons.ts)· print: προεπισκόπηση εκτύπωσης
+  exportCadre(date: ISODate, sigs?: Sig[], headId?: string): Promise<ExportResult>;   // Στελέχη: ένα Excel (στελέχη, καταστάσεις, εκτός δύναμης), ανοίγει μόλις γραφτεί
   pickRoster(): Promise<ImportPreview | { ok: false; error: string } | null>;
   applyRoster(token: string, deactivateMissing: boolean): Promise<CmdResult>;
   pickImage(): Promise<{ ok: true; id: string; ext: 'png' | 'jpg'; w: number; h: number } | { ok: false; error: string } | null>;   // εικόνα επικεφαλίδας: διάλεξε αρχείο, μικραίνει μία φορά, αποθηκεύεται στο data/eikones (id = sha1)
@@ -156,7 +156,7 @@ export interface Api {
   repPreview(src: RepSource, r: Report, ids: (number | string)[], date: ISODate, raw?: boolean, opts?: { sample?: number }): Promise<RepPreview | Fail>;
   layoutPreview(q: LayoutReq): Promise<LayoutPv | Fail>;
   // out 'sheet': γράφει φύλλο στο Δυναμολόγιο/άλλο Excel· confirm: φύλλα με ίδιο όνομα που δεν έφτιαξε το έντυπο (ξανά με force)
-  repRun(r: Report, file: string, ids: (number | string)[], date: ISODate, print?: boolean, force?: boolean, opts?: { quiet?: boolean; again?: boolean }): Promise<RepRunResult>;
+  repRun(r: Report, file: string, ids: (number | string)[], date: ISODate, print?: boolean, force?: boolean, opts?: { quiet?: boolean; again?: boolean; headId?: string }): Promise<RepRunResult>;
   repHist(id: string): Promise<RepHistEntry[]>;   // ιστορικό εκδόσεων: τα 10 τελευταία, νεότερο πρώτο
   repTimes(id: string): Promise<Record<string, number>>;   // τυχαίοι: πόσες φορές βγήκε ο καθένας σε αυτό το έντυπο σε αυτή την ΕΣΣΟ
   repPickFile(): Promise<string | null>;

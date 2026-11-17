@@ -11,6 +11,7 @@ import { Select } from '../select';
 import { MovesView, Pop, WeaponInDialog, WeaponOutDialog, WeaponState, Key, reasonLbl } from './weaponMoves';
 import { useNav, useOpenFrom, useStore } from '../store';
 import { ActiveFilter, DateBar, SigsMenu } from '../common';
+import { useHeadPick } from '../headPick';
 import type { Sig } from '../../shared/sigs';
 import { fullName, plainName, platoonsOf, platoonShort, shortName, unitOf, type Person } from '../../shared/domain';
 import { siOf, siShort } from '../../shared/si';
@@ -144,7 +145,7 @@ export function WeaponsScreen() {
   const [reset, setReset] = useState(0);
   const height = useViewportHeight(360);
   const [ask, setAsk] = useState<{ p: Person; w: string; others: Person[] } | null>(null);
-  const [xl, setXl] = useState(false);
+  const [xl, setXl] = useState(false); const hp = useHeadPick('weapons');
   const lists = state.settings.lists;
   // Σήμερα οι ένοπλες υπηρεσίες κρίνονται με την ώρα (νούμερο που τρέχει, πριν, μετά)· η ώρα ανανεώνεται μόνη της
   const [hm, setHm] = useState(nowHM());
@@ -241,10 +242,10 @@ export function WeaponsScreen() {
     setReset(n => n + 1);
     save(changes, { warn: warn || undefined, what: 'επικόλληση', msg: 'Επικόλληση: ' + changes.length + (changes.length === 1 ? ' αριθμός όπλου' : ' αριθμοί όπλων') + ' από ' + rkShort(rows[i]) + ' και κάτω' });
   }, [rows, state.people, save]);
-  const exportXl = async (print: boolean, sigs?: Sig[]) => {
+  const exportXl = async (print: boolean, sigs?: Sig[], hid?: string) => {
     setXl(true);
     try {
-      const r = await window.api.exportWeapons(date, print, sigs);
+      const r = await window.api.exportWeapons(date, print, sigs, hid ?? hp.take());
       if (!r.ok) toast({ text: html`<span><b>Δεν βγήκε.</b> ${r.error}</span>` });
       else if (r.warnings.length) toast({ text: r.warnings.join(' · ') });
       else if (!print) toast({ text: 'Βγήκε ' + r.file.split(/[\\/]/).pop() + ': κατάσταση οπλισμού με στήλη υπογραφής, και ένα φύλλο για κάθε φίλτρο.' });
@@ -297,9 +298,10 @@ export function WeaponsScreen() {
   return html`<div>
     <${PageHeader} title="Οπλισμός" quote="«Το θέμα είναι ο οπλισμός» - Λοχαγός Μ. Γ' ΕΣΣΟ 2026" sub=${'Με όπλο ' + armedN + ' από ' + total + ' σε δύναμη, εκτός οπλοβαστού ' + (date === today ? 'τώρα' : dow(date) + ' ' + dm(date)) + ' ' + outN + '. Πάτα ΕΚΤΟΣ ή ΕΝΤΟΣ στη γραμμή.'}>
       <div className="page-head__acts weapons__acts"><${DateBar} value=${date} onChange=${(d: string) => nav.set({ wdate: d === today ? null : d })} days=${[today, tomorrow]}/>
+      ${hp.node}
       <${Button} variant="outline" disabled=${xl} onClick=${() => exportXl(false)} data-tip="Κατάσταση οπλισμού με στήλη υπογραφής, και ένα φύλλο για κάθε φίλτρο (χωρίς όπλο, άοπλοι με όπλο, ίδιος αριθμός, να παραδώσουν)">${xl ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
       <${Button} variant="outline" disabled=${xl} onClick=${() => exportXl(true)} data-tip="Κατάσταση οπλισμού με την κεφαλίδα της ${HK()} και στήλη υπογραφής" data-tip-side="left">${Icon.print}Εκτύπωση<//>
-      <${SigsMenu} form="weapons" date=${date} label="ο Οπλισμός" disabled=${xl} go=${exportXl}/></div><//>
+      <${SigsMenu} form="weapons" date=${date} label="ο Οπλισμός" disabled=${xl} headId=${hp.headId} go=${exportXl}/></div><//>
     <div style=${{ marginBottom: '12px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ wtab: v })} items=${[{ value: 'weapons', label: 'Όπλα (' + armedN + ')' }, { value: 'moves', label: 'Κινήσεις' + (outN ? ' · εκτός ' + outN : '') }]}/></div>
     ${tab === 'moves' ? html`<${MovesView} date=${date} info=${info} pm=${pm} outN=${outN}/>` : html`<${Fragment}>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder="Όνομα, ΑΣΜ, θάλαμος ή αριθμός όπλου (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>

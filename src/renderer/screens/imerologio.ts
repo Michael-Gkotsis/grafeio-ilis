@@ -5,6 +5,7 @@ import { html, cx, Button, Dialog, Icon, PageHeader, Segmented } from '../ui';
 import { useNav, useStore } from '../store';
 import { useToast } from '../ui';
 import { SigsMenu } from '../common';
+import { useHeadPick } from '../headPick';
 import type { Sig } from '../../shared/sigs';
 import { addDays, dm, dow, type ISODate } from '../../shared/dates';
 import { platoonsOf, platoonShort, type Person } from '../../shared/domain';
@@ -19,7 +20,7 @@ const dayHead = (d: ISODate) => html`<th key=${d} className="imer__d" scope="col
 
 export function ImerTab() {
   const { state, today, run, undoMark } = useStore(); const nav = useNav(); const toast = useToast();
-  const [xl, setXl] = useState(false); const [codes, setCodes] = useState(false); const [pick, setPick] = useState<{ p: Person; d: ISODate } | null>(null);
+  const [xl, setXl] = useState(false); const hp = useHeadPick('imer'); const [codes, setCodes] = useState(false); const [pick, setPick] = useState<{ p: Person; d: ISODate } | null>(null);
   const all: boolean = !!nav.params.imAll;
   const { from, to } = imerRange(today, nav.params.imFrom);
   const units = platoonsOf(state.settings).map(u => platoonShort(u.name));
@@ -30,10 +31,10 @@ export function ImerTab() {
   const move = (k: number) => nav.set({ imFrom: addDays(from, 7 * k) });
   const isDefault = !nav.params.imFrom;
   const req = { from, to, all };
-  const go = async (print: boolean, sigs?: Sig[]) => {
+  const go = async (print: boolean, sigs?: Sig[], hid?: string) => {
     setXl(true);
     try {
-      const r = await window.api.exportImer(req, print, sigs);
+      const r = await window.api.exportImer(req, print, sigs, hid ?? hp.take());
       if (!r.ok) toast({ text: html`<span><b>Δεν βγήκε.</b> ${r.error}</span>` });
       else if (print && r.warnings.length) toast({ text: r.warnings.join(' · ') });
       else if (!print) toast({ text: 'Βγήκε ' + r.file.split(/[\\/]/).pop() + (r.warnings.length ? ' · ' + r.warnings.join(' · ') : '') });
@@ -45,10 +46,11 @@ export function ImerTab() {
   const totRows = (tot: ImerPart['tot'], label: string) => ['Π', 'Α'].map((k, i) => html`<tr key=${label + k} className="imer__tot"><th colSpan="4" scope="row">${i === 0 ? label : ''}</th><th>${i === 0 ? 'Παρόντες (Π)' : 'Απόντες (Α)'}</th>${tot.map((t, j) => html`<td key=${j}>${t.show ? (i === 0 ? t.p : t.a) : ''}</td>`)}</tr>`);
   return html`<div>
     <${PageHeader} title="Ημερολόγιο κωλυομένων και απόντων" sub="Γεμίζει μόνο του από άδειες, ιατρικά, υπηρεσίες και πόστα. Πάτα ένα κελί για να το αλλάξεις με το χέρι.">
+      ${hp.node}
       <${Button} disabled=${xl} onClick=${() => go(false)} data-tip="Ένα Excel με φύλλο ανά ουλαμό, όπως το έχεις στο χαρτί">${xl ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
       <${Button} variant="outline" disabled=${xl} onClick=${() => go(true)} aria-label="Εκτύπωση" data-tip="Εκτύπωση χωρίς να ανοίξεις Excel">${Icon.print}Εκτύπωση<//>
       <${Button} variant="outline" onClick=${() => setCodes(true)} data-tip="Τίτλος, φύλλα, κωδικοί και τι μετρά ως Π ή Α">Κωδικοί…<//>
-      <${SigsMenu} form="imer" date=${today} label="το Ημερολόγιο" disabled=${xl} variant="outline" go=${go}/><//>
+      <${SigsMenu} form="imer" date=${today} label="το Ημερολόγιο" disabled=${xl} variant="outline" headId=${hp.headId} go=${go}/><//>
     <div className="toolbar">
       <${Button} variant="outline" size="icon" aria-label="Πίσω μία εβδομάδα" data-tip="Μία εβδομάδα πίσω" onClick=${() => move(-1)}>‹<//>
       <b className="imer__range">${dm(from)} – ${dm(to)}/${to.slice(0, 4)}</b><span className="muted">· ${all ? 'όλες οι μέρες' : 'μέρες εκπαίδευσης'}</span>

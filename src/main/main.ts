@@ -269,7 +269,7 @@ async function exportFile(kind: ExportKind, date: ISODate, opts: ExportOpts): Pr
       const r = await produce(kind, date, s, opts.sigs, opts.headId);
       const [out] = await writeAll([{ dir: formDir(formOf(kind, s), date), name: r.name, data: r.data }]);
       // οι υπογραφές αυτής της φοράς μένουν και στις αυτόματες ενημερώσεις του ίδιου αρχείου
-      rememberOut({ form: formOf(kind, s), kind, date, file: out, at: nowHM(), hash: await X.zipHash(r.data), vhash: await X.valuesHash(r.data), ...(stamp(out) || {}), ...(opts.sigs ? { sigs: opts.sigs } : {}) });
+      rememberOut({ form: formOf(kind, s), kind, date, file: out, at: nowHM(), hash: await X.zipHash(r.data), vhash: await X.valuesHash(r.data), ...(stamp(out) || {}), ...(opts.sigs ? { sigs: opts.sigs } : {}), ...(opts.headId ? { headId: opts.headId } : {}) });
       return { r, out };
     });
     // ΗΚΑΙ: το «3. Άδειες» που χρησιμοποιήθηκε μένει για τη μέρα (αλλιώς μια νέα προεπιλογή θα άλλαζε το ξαναβγάλσιμο)
@@ -293,7 +293,7 @@ async function exportFile(kind: ExportKind, date: ISODate, opts: ExportOpts): Pr
 // Κάθε έντυπο που βγήκε για σήμερα ή επόμενη μέρα ξαναγράφεται όταν αλλάξει κάτι στην εφαρμογή (Michael, 11/10).
 // Αν δεν άλλαξε το περιεχόμενο δεν αγγίζεται· αν είναι ανοιχτό στο Excel ή ο προέλεγχος βρίσκει λάθος, περιμένει.
 // vhash, mtime, size: τι έγραψε η εφαρμογή, για να φαίνεται αν ο χρήστης το άλλαξε μετά με το χέρι
-type OutRec = FormOut & { kind: ExportKind; hash: string; vhash?: string; mtime?: number; size?: number; sigs?: Sig[] };
+type OutRec = FormOut & { kind: ExportKind; hash: string; vhash?: string; mtime?: number; size?: number; sigs?: Sig[]; headId?: string };
 const OUTS_FILE = path.join(DATA, 'forms.json');
 const readOuts = (): OutRec[] => { try { return JSON.parse(fs.readFileSync(OUTS_FILE, 'utf8')); } catch { return []; } };
 const writeOuts = (l: OutRec[]) => { try { writeJson(OUTS_FILE, l); } catch (e) { console.error('forms.json', e); } };
@@ -318,7 +318,7 @@ async function regenFormsNow(): Promise<boolean> {
       const s = store.state;
       const errs = preflight(o.kind, s, o.date).filter(c => c.level === 'err');
       if (errs.length) { o.pending = true; o.error = 'Ο προέλεγχος βρήκε λάθος: ' + errs[0].text; continue; }
-      const r = await produce(o.kind, o.date, s, o.sigs); const h = await X.zipHash(r.data);
+      const r = await produce(o.kind, o.date, s, o.sigs, o.headId); const h = await X.zipHash(r.data);
       if (h === o.hash) { o.pending = false; o.error = undefined; continue; }
       await writeAll([{ dir: path.dirname(o.file), name: path.basename(o.file), data: r.data }]);
       o.hash = h; o.vhash = await X.valuesHash(r.data); Object.assign(o, stamp(o.file) || {}); o.at = nowHM(); o.pending = false; o.error = undefined; any = true;
@@ -1113,25 +1113,25 @@ else {
     });
     ipcMain.handle('export', (_e, kind: ExportKind, date: ISODate, opts) => exportGuarded(kind, date, opts || {}));
     // sigs: υπογραφές μόνο για αυτή τη φορά (αλλιώς των Ρυθμίσεων)
-    ipcMain.handle('export:lists', async (_e, date: ISODate, sigs?: Sig[]) => {
+    ipcMain.handle('export:lists', async (_e, date: ISODate, sigs?: Sig[], headId?: string) => {
       try {
-        const r = await made('lists', date, store.state, sigs);
+        const r = await made('lists', date, store.state, sigs, undefined, headId);
         const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
         shell.openPath(out);
         return { ok: true, file: out, warnings: r.warnings };
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
     });
-    ipcMain.handle('export:cadre', async (_e, date: ISODate, sigs?: Sig[]) => {
+    ipcMain.handle('export:cadre', async (_e, date: ISODate, sigs?: Sig[], headId?: string) => {
       try {
-        const r = await made('cadre', date, store.state, sigs);
+        const r = await made('cadre', date, store.state, sigs, undefined, headId);
         const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
         shell.openPath(out);
         return { ok: true, file: out, warnings: r.warnings };
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
     });
-    ipcMain.handle('export:roster', async (_e, date: ISODate, print?: boolean, sigs?: Sig[]) => {
+    ipcMain.handle('export:roster', async (_e, date: ISODate, print?: boolean, sigs?: Sig[], headId?: string) => {
       try {
-        const r = await made('rosterPrint', date, store.state, sigs);
+        const r = await made('rosterPrint', date, store.state, sigs, undefined, headId);
         const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
         const warnings = r.warnings;
         if (print) { const p = await printPreview(out); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else shell.openPath(out);
@@ -1139,9 +1139,9 @@ else {
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
     });
     // Οπλισμός: ένα Excel, φύλλο ανά φίλτρο· print: προεπισκόπηση εκτύπωσης της κατάστασης οπλισμού
-    ipcMain.handle('export:weapons', async (_e, date: ISODate, print?: boolean, sigs?: Sig[]) => {
+    ipcMain.handle('export:weapons', async (_e, date: ISODate, print?: boolean, sigs?: Sig[], headId?: string) => {
       try {
-        const r = await made('weapons', date, store.state, sigs);
+        const r = await made('weapons', date, store.state, sigs, undefined, headId);
         const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
         const warnings = r.warnings;
         if (print) { const p = await printPreview(out); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else shell.openPath(out);
@@ -1181,9 +1181,9 @@ else {
       } catch (e) { return fail(e); }
     });
     // Ημερολόγιο κωλυομένων: Excel με φύλλο ανά ουλαμό από την οθόνη (Δυναμολόγιο › Ημερολόγιο)· print: προεπισκόπηση εκτύπωσης
-    ipcMain.handle('export:imer', async (_e, req: ImerReq, print?: boolean, sigs?: Sig[]) => {
+    ipcMain.handle('export:imer', async (_e, req: ImerReq, print?: boolean, sigs?: Sig[], headId?: string) => {
       try {
-        const r = await made('imer', req.to, store.state, sigs, req);
+        const r = await made('imer', req.to, store.state, sigs, req, headId);
         const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
         const warnings = r.warnings;
         if (print) { const p = await printPreview(out); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else shell.openPath(out);
@@ -1253,7 +1253,7 @@ else {
         return { css: doc.css, warnings: out.warnings || [], sheets: ls.map(l => { const sh = doc.sheets.find(x => x.name === l.sheet); return { ...l, html: sh?.html || '', pages: sh?.pages || 0 }; }) };
       } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
     });
-    ipcMain.handle('rep:run', async (_e, r: Report, file: string, ids: (number | string)[], date: ISODate, print: boolean, force?: boolean, opts?: { quiet?: boolean; again?: boolean }): Promise<RepOut> => {
+    ipcMain.handle('rep:run', async (_e, r: Report, file: string, ids: (number | string)[], date: ISODate, print: boolean, force?: boolean, opts?: { quiet?: boolean; again?: boolean; headId?: string }): Promise<RepOut> => {
       try {
         const s = store.state; const t0 = Date.now(); let res: RepOut;
         if (r.out === 'sheet' && !print) {
@@ -1261,7 +1261,7 @@ else {
           if (res.ok) { logWrite('Έντυπο ' + r.name + ' (φύλλο)', t0); notify(); }
         } else {
           const buf = await tplBuf(file); const rs = savedSigs(r, file);
-          const out = await off('fillReport', [buf, rs, ids, date], () => fillReport(buf, s, rs, ids, date), s);
+          const out = await off('fillReport', [buf, rs, ids, date, { headId: opts?.headId }], () => fillReport(buf, s, rs, ids, date, { headId: opts?.headId }), s);
           const ext = /\.xlsm$/i.test(file) ? '.xlsm' : '.xlsx';
           const [f] = await serial(() => writeAll([{ dir: outputDir(), name: out.name.replace(/\.xlsx$/, ext), data: out.data }]));
           logWrite('Έντυπο ' + r.name, t0);
