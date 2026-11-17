@@ -17,7 +17,7 @@ import { noteDue, noteGroups, noteHead, noteSearch, noteWho } from '../../shared
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
 import { HK_SECTIONS, kolColName, dutyStartOf, hkLvOn, hkOn, hkToggle, type HkaiManual, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, coversDay, effects, fullName, shortName, unitOf, isWaiting, type LeaveAsk, type Person, type PersonRequest, type Status, platoonsOf, platoonShort, roomTxt } from '../../shared/domain';
 import { ReturnsList } from './guard';
-import { HK_MANUAL, approvalPlan, planNeedsOk, awayNow, activePeople, hkaiCounts, kolView, isRecordExpiredOn, personMap, statusesAt, statusesOn, strengthOf, strengthAt, awayText, type StatusPlan } from '../../shared/rules';
+import { HK_MANUAL, approvalPlan, planNeedsOk, awayNow, activePeople, hkaiCounts, kolView, isRecordExpiredOn, personMap, statusesAt, statusesOn, strengthOf, strengthAt, awayText, SVC_AWAY_LBL, type StatusPlan } from '../../shared/rules';
 import { addDays, daysBetween, dayName, dm, dmy, dow, nowHM, parseD, DOW_GEN } from '../../shared/dates';
 import { outCountOn } from '../../shared/weaponView';
 import { returnOf } from '../../shared/returns';
@@ -55,6 +55,8 @@ export function TodayScreen() {
     const at = strengthAt(state.rules, today, today, now); activePeople(state).forEach(p => { const x = statusesAt(state, p.id, today, at).find(q => isAway(q, state.settings.lists)); if (x) out.push({ p, s: x }); });
     return out.sort((a, b) => TYPE_KEYS.indexOf(a.s.type) - TYPE_KEYS.indexOf(b.s.type) || a.s.to.localeCompare(b.s.to) || shortName(a.p).localeCompare(shortName(b.p), 'el'));
   }, [state, today, now]);
+  // και όσοι είναι σε υπηρεσία εκτός στρατοπέδου (φυλάκιο): απόντες όπως στην ΗΚΑΙ, ώστε η λίστα να συμφωνεί με το «Απόντες» πάνω
+  const nAway = away.length + c.awaySvc.length;
   // έξοδος/ΔΝ: ως πότε λείπει («ως 22:00», «ως Δευ 06:00»), αλλιώς «σήμερα» όταν δεν ξέρουμε πότε γυρνά
   const outUntil = (s: Status) => { const r = returnOf(state, s.pid, s.from); return !r || r.pending || r.open ? 'σήμερα' : 'ως ' + (r.day === today ? '' : dow(r.day) + ' ') + r.time; };
   const empty = frouraEmpty(state, tomorrow);
@@ -126,9 +128,9 @@ export function TodayScreen() {
       <${Card} flush=${true} title="Πρέπει σήμερα" actions=${html`<span className="card__meta">${tasks.length ? tasks.length + ' ανοιχτά' : 'όλα εντάξει'}</span>`}>
         ${tasks.length ? html`<ol className="tasks">${tasks.map((t, i) => html`<li key=${t.key}><span className="tasks__n">${i + 1}</span><div><b>${t.title}</b><small className=${t.urgent ? 'txt-bad' : undefined}>${t.sub}</small></div><${Button} variant=${i === 0 ? 'default' : 'outline'} onClick=${t.fn}>${t.btn}<//></li>`)}</ol>` : html`<div className="empty">Όλα εντάξει. Τίποτα δεν περιμένει από σένα αυτή τη στιγμή.</div>`}
       <//>
-      <${Card} flush=${true} title=${'Απόντες σήμερα · ' + away.length} actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('strength', { strengthDate: today, svCat: 'away' })}>Δύναμη<//>`}>
-        ${away.length ? html`<ul className="rows">${away.slice(0, 12).map(({ p, s }) => html`<li key=${s.id}><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}><${RkName} p=${p}/></button><${Badge} tone=${TYPES[s.type].tone} className="tag" data-tip=${TYPES[s.type].long} data-tip-side="left">${statusLbl(s, state.settings.lists)} ${TYPES[s.type].cat === 'out' ? outUntil(s) : s.open ? 'χωρίς λήξη' : 'έως ' + dm(s.to) + (s.toTime ? ' ' + s.toTime : '')}<//></li>`)}</ul>
-          ${away.length > 12 && html`<p className="note rows__more">Και άλλοι ${away.length - 12} στη Δύναμη.</p>`}` : html`<div className="empty">Κανείς δεν λείπει σήμερα.</div>`}
+      <${Card} flush=${true} title=${'Απόντες σήμερα · ' + nAway} actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('strength', { strengthDate: today, svCat: 'away' })}>Δύναμη<//>`}>
+        ${nAway ? html`<ul className="rows">${away.slice(0, 12).map(({ p, s }) => html`<li key=${s.id}><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}><${RkName} p=${p}/></button><${Badge} tone=${TYPES[s.type].tone} className="tag" data-tip=${TYPES[s.type].long} data-tip-side="left">${statusLbl(s, state.settings.lists)} ${TYPES[s.type].cat === 'out' ? outUntil(s) : s.open ? 'χωρίς λήξη' : 'έως ' + dm(s.to) + (s.toTime ? ' ' + s.toTime : '')}<//></li>`)}${c.awaySvc.slice(0, Math.max(0, 12 - away.length)).map(p => html`<li key=${'svc' + p.id}><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}><${RkName} p=${p}/></button><${Badge} tone="outline" className="tag" data-tip="Υπηρεσία εκτός στρατοπέδου (π.χ. φυλάκιο): μετρά απών, όπως στην ΗΚΑΙ" data-tip-side="left">${SVC_AWAY_LBL}<//></li>`)}</ul>
+          ${nAway > 12 && html`<p className="note rows__more">Και άλλοι ${nAway - 12} στη Δύναμη.</p>`}` : html`<div className="empty">Κανείς δεν λείπει σήμερα.</div>`}
       <//>
     </div>
     <div className="cols cols--b">
