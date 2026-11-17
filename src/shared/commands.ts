@@ -449,8 +449,29 @@ function stampMoves(prev: AppState, next: AppState, c: Command, today: ISODate):
 }
 export function apply(s: AppState, c: Command, ctx: Ctx): Result {
   const r = run(s, c, ctx);
-  const state = fitDeprivations(noPending(stampMoves(s, r.state, c, ctx.today)));
+  const state = syncAssets(s, fitDeprivations(noPending(stampMoves(s, r.state, c, ctx.today))), ctx);
   return state === r.state ? r : { ...r, state, files: r.files.includes('Ποινές') ? r.files : [...r.files, 'Ποινές'] };
+}
+// Μητρώο ↔ Δυναμολόγιο (sweep 17/11): όταν αλλάζει ο αριθμός όπλου ενός ατόμου/στελέχους (Οπλισμός, Excel, καρτέλα), η αληθινή εγγραφή του παλιού
+// όπλου στο Μητρώο έμενε «χρεωμένη» σε αυτόν, και το μητρώο έδειχνε δύο όπλα ενώ η Κατάσταση οπλισμού ένα. Τώρα πάει σε όποιον το έχει πια
+// στο Δυναμολόγιο, αλλιώς γίνεται αχρέωτο (χωρίς οπλοβαστό), με γραμμή στο ιστορικό. Τα δεύτερα όπλα (άλλος αριθμός) δεν αγγίζονται.
+function syncAssets(prev: AppState, next: AppState, ctx: Ctx): AppState {
+  if (!next.assets?.length || (prev.people === next.people && prev.cadreList === next.cadreList)) return next;
+  const was = new Map<string, string>(), now = new Map<string, AssetHolder>(), cur = new Map<string, string>();
+  for (const p of prev.people) { const k = weaponKey(p.weapon); if (k) was.set('p' + p.id, k); }
+  for (const c of prev.cadreList || []) { const k = weaponKey(c.weapon); if (k) was.set('c' + c.id, k); }
+  for (const p of next.people) { const k = weaponKey(p.weapon); if (k) { cur.set('p' + p.id, k); if (!now.has(k) || p.active) now.set(k, { k: 'person', pid: p.id }); } }
+  for (const c of next.cadreList || []) { const k = weaponKey(c.weapon); if (k) { cur.set('c' + c.id, k); if (!now.has(k)) now.set(k, { k: 'cadre', cid: c.id }); } }
+  const lost = new Set([...was].filter(([h, k]) => cur.get(h) !== k).map(([h, k]) => h + '|' + k)); if (!lost.size) return next;
+  const cfg = assetCfgOf(next.settings); let log = next.assetLog || []; let changed = false;
+  const assets = next.assets.map(a => {
+    const h = a.holder; if (a.gone || !h || (h.k !== 'person' && h.k !== 'cadre') || (catOf(cfg, a.cat) && catOf(cfg, a.cat)!.kind !== 'weapon')) return a;
+    const k = weaponKey(a.no); if (!lost.has((h.k === 'person' ? 'p' + h.pid : 'c' + h.cid) + '|' + k)) return a;
+    const to = now.get(k); const x: Asset = { ...a }; delete x.rack; delete x.wpos; if (to) x.holder = to; else delete x.holder;
+    changed = true; log = [...log, { id: 'e' + ctx.newId(), aid: a.id, date: ctx.today, what: 'assign', text: to ? 'χρεώθηκε σε ' + holderText(next, to) + ' (από τον Οπλισμό)' : 'έγινε αχρέωτο (άλλαξε ο αριθμός όπλου στον Οπλισμό)' }];
+    return x;
+  });
+  return changed ? { ...next, assets, assetLog: log } : next;
 }
 // Μητρώο οπλισμού και υλικού: κάθε αλλαγή είναι εντολή (αναίρεση) και γράφει γεγονός στο ιστορικό της εγγραφής
 function assetCmd(s: AppState, c: Extract<Command, { t: 'saveAsset' | 'assetMaint' | 'assetState' | 'assetHolder' | 'assetGone' | 'deleteAsset' | 'assetFuel' | 'assetKm' | 'assetDriver' }>, ctx: Ctx): Result {
@@ -502,7 +523,11 @@ function assetCmd(s: AppState, c: Extract<Command, { t: 'saveAsset' | 'assetMain
   }
   if (c.t === 'assetGone') {
     const a: Asset = { ...a0, gone: c.date, state: 'writeoff' }; const why = (c.why || '').trim(); if (why) a.why = why;
-    return { state: put(a, s, ev(a.id, c.date, 'writeoff', 'διαγράφηκε οριστικά' + (why ? ': ' + why : ''))), text: 'Μητρώο: διαγράφηκε ' + nm, files: [] };
+    // κύριο όπλο ατόμου/στελέχους (sweep 17/11): φεύγει και από το Δυναμολόγιο, αλλιώς η Κατάσταση οπλισμού το έδειχνε ακόμα ΕΝΤΟΣ
+    const lk = rowNow?.link; let st = s;
+    if (lk?.k === 'person') st = run(st, { t: 'setWeapons', changes: [{ pid: lk.pid, weapon: '' }], what: 'μητρώο' }, ctx).state;
+    else if (lk?.k === 'cadre') st = { ...st, cadreList: st.cadreList.map(x => { if (x.id !== lk.cid) return x; const { weapon: _w, ...rest } = x; return rest; }) };
+    return { state: put(a, st, ev(a.id, c.date, 'writeoff', 'διαγράφηκε οριστικά' + (why ? ': ' + why : ''))), text: 'Μητρώο: διαγράφηκε ' + nm + (lk ? ' (βγήκε και από τον Οπλισμό του ' + holderText(s, lk) + ')' : ''), files: [] };
   }
   // χρέωση: το κύριο όπλο ατόμου μένει στο Δυναμολόγιο (Person.weapon), οπότε περνά από τις ίδιες εντολές με τον Οπλισμό
   const h = c.holder; const link = rowNow?.link; const isWeapon = catOf(cfg, a0.cat)?.kind === 'weapon';

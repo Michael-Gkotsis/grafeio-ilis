@@ -141,7 +141,9 @@ export function registry(s: Pick<AppState, 'people' | 'cadreList' | 'assets' | '
   for (const x of prim) { const k = weaponKey(x.no); const o = byKey.get(k); if (!o || (!o.active && x.active)) byKey.set(k, x); }
   const rows: AssetRow[] = []; const seen = new Set<string>();
   for (const a of s.assets || []) {
-    if (a.gone) { seen.add(weaponKey(a.no)); continue; }
+    // διαγραμμένη: δεν φαίνεται. Δεν κρύβει πια το κύριο όπλο κάποιου με τον ίδιο αριθμό (sweep 17/11: ο Οπλισμός το έδειχνε, το μητρώο όχι)·
+    // η διαγραφή κύριου όπλου το βγάζει και από το Δυναμολόγιο (commands.ts assetGone)
+    if (a.gone) continue;
     const k = weaponKey(a.no); seen.add(k);
     const pr = cfg.cats.find(c => c.id === a.cat)?.kind === 'weapon' || !catOf(cfg, a.cat) ? byKey.get(k) : undefined;
     // κύριο όπλο κάποιου: κάτοχος, τύπος, οπλοβαστός και θέση από το Δυναμολόγιο, όχι από την εγγραφή
