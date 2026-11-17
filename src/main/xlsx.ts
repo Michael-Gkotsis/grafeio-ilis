@@ -4,7 +4,7 @@
 // αντιγράφουμε μια γραμμή-πρότυπο και σπρώχνουμε ό,τι είναι από κάτω (υπογραφές κ.λπ.).
 import JSZip from 'jszip';
 import crypto from 'crypto';
-import { sheetRelsPath, resolveTarget, EMU_PX } from './xlDrawings';
+import { sheetRelsPath, resolveTarget, parseDrawings, EMU_PX } from './xlDrawings';
 import { upper } from '../shared/text';
 import { digitPx, fitText, minSize, textPx, type Box, type Fit, type FontSpec } from './textfit';
 const WIDE_MAX = 60;   // χαρακτήρες: ως εδώ φαρδαίνει μια στήλη πίνακα για να χωρά ό,τι γράφτηκε (fitSheet)
@@ -522,7 +522,7 @@ function withAlign(x: string, set: Record<string, string>, fresh: Record<string,
 }
 
 // Εικόνα σε φύλλο: oneCellAnchor στο κελί (col0, row0 από 0) με μετατόπιση σε EMU και μέγεθος σε px
-export interface PicIn { bytes: Uint8Array; ext: 'png' | 'jpg'; col0: number; colOff: number; row0: number; rowOff: number; w: number; h: number; name?: string }
+export interface PicIn { bytes: Uint8Array; ext: 'png' | 'jpg'; col0: number; colOff: number; row0: number; rowOff: number; w: number; h: number; name?: string; tag?: string }   // tag: σε ποιο κομμάτι του χαρτιού ανήκει ('head', 'date'): ακολουθεί τις μετακινήσεις του (layout.ts)
 export class Workbook {
   private sheets = new Map<string, Sheet>();
   private names: { name: string; path: string }[] = [];
@@ -567,8 +567,12 @@ export class Workbook {
   // Εικόνες που θα γραφτούν στην αποθήκευση (xl/drawings): η θέση είναι η τελική, οπότε προστίθενται αφού μπουν όλες οι γραμμές
   private pics: { sheet: Sheet; p: PicIn; rid: string | null }[] = [];
   addPicture(ws: Sheet, p: PicIn) { this.pics.push({ sheet: ws, p, rid: null }); }
+  // Οι εικόνες που περιμένουν αποθήκευση σε ένα φύλλο, με το σημάδι τους· movePics: η θέση τους αλλάζει μαζί με το κομμάτι που ανήκουν
+  picsOf(ws: Sheet, tag: string): PicIn[] { return this.pics.filter(x => x.sheet === ws && x.p.tag === tag).map(x => x.p); }
+  movePics(ws: Sheet, tag: string, dr: number, dc: number) { for (const p of this.picsOf(ws, tag)) { p.row0 = Math.max(0, p.row0 + dr); p.col0 = Math.max(0, p.col0 + dc); } }
   shiftForeign(from: Sheet, after: number, n: number) {
     this.moved.push({ sheet: from.name, after, n });
+    for (const x of this.pics) if (x.sheet === from && x.p.row0 >= after) x.p.row0 += n;   // γραμμές που μπαίνουν πάνω από εικόνα που περιμένει: κατεβαίνει
     for (const s of this.sheets.values()) if (s !== from) s.shiftForeign(from.name, after, n);
   }
   // Νέες γραμμές στο τέλος της λίστας του φύλλου ws: οι τύποι (σε αυτό και στα άλλα φύλλα) που μετράνε ως τον
@@ -1097,10 +1101,26 @@ export class Workbook {
     let ws: Sheet;
     if (this.hasSheet(safe)) {
       const e = this.names.find(x => x.name === safe)!;
+      // το φύλλο ξαναγράφεται: το σχέδιο των παλιών εικόνων του φεύγει από τις σχέσεις του (οι νέες εικόνες μπαίνουν με addPicture)
+      const rp = sheetRelsPath(e.path), rf = this.zip.file(rp);
+      if (rf) this.zip.file(rp, (await rf.async('string')).replace(/<Relationship\b[^>]*Type="[^"]*\/drawing"[^>]*\/>/g, ''));
       this.zip.file(e.path, xml); ws = new Sheet(safe, e.path, xml); this.sheets.set(e.path, ws);
     } else ws = await this.newSheet(safe, xml);
     this.setLocalNames(this.sheetIndex(safe), dns);
+    // εικόνες (επικεφαλίδα που σχεδίασες, δικές σου εικόνες του εντύπου): ξαναμπαίνουν με addPicture, που δίνει νέα ονόματα σχεδίου, εικόνας και σχέσης
+    // πάνω από όσα έχει ήδη το αρχείο προορισμού (οι εικόνες των άλλων φύλλων του δεν αγγίζονται)
+    for (const p of await src.picturesOf(from)) this.addPicture(ws, p);
     return ws;
+  }
+  // Οι απλές εικόνες ενός φύλλου (μία γωνία αγκύρωσης και μέγεθος), με τα bytes τους, για αντιγραφή σε άλλο βιβλίο
+  async picturesOf(name: string): Promise<PicIn[]> {
+    const ws = await this.sheet(name); const out: PicIn[] = [];
+    for (const d of await parseDrawings(this.zip, ws.path, ws.toXml())) {
+      if (d.kind !== 'one' || !d.from || d.cx <= 0 || d.cy <= 0) continue;
+      const f = this.zip.file(d.media); if (!f) continue;
+      out.push({ bytes: await f.async('nodebuffer'), ext: /\.png$/i.test(d.media) ? 'png' : 'jpg', col0: d.from.c - 1, colOff: d.from.co, row0: d.from.r - 1, rowOff: d.from.ro, w: d.cx / EMU_PX, h: d.cy / EMU_PX });
+    }
+    return out;
   }
   // Φύλλα που έγραψαν τα Έντυπα: σημάδι μέσα στο αρχείο (κρυφό όνομα του φύλλου), ώστε όποιο κομμάτι της εφαρμογής ψάχνει
   // φύλλα με το όνομά τους (π.χ. «ΘΑΛΑΜΟΙ» για τους νέους στρατιώτες) να μην πέφτει πάνω τους

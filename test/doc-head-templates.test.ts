@@ -58,7 +58,7 @@ describe('ΗΚΑΙ με επικεφαλίδα', () => {
     const a = await fillHkai(T('hkai.xlsx'), plain(), D); const b = await fillHkai(T('hkai.xlsx'), designed(), D);
     const pa = await pics(a.data!), pb = await pics(b.data!);
     expect(Object.values(pa).reduce((x, y) => x + y, 0)).toBe(0);
-    expect(pb[a.sheet!]).toBe(1); expect(Object.values(pb).reduce((x, y) => x + y, 0)).toBe(1);
+    expect(pb[a.sheet!]).toBe(1); expect(Object.values(pb).reduce((x, y) => x + y, 0)).toBe(2);
     const t = await cells(b.data!, Object.keys(pb).indexOf(a.sheet!)); expect(t).toContain('ΚΕΝ ΑΥΛΩΝΑ');
     expect(await nums(b.data!)).toEqual(await nums(a.data!));
     expect(await opens(b.data!)).toBeGreaterThan(0);

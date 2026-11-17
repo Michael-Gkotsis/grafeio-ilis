@@ -5,6 +5,8 @@ import { useMemo, useState } from 'react';
 import { html, cx, Button, Why, Dialog, Icon } from '../ui';
 import { useNav, useStore } from '../store';
 import { GO } from '../common';
+import { HeadPick } from '../headPick';
+import { sigFormOf } from '../../shared/sigs';
 import { preflight, type Check } from '../../shared/preflight';
 import { HK } from '../../shared/unit';
 import { dayName, dmy, type ISODate } from '../../shared/dates';
@@ -32,6 +34,7 @@ export function DayFormsDialog({ onClose }: { onClose: () => void }) {
   // με ✕ δεν βγαίνει (όπως και από το κουμπί του κάθε εντύπου), τα άλλα βγαίνουν κανονικά
   const [on, setOn] = useState(() => items.map((_, i) => !bad[i]));
   const [busy, setBusy] = useState<'' | 'xl' | 'print'>('');
+  const [hids, setHids] = useState<Record<number, string | undefined>>({});   // «Επικεφαλίδα:» κάθε εντύπου, μόνο για αυτή τη φορά
   const [done, setDone] = useState<Record<number, Done | 'run'>>({});
   const pick = items.map((_, i) => i).filter(i => on[i] && !bad[i]);
   const nWarn = pick.reduce((a, i) => a + checks[i].length, 0);
@@ -46,8 +49,8 @@ export function DayFormsDialog({ onClose }: { onClose: () => void }) {
       try {
         if (it.rep) {
           const tpl = (state.settings.reportTpls || []).find(t => t.id === it.rep!.tpl)!;
-          r = await window.api.repRun(it.rep, tpl.file, rowsOf(state, it.rep, it.date).map(x => x.id), it.date, false, false, { quiet: print });
-        } else r = await window.api.exportFile(it.kind as ExportKind, it.date, { open: !print, ack: true });
+          r = await window.api.repRun(it.rep, tpl.file, rowsOf(state, it.rep, it.date).map(x => x.id), it.date, false, false, { quiet: print, ...(hids[i] ? { headId: hids[i] } : {}) });
+        } else r = await window.api.exportFile(it.kind as ExportKind, it.date, { open: !print, ack: true, ...(hids[i] ? { headId: hids[i] } : {}) });
       } catch (e) { r = { ok: false, error: String(e) }; }
       if (r.ok) { files.push([i, r.file, r.sheets]); setDone(d => ({ ...d, [i]: { ok: true, text: 'Βγήκε: ' + r.file.split(/[\\/]/).pop() + (r.ok && r.warnings.length ? ' · ⚠ ' + r.warnings.join(' · ') : ''), file: r.file } })); }
       else setDone(d => ({ ...d, [i]: { ok: false, text: 'Δεν βγήκε: ' + r.error } }));
@@ -73,6 +76,7 @@ export function DayFormsDialog({ onClose }: { onClose: () => void }) {
         <label className="dayforms__head"><input type="checkbox" className="ui-check" checked=${on[i] && !bad[i]} disabled=${bad[i] || !!busy} onChange=${(e: any) => setOn(o => o.map((x, j) => (j === i ? e.target.checked : x)))}/>
           <b>${it.name}</b><span className="muted">${dayName(it.date, today)} ${dmy(it.date)}</span>
           <span className=${cx('dayforms__st', bad[i] ? 'txt-bad' : cs.length ? 'txt-warn' : 'txt-ok')}>${bad[i] ? '✕ δεν μπορεί να βγει' : cs.length ? '⚠ ' + cs.length + (cs.length === 1 ? ' προειδοποίηση' : ' προειδοποιήσεις') : '✓ έτοιμο'}</span></label>
+        <div className="dayforms__pick"><${HeadPick} form=${it.rep ? 'reports' : sigFormOf(it.kind as ExportKind)} own=${it.rep?.hdId} value=${hids[i]} onChange=${(v: string | undefined) => setHids(h => ({ ...h, [i]: v }))} id=${'dfh' + i}/></div>
         ${cs.length > 0 && html`<ul className="preflight">${cs.map((c, k) => html`<li key=${k} className=${c.level === 'err' ? 'is-err' : 'is-warn'}><span className="preflight__ic">${c.level === 'err' ? '✕' : '⚠'}</span><span>${c.text}</span>${c.go && html`<${Button} size="sm" variant="link" disabled=${!!busy} onClick=${() => show(it, c)}>Δείξε μου<//>`}</li>`)}</ul>`}
         ${d && html`<p className=${cx('dayforms__done', d !== 'run' && !d.ok && 'txt-bad')}>${d === 'run' ? 'Βγαίνει…' : (d.ok ? '✓ ' : '✕ ') + d.text}</p>`}
       </section>`;

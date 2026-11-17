@@ -29,6 +29,7 @@ export function applyMoves(wb: Workbook, ws: Sheet, blocks: Block[], moves: Move
       const ref = colName(c) + r; if (ws.hasFormula(ref)) continue;
       cells.push({ r, c, raw: ws.raw(ref), s: ws.style(ref) });
     }
+    if (b.id === 'head' || b.id === 'date') wb.movePics(ws, b.id, dr, dc);   // οι εικόνες της επικεφαλίδας ακολουθούν το κομμάτι τους
     return { b, dr, dc, cells, merges: ws.merges().filter(x => inside(x, b)) };
   });
   // πρώτα αδειάζουν όλα (ένα κομμάτι μπορεί να πάει εκεί που ήταν ένα άλλο), μετά γράφονται στη νέα θέση

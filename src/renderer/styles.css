@@ -713,7 +713,7 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 .puntext{border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:var(--card);font-family:'Times New Roman',serif;font-size:15px;line-height:1.5;user-select:text}
 .psk{display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1px solid var(--border);border-radius:var(--radius-lg);padding:10px 12px;background:var(--card)}
 .psk>div{flex:1;min-width:180px;display:flex;flex-direction:column}.psk small{color:var(--muted-fg);font-size:12px}
-.psk__acts{display:flex;gap:6px;flex-wrap:nowrap}
+.psk__acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .chk__sort{all:unset;cursor:pointer;font:inherit;color:inherit;white-space:nowrap}.chk__sort:hover{text-decoration:underline}.chk__sort:focus-visible{outline:2px solid var(--ring,#5b7a2a);outline-offset:2px}
 
 /* ---------- πλοήγηση, λίστες, ρυθμίσεις εμφάνισης ---------- */
@@ -1679,3 +1679,4 @@ div[style*="center"] > .hd-img{margin:0 auto}div[style*="right"] > .hd-img{margi
 .headpick-row { margin: 0 0 12px; }
 .rep-table td > .headpick { margin-top: 4px; }
 .rep-table .headpick .ui-select { max-width: 160px; }
+.dayforms__pick:not(:empty) { margin: 6px 0 0 26px; }
