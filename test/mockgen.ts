@@ -603,7 +603,7 @@ export async function genRosterEdge(seed: number): Promise<EdgeRoster> {
 // word styles, Λόχος words.
 export interface FillFlags {
   lochos: boolean; own: boolean; originSplit: boolean; rankSplit: boolean; countifs: boolean; totals: 'formulas' | 'numbers' | 'missing';
-  seps: boolean; ownCols: number; drop: number; twoHeader: boolean; words: 'abbr' | 'labels' | 'accent'; typo: boolean; dropRows: boolean; unknownRow: boolean; dupHeader: boolean; hospitalSplit: boolean;
+  seps: boolean; ownCols: number; drop: number; twoHeader: boolean; words: 'abbr' | 'labels' | 'accent'; typo: boolean; dropRows: boolean; unknownRow: boolean; dupHeader: boolean; hospitalSplit: boolean; adik?: boolean;
 }
 export interface FillMock {
   seed: number; buf: Buffer; s: AppState; date: ISODate; profile: TplProfile | null; flags: FillFlags; desc: string[]; sheet: string;
@@ -625,12 +625,12 @@ export async function genFillMock(seed: number, force: Partial<FillFlags> = {}):
   const f: FillFlags = {
     lochos: chance(r, 0.3), own: chance(r, 0.3), originSplit: false, rankSplit: false, countifs: chance(r, 0.25),
     totals: pick(r, ['formulas', 'formulas', 'numbers', 'missing'] as const), seps: chance(r, 0.35), ownCols: pick(r, [0, 0, 1, 2]), drop: int(r, 0, 4), twoHeader: chance(r, 0.5),
-    words: pick(r, ['abbr', 'labels', 'accent'] as const), typo: chance(r, 0.2), dropRows: chance(r, 0.3), unknownRow: chance(r, 0.15), dupHeader: chance(r, 0.15), hospitalSplit: chance(r, 0.15), ...force
+    words: pick(r, ['abbr', 'labels', 'accent'] as const), typo: chance(r, 0.2), dropRows: chance(r, 0.3), unknownRow: chance(r, 0.15), dupHeader: chance(r, 0.15), hospitalSplit: chance(r, 0.15), adik: process.env.FUZZ_ADIK ? process.env.FUZZ_ADIK === '1' : seed % 3 === 0, ...force
   };
   if (!f.countifs && !force.originSplit) f.originSplit = chance(r, 0.3);
   if (f.countifs) f.originSplit = false;
   if (!f.originSplit && f.lochos && !force.rankSplit) f.rankSplit = chance(r, 0.5);
-  const s = genHkState(seed, { own: f.own, lochos: f.lochos, cadre: !f.originSplit, nofixed: f.originSplit, attached: f.countifs ? chance(r, 0.2) : true, plainRanks: f.countifs && chance(r, 0.6) });
+  const s = genHkState(seed, { own: f.own, lochos: f.lochos, cadre: !f.originSplit, nofixed: f.originSplit, attached: f.countifs ? chance(r, 0.2) : true, plainRanks: f.countifs && chance(r, 0.6), adik: !!f.adik });
   const d = DAYS[int(r, 0, 5)]; const h = hkaiCounts(s, d); const lists = s.settings.lists; const desc: string[] = [];
   const stateOf = new Map<number, string>(); for (const [k, ps] of Object.entries(h.cols)) for (const p of ps) stateOf.set(p.id, k);
   const plainQ = (key: string): Q => ({ force: h.rank[key].n, attached: h.rank[key].attached, st: k => h.rank[key].c[k] || 0 });
@@ -660,7 +660,8 @@ export async function genFillMock(seed: number, force: Partial<FillFlags> = {}):
   const cwords = (k: string) => (f.words === 'accent' ? ACC_STATUS[k] : STATUS_WORDS[k]?.[0]);
   let pool = [...KOL, ...ABS].filter(k => (!f.countifs || cwords(k) || KOL.includes(k)) && HKC.some(c => c.key === k));
   if (f.countifs) pool = pool.filter(k => !!cwords(k) || need.includes(k));
-  pool = shuffle(r, pool.filter(k => !need.includes(k))).slice(0, Math.max(0, pool.length - need.length - f.drop)); pool.push(...need.filter(k => k !== 'placed' && k !== 'attached'));
+  // drop: how many optional state columns this unit's template leaves out (0 = every column; the needed ones are always there)
+  pool = shuffle(r, pool.filter(k => !need.includes(k))).slice(0, Math.max(0, pool.filter(k => !need.includes(k)).length - f.drop)); pool.push(...need.filter(k => k !== 'placed' && k !== 'attached'));
   const def = (k: string) => HKC.find(c => c.key === k)!;
   const nm = (k: string) => sp(pick(r, def(k).names));
   const mk = (k: string, group: TCol['group']): TCol => ({ kind: 'state', key: k, text: nm(k), group, word: cwords(k) });

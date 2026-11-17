@@ -312,7 +312,8 @@ export function dutySheet(s: AppState, ym: string): DutySheet {
 // στρατιωτών (rules.ts). Υποψήφιος = μέλος της ομάδας που περνά ΟΛΟΥΣ τους περιορισμούς (ίδιοι κανόνες με το eligibility, χωρίς σκληρούς λόγους).
 // 1ο πέρασμα: μόνο όσοι είναι κάτω από το όριό τους (με μεταφορά)· 2ο: ως όριο+έξτρα («+1 αν χρειαστεί»)· αλλιώς μένει κενή και αναφέρεται.
 // Σειρά επιλογής: λιγότερες υπηρεσίες τον μήνα (και θέσεις στρατιωτών) → σε ΣΚ/αργία: λιγότερες ΣΚ/αργίες 3 μηνών και όχι όποιος έκανε
-// ΣΚ/αργία την προηγούμενη εβδομάδα → περισσότερος καιρός από την τελευταία υπηρεσία → σειρά ιεραρχίας. Ντετερμινιστικό· ευρετήρια μία φορά ανά εκτέλεση.
+// ΣΚ/αργία την προηγούμενη εβδομάδα → περισσότερος καιρός από την τελευταία υπηρεσία → σειρά ιεραρχίας. Σε ΣΚ/αργία (sweep 17/11) διαλέγει ανάμεσα σε
+// όσους είναι ως +1 υπηρεσία από τον λιγότερο φορτωμένο, με πρώτο κριτήριο τα ΣΚ/αργίες 3 μηνών. Ντετερμινιστικό· ευρετήρια μία φορά ανά εκτέλεση.
 export interface AutoFillResult { add: Omit<CadreDuty, 'id'>[]; empty: { date: ISODate; svc: string }[]; extra: { cid: string; date: ISODate }[] }
 export function autoFill(s: AppState, ym: string, opts: { fairHol?: boolean } = {}): AutoFillResult {
   const cfg = dutyCfgOf(s.settings); const fairHol = opts.fairHol ?? cfg.fairHol;
@@ -376,8 +377,12 @@ export function autoFill(s: AppState, ym: string, opts: { fairHol?: boolean } = 
             ok.push(x);
           }
           let best: St | undefined, isExtra = false;
-          for (const x of ok) if (x.done < x.lim && (!best || cmp(x, best, h, d) < 0)) best = x;
-          if (!best) { isExtra = true; for (const x of ok) if (x.done < x.lim + x.extra && (!best || cmp(x, best, h, d) < 0)) best = x; }
+          // ΣΚ/αργία (sweep 17/11): με «λιγότερες υπηρεσίες πρώτα» η σειρά κλείδωνε σε κύκλο και 2 από τους 7 έκαναν και τα 8 ΣΚ του Φεβρουαρίου.
+          // Τώρα μπαίνουν στη ζυγαριά όσοι είναι ως +1 από τον λιγότερο φορτωμένο, και από αυτούς νικά όποιος έχει λιγότερα ΣΚ/αργίες
+          const pool = (cap: (x: St) => number) => { const l = ok.filter(x => x.done < cap(x)); if (!h || !l.length) return l; const m = Math.min(...l.map(x => x.done)); return l.filter(x => x.done <= m + 1); };
+          const holCmp = (a: St, b: St) => { const x = hol3Of(a), y = hol3Of(b); return x !== y ? x - y : cmp(a, b, h, d); };
+          for (const x of pool(x => x.lim)) if (!best || (h ? holCmp(x, best) : cmp(x, best, h, d)) < 0) best = x;
+          if (!best) { isExtra = true; for (const x of pool(x => x.lim + x.extra)) if (!best || (h ? holCmp(x, best) : cmp(x, best, h, d)) < 0) best = x; }
           if (!best) { empty.push({ date: d, svc: v.id }); continue; }
           add.push({ date: d, svc: v.id, cid: best.c.id, auto: true });
           if (isExtra) extra.push({ cid: best.c.id, date: d });

@@ -3,7 +3,7 @@
 // και το Excel. Οι καταστάσεις γράφονται ως συνηθισμένα CadreAbs (εντολή addCadreAbs), άρα η ΗΚΑΙ τις βλέπει όπως πάντα.
 // Τίποτα εδώ δεν μπλοκάρει· οι οθόνες προειδοποιούν. Δεν αγγίζει τον υπολογισμό υπηρεσιών των στρατιωτών.
 import { MONTHS, addDays, dmy, weekday, type ISODate } from './dates';
-import { cadreAbsOf, hkRowsOf, rankTxt } from './ranks';
+import { cadreAbsKinds, cadreAbsOf, hkRowsOf, rankTxt } from './ranks';
 import type { AppState, Cadre, CadreAbs, CadreNoDuty, Settings } from './domain';
 import { holOf } from './rules';
 import { orderedCadre } from './cadre';
@@ -25,10 +25,23 @@ export function shortOf(name: string): string {
   if (!w.length) return '?';
   return w.length === 1 ? w[0].slice(0, 3) : w.slice(0, 3).map(x => x[0]).join('');
 }
+// Ένας κωδικός ανά είδος, χωρίς δύο είδη με τον ίδιο (sweep 17/11: «Άδεια αιμοδοσίας» και «Άδεια ασθενείας» έβγαιναν και τα δύο ΑΑ,
+// «Εκτός Υπηρεσίας» έβγαινε ΕΥ όπως το βασικό): πρώτα τα βασικά με τους σταθερούς κωδικούς, μετά τα δικά σου με τη σειρά τους· όποιο
+// πέσει σε κωδικό που πιάστηκε παίρνει αριθμό (ΑΑ2, ΑΑ3…)
+const codeIdx = new WeakMap<object, Map<string, string>>();
+const NO_LISTS = {};
+function codeMap(lists: Settings['lists']): Map<string, string> {
+  const key = lists || NO_LISTS; let m = codeIdx.get(key); if (m) return m;
+  m = new Map(); const used = new Set<string>(); const all = cadreAbsKinds(lists, true);
+  const put = (id: string, want: string) => { let c = want, i = 2; while (used.has(c)) c = want + i++; used.add(c); m!.set(id, c); };
+  for (const [id] of all) if (SHORT[id]) put(id, SHORT[id]);
+  for (const [id, name] of all) if (!SHORT[id] && !m.has(id)) put(id, shortOf(name));
+  codeIdx.set(key, m); return m;
+}
 export function planCode(kind: string, settings: Pick<Settings, 'lists' | 'cadreLeave'>): PlanCode {
   const k = cadreAbsOf(kind, settings.lists); const base = k?.[0] || '';
   const name = k?.[1] || kind;
-  const code = SHORT[base] || shortOf(name);
+  const code = (k && codeMap(settings.lists).get(k[0])) || SHORT[base] || shortOf(name);
   const fam: PlanFam = base === 'ka' ? 'ka' : base === 'amd' ? 'amd' : base === 'apal' ? 'apal'
     : leaveCfgOf(settings).quotas.some(q => usesQuota(q, kind, settings.lists)) ? 'leave' : 'other';
   return { code, fam, name };

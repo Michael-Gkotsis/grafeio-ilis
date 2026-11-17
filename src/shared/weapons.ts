@@ -54,6 +54,7 @@ export interface WeaponInfo {
   racks: Map<string, Person[]>;       // seatKey (οπλοβαστός + θέση) → όσοι έχουν αυτή τη θέση (μόνο σε δύναμη)
   out: Map<number, string>;           // εκτός οπλοβαστού λόγω ένοπλης υπηρεσίας: pid → «Σκοπός 3ης (α) 15:45–18:15» (τώρα, ή όλα τα νούμερα της μέρας)
   moves: Map<number, WeaponMove>;     // βγήκε από τον οπλοβαστό (Έξοδος όπλων) και δεν μπήκε ακόμα: pid → η κίνηση
+  repair: Map<number, string>;        // το όπλο του είναι «Προς επισκευή»/«Ακινησία» στο Μητρώο (sweep 17/11): pid → «ΠΡΟΣ ΕΠΙΣΚΕΥΗ: λόγος»
   arm: ArmInfo;                       // οι ένοπλες υπηρεσίες ανά νούμερο (armed.ts)
 }
 // Ένοπλες υπηρεσίες (Michael, 24/10): live = κρίνονται με την ώρα (σήμερα)· αλλιώς όλα τα νούμερα της μέρας με τις ώρες τους.
@@ -71,12 +72,13 @@ export function openMoves(log: WeaponMove[] | undefined): Map<number, WeaponMove
 }
 // «ΕΚΠ από 18/10 08:15»
 export const moveOutTxt = (m: WeaponMove) => m.reason + ' από ' + dm(m.outDay) + ' ' + m.outTime;
-export const isOut = (info: WeaponInfo, pid: number) => info.moves.has(pid) || info.out.has(pid);
+export const isOut = (info: WeaponInfo, pid: number) => info.moves.has(pid) || info.repair.has(pid) || info.out.has(pid);
 // Όσοι είναι εκτός (σε δύναμη): κίνηση ή ένοπλη υπηρεσία, μία φορά ο καθένας. Από εδώ μετράνε και η κεφαλίδα, και το chip, και η καρτέλα Κινήσεις
 export const outPeople = (people: Person[], info: WeaponInfo) => people.filter(p => p.active && isOut(info, p.id));
 // Ο λόγος που φαίνεται για κάθε εκτός: ο χειροκίνητος (όπως γράφτηκε) ή AUTO_KEY για ένοπλη υπηρεσία χωρίς κίνηση (η κίνηση νικά, μετράει μία φορά)
 export const AUTO_KEY = '@auto';
-export const outReasonOf = (info: WeaponInfo, pid: number) => info.moves.get(pid)?.reason ?? (info.out.has(pid) ? AUTO_KEY : '');
+export const REPAIR_KEY = 'ΠΡΟΣ ΕΠΙΣΚΕΥΗ';
+export const outReasonOf = (info: WeaponInfo, pid: number) => info.moves.get(pid)?.reason ?? (info.repair.has(pid) ? REPAIR_KEY : info.out.has(pid) ? AUTO_KEY : '');
 export function outReasons(people: Person[], info: WeaponInfo): [string, number][] {
   const n = new Map<string, number>();
   for (const p of outPeople(people, info)) { const r = outReasonOf(info, p.id); n.set(r, (n.get(r) || 0) + 1); }
@@ -95,7 +97,7 @@ function armInfo(st: ArmState, d: ISODate, now?: string): ArmInfo {
   return { ...NO_ARM, rows, cur };
 }
 // Χωρίς d οι ένοπλες υπηρεσίες δεν μετράνε· με d όλα τα νούμερα της μέρας κύκλου· με d και now (σήμερα) μόνο όσα τρέχουν τώρα
-export function weaponInfo(s: Pick<AppState, 'people' | 'settings'> & Partial<Pick<AppState, 'guards' | 'dutyLog' | 'weaponLog' | 'rules' | 'dutyFix'>>, d?: ISODate, now?: string): WeaponInfo {
+export function weaponInfo(s: Pick<AppState, 'people' | 'settings'> & Partial<Pick<AppState, 'guards' | 'dutyLog' | 'weaponLog' | 'rules' | 'dutyFix' | 'assets'>>, d?: ISODate, now?: string): WeaponInfo {
   const blocks = (blocksOf(s.settings) || s.settings.blocks).filter(b => !b.hidden && b.kind !== 'ly');
   const unarmed = new Set<number>(); const holders = new Map<string, Person[]>(); const racks = new Map<string, Person[]>();
   const push = (m: Map<string, Person[]>, k: string, p: Person) => { const l = m.get(k); if (l) l.push(p); else m.set(k, [p]); };
@@ -108,14 +110,24 @@ export function weaponInfo(s: Pick<AppState, 'people' | 'settings'> & Partial<Pi
   const out = new Map<number, string>();
   if (arm.live) arm.cur.forEach((r, pid) => out.set(pid, armTxt([r])));
   else { const by = new Map<number, ArmRow[]>(); for (const r of arm.rows) { const l = by.get(r.owner); if (l) l.push(r); else by.set(r.owner, [r]); } by.forEach((l, pid) => out.set(pid, armTxt(l))); }
-  return { unarmed, holders, racks, out, moves: openMoves(s.weaponLog), arm };
+  return { unarmed, holders, racks, out, moves: openMoves(s.weaponLog), repair: repairOf(s), arm };
+}
+// Όπλα του Μητρώου «Προς επισκευή» ή σε «Ακινησία» (όχι διαγραμμένα): δεν είναι στον οπλοβαστό. Μόνο κατηγορίες όπλων (όχι υλικό/οχήματα)
+const WEAPON_CATS = ['tyfekia', 'pistolia', 'polyvola', 'antiarm', 'pyrovola'];
+function repairOf(s: Pick<AppState, 'people' | 'settings'> & Partial<Pick<AppState, 'assets'>>): Map<number, string> {
+  const m = new Map<number, string>(); if (!s.assets?.length) return m;
+  const cats = s.settings.assets?.cats?.length ? new Set(s.settings.assets.cats.filter(c => c.kind === 'weapon').map(c => c.id)) : new Set(WEAPON_CATS);
+  const bad = new Map<string, string>();
+  for (const a of s.assets) if (!a.gone && (a.state === 'repair' || a.state === 'immobile') && cats.has(a.cat)) { const k = weaponKey(a.no); if (k) bad.set(k, upper(REPAIR_KEY + (a.why ? ': ' + a.why : ''))); }
+  if (bad.size) for (const p of s.people) { const t = bad.get(weaponKey(p.weapon)); if (t) m.set(p.id, t); }
+  return m;
 }
 // Οι άλλοι (σε δύναμη) με την ίδια θέση (οπλοβαστός + θέση)
 export const sameRack = (info: WeaponInfo, p: Pick<Person, 'id' | 'rack' | 'wpos'>, rack = p.rack, wpos = p.wpos) =>
   (info.racks.get(seatKey(rack, wpos)) || []).filter(x => x.id !== p.id);
 // «ΕΝΤΟΣ» ή «ΕΚΤΟΣ: ΣΚΟΠΟΣ …»· κενό για όποιον δεν έχει όπλο ούτε ένοπλη υπηρεσία
 // Πρώτα η έξοδος με λόγο (ΕΚΠ…), μετά η ένοπλη υπηρεσία
-export const inOutText = (p: Person, info: WeaponInfo) => (info.moves.has(p.id) ? 'ΕΚΤΟΣ: ' + moveOutTxt(info.moves.get(p.id)!) : info.out.has(p.id) ? 'ΕΚΤΟΣ: ' + info.out.get(p.id) : weaponKey(p.weapon) && p.active ? 'ΕΝΤΟΣ' : '');
+export const inOutText = (p: Person, info: WeaponInfo) => (info.moves.has(p.id) ? 'ΕΚΤΟΣ: ' + moveOutTxt(info.moves.get(p.id)!) : info.repair.has(p.id) ? 'ΕΚΤΟΣ: ' + info.repair.get(p.id) : info.out.has(p.id) ? 'ΕΚΤΟΣ: ' + info.out.get(p.id) : weaponKey(p.weapon) && p.active ? 'ΕΝΤΟΣ' : '');
 // Οι άλλοι που έχουν τον ίδιο αριθμό
 export const sameWeapon = (info: WeaponInfo, p: Pick<Person, 'id' | 'weapon'>, weapon = p.weapon) =>
   (info.holders.get(weaponKey(weapon)) || []).filter(x => x.id !== p.id);
