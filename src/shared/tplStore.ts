@@ -15,6 +15,9 @@ export interface SheetPrint { name: string; roles: string[]; tokens: string[] }
 export interface Fingerprint { sheets: SheetPrint[]; regions: RegionSig[] }
 // «ignore this column/row» marks, found again by their header text
 export interface IgnoreMark { type: 'col' | 'row'; sheet: string; region: number; text: string; r?: number; c?: number }
+// The unit's own ΗΚΑΙ/ΗΚΑΛ rules (src/shared/hkRules.ts): a column or row the lexicon cannot know, mapped by the user. Keys are phraseKey(header text).
+// Stored as plain JSON: cols → { t: 'state', keys } | { t: 'placed'|'attached'|'force'|'avail'|'prov' } | { t: 'sum', of: [...] }; rows → { keys, origins?, ranks?, who? }
+export interface HkRulesStore { cols: Record<string, unknown>; rows: Record<string, unknown> }
 export interface TplProfile {
   v: number;
   id: string;
@@ -24,6 +27,7 @@ export interface TplProfile {
   elements: TplElement[];
   words: Record<string, string>;      // word the unit uses -> concept id (feeds the lexicon «learned» names)
   ignore: IgnoreMark[];
+  rules?: HkRulesStore;               // the unit's own columns/rows mapped to counting rules (hkRules.ts); until mapped they are warnings and never written
   ours?: Record<string, string>;      // cells the safe writer filled: 'sheet|r:c' -> the text written (a cell that still holds it may be overwritten)
 }
 
@@ -47,6 +51,7 @@ export function sanitizeProfiles(x: unknown): TplProfile[] {
       v: p.v, id: p.id, kind: p.kind as ProfileKind, ...(typeof p.name === 'string' ? { name: p.name } : {}),
       fp: { sheets: arr(p.fp.sheets, isSheet), regions: arr(p.fp.regions, isRegion) },
       elements: arr(p.elements, isEl), words, ignore: arr(p.ignore, isMark),
+      ...(isObj(p.rules) ? { rules: { cols: isObj(p.rules.cols) ? p.rules.cols : {}, rows: isObj(p.rules.rows) ? p.rules.rows : {} } } : {}),
       ...(isObj(p.ours) ? { ours: Object.fromEntries(Object.entries(p.ours).filter(([, v]) => typeof v === 'string')) as Record<string, string> } : {})
     });
   }

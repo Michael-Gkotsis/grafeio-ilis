@@ -128,6 +128,8 @@ const HKROWS: Concept[] = HK_RANKS.map(k => {
   const ranks = (d.ranks || []).flatMap(r => { const c = RANKS.find(x => x.id === 'rank:' + r); return c ? c.names : []; });
   return { id: 'hkrow:' + k, kind: 'hkrow' as const, label: k, names: [k, ...d.names, ...ranks], weak: d.weak || [] };
 });
+// The ΗΚΑΙ row (key of HK_RANKS) that counts a rank concept («rank:ΛΟΧΑΓΟΣ» → «Ίλαρχοι»), or null
+export const hkRowOfRankId = (rankId: string): string | null => HKROWS.find(c => HKROW_NAMES[c.label]?.ranks?.includes(rankId.slice(5)))?.label ?? null;
 // Totals and groups of the ΗΚΑΙ rows/columns
 const TOTALS: Concept[] = [
   C('total', 'sum', 'Σύνολο', ['ΑΘΡΟΙΣΗ', 'ΑΘΡΟΙΣΜΑ', 'ΣΥΝ', 'ΣΥΝΟΛΙΚΑ', 'TOTAL']),

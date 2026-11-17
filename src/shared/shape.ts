@@ -115,6 +115,29 @@ function clusters(g: Grid, r: number, nCols: number): Cluster[] {
   }
   return out;
 }
+// Two or more blank columns between the parts of one table («separator» columns): the right part alone is too small to be a table (a few field headers),
+// but its header sits in the same band and its cells line up with the rows of the left part, so both are ONE table. Two valid tables side by side stay two.
+function mergeFar(lex: Lexicon, g: Grid, hr: number, cls: Cluster[], hitCols: number[]): Cluster[] {
+  const out: Cluster[] = [];
+  for (const cl of cls) {
+    const prev = out[out.length - 1]; const gap = prev ? cl.c1 - prev.c2 - 1 : 0;
+    if (prev && gap >= 2 && gap <= 4) {
+      const hits = hitCols.filter(c => c >= cl.c1 && c <= cl.c2); const lHits = hitCols.filter(c => c >= prev.c1 && c <= prev.c2);
+      const sure = hits.filter(c => lex.match(g.text(hr, c), { kinds: FIELD_KINDS }).confidence === 'sure').length;
+      const alone = hits.length >= 3 || (hits.length >= 2 && sure >= 2);
+      // the separator columns are empty under the header, and the right part has cells next to the rows of the left part
+      let blank = true, left = 0, right = 0;
+      for (let r = hr + 1; r <= hr + 12 && r < g.nRows; r++) {
+        for (let c = prev.c2 + 1; c < cl.c1; c++) if (g.text(r, c) !== '' && g.text(r, c) !== '·') blank = false;
+        let l = false, rr = false; for (let c = prev.c1; c <= prev.c2; c++) if (g.text(r, c) !== '') l = true; for (let c = cl.c1; c <= cl.c2; c++) if (g.text(r, c) !== '') rr = true;
+        if (l) left++; if (l && rr) right++;
+      }
+      if (!alone && lHits.length >= 3 && hits.length >= 1 && blank && left >= 2 && right >= left * 0.5) { prev.c2 = cl.c2; continue; }
+    }
+    out.push({ ...cl });
+  }
+  return out;
+}
 const anchorsIn = (g: Grid, r: number, c1: number, c2: number) => { let n = 0; const row = g.sheet.rows[r] || []; for (let c = c1; c <= c2; c++) if (valueText(row[c]) !== '') n++; return n; };
 const hasHMerge = (g: Grid, r: number, c1: number, c2: number) => g.sheet.merges.some(m => m.r1 <= r && m.r2 >= r && m.c2 > m.c1 && m.c1 <= c2 && m.c2 >= c1);
 
@@ -152,7 +175,7 @@ function findLists(lex: Lexicon, g: Grid, scan: number, skipRows: number[]): Lis
     if (skipRows.includes(hr) || skipRows.includes(hr - 1) || skipRows.includes(hr + 1)) continue;
     if ((rowHits.get(hr) || []).length < 2) continue;
     // table clusters in this row; the hits inside each one
-    for (const cl of clusters(g, hr, nCols)) {
+    for (const cl of mergeFar(lex, g, hr, clusters(g, hr, nCols), rowHits.get(hr) || [])) {
       if (inUsed(hr, cl.c1)) continue;
       const hits = (rowHits.get(hr) || []).filter(c => c >= cl.c1 && c <= cl.c2);
       const sure = hits.filter(c => lex.match(g.text(hr, c), { kinds: FIELD_KINDS }).confidence === 'sure').length;
@@ -256,7 +279,23 @@ function findMatrices(lex: Lexicon, g: Grid, scan: number, lists: ListRegion[]):
       if (textBand[1] < textBand[0]) continue;
       // data columns: filled in the band, up to the last filled (a single empty column inside is allowed)
       let cEnd = c; let gapc = 0;
-      for (let cc = c + 1; cc < g.nCols; cc++) { let f = false; for (let r = band[0]; r <= band[1]; r++) if (g.textThrough(r, cc) !== '') { f = true; break; } if (f) { cEnd = cc; gapc = 0; } else { gapc++; if (gapc > 1) break; } }
+      const filledAt = (cc: number) => { for (let r = band[0]; r <= band[1]; r++) if (g.textThrough(r, cc) !== '') return true; return false; };
+      for (let cc = c + 1; cc < g.nCols; cc++) {
+        if (filledAt(cc)) { cEnd = cc; gapc = 0; continue; }
+        gapc++;
+        if (gapc > 1) {
+          // 2–4 blank columns: the table goes on when the columns beyond are columns of the ΗΚΑΙ (a SURE column word) with cells lined up in the same rows
+          let nx = -1; for (let k = cc; k < Math.min(g.nCols, cEnd + 6); k++) if (filledAt(k)) { nx = k; break; }
+          let ok = false;
+          if (nx >= 0) {
+            let sureHk = 0, any = 0; for (let k = nx; k < Math.min(g.nCols, nx + 4); k++) if (filledAt(k)) { const mm = colInfo(lex, g, textBand, k, COL_KINDS).match; if (usable(mm)) any++; if (/^hkcol:/.test(mm.concept || '') && mm.confidence === 'sure') sureHk++; }
+            let rowsWith = 0; for (let r = startRow; r <= endRow; r++) { let b = false; for (let k = nx; k < Math.min(g.nCols, nx + 4); k++) if (g.value(r, k) != null || g.isFormula(r, k)) b = true; if (b) rowsWith++; }
+            ok = sureHk >= 2 || ((sureHk >= 1 || any >= 2) && rowsWith >= Math.max(2, (endRow - startRow + 1) * 0.3));
+          }
+          if (!ok) break;
+          cc = nx - 1; gapc = 0;
+        }
+      }
       const cols: ColInfo[] = []; for (let cc = c + 1; cc <= cEnd; cc++) if (!spanTail(g, textBand, cc)) cols.push(colInfo(lex, g, textBand, cc, COL_KINDS));
       // «Σύνολο» right after Τοποθετημένοι/Προσκολλημένοι is the force total
       cols.forEach((x, k) => { if (x.match.concept === 'hkcol:sum' && x.match.confidence !== 'sure' && k >= 2 && cols[k - 1].match.concept === 'hkcol:attached' && cols[k - 2].match.concept === 'hkcol:placed') x.match = { ...x.match, confidence: 'sure', why: 'Σύνολο μετά από Τοποθετημένοι και Προσκολλημένοι' }; });
@@ -391,7 +430,7 @@ function findFormulas(lex: Lexicon, g: Grid): FormulaSource[] {
   const out: FormulaSource[] = [];
   for (const [dataSheet, cells] of per) {
     const byCol = new Map<number, Map<string, number>>();
-    for (const cell of cells) for (const cd of cell.conds) { if (cd.crit == null) continue; const mm = byCol.get(cd.col) || new Map<string, number>(); mm.set(cd.crit, (mm.get(cd.crit) || 0) + 1); byCol.set(cd.col, mm); }
+    for (const cell of cells) for (const cd of cell.conds) { const w = condWord(g, cd); if (w == null) continue; const mm = byCol.get(cd.col) || new Map<string, number>(); mm.set(w, (mm.get(w) || 0) + 1); byCol.set(cd.col, mm); }
     const critCols: Driven['critCols'] = [...byCol.entries()].map(([col, words]) => {
       const ws = [...words.entries()].map(([text, n]) => ({ text, n, match: lex.match(text, { kinds: ['rank', 'status', 'hkrow', 'hkcol', 'service', 'post'] }) }));
       const ranks = ws.filter(w => /^(rank|hkrow):/.test(w.match.concept || '') && usable(w.match)).length; const st = ws.filter(w => /^(status|hkcol|service):/.test(w.match.concept || '') && usable(w.match)).length;
@@ -401,6 +440,12 @@ function findFormulas(lex: Lexicon, g: Grid): FormulaSource[] {
     out.push({ sheet: g.sheet.name, dataSheet, cells, critCols });
   }
   return out;
+}
+// the word a condition counts: the quoted text, or the text of the single cell it points at («$A7» = the row label)
+function condWord(g: Grid, cd: CountCond): string | null {
+  if (cd.crit != null) return cd.crit;
+  const m = cd.ref ? /^\$?([A-Z]{1,3})\$?(\d+)$/.exec(cd.ref.trim()) : null; if (!m) return null;
+  const t = g.textThrough(Number(m[2]) - 1, colIndex(m[1])); return t || null;
 }
 const critText = (s: string): string | null => { const m = /^"((?:[^"]|"")*)"$/.exec(s.trim()); return m ? m[1].replace(/""/g, '"') : null; };
 
@@ -439,7 +484,7 @@ export function detectSheet(sheet: SheetModel, o: DetectOpts = {}): SheetShape {
       const rankCol = f.critCols.find(x => x.role === 'rank')?.col, statusCol = f.critCols.find(x => x.role === 'status')?.col;
       const votes = (k: 'r' | 'c', col: number | undefined, into: Record<number, string>) => {
         if (col == null) return; const acc = new Map<number, Map<string, number>>();
-        for (const x of inside) { const cd = x.conds.find(y => y.col === col && y.crit != null); if (!cd) continue; const idx = k === 'r' ? x.r : x.c; const mm = acc.get(idx) || new Map(); mm.set(cd.crit!, (mm.get(cd.crit!) || 0) + 1); acc.set(idx, mm); }
+        for (const x of inside) { const cd = x.conds.find(y => y.col === col && condWord(g, y) != null); if (!cd) continue; const idx = k === 'r' ? x.r : x.c; const w = condWord(g, cd)!; const mm = acc.get(idx) || new Map(); mm.set(w, (mm.get(w) || 0) + 1); acc.set(idx, mm); }
         for (const [idx, mm] of acc) into[idx] = [...mm.entries()].sort((a, b) => b[1] - a[1])[0][0];
       };
       votes('r', rankCol, rowCrit); votes('c', statusCol, colCrit);
