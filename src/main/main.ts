@@ -1129,6 +1129,15 @@ else {
         return { ok: true, file: out, warnings: r.warnings };
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
     });
+    // Άδειες και απαλλαγές στελεχών: νέο αρχείο (year, και cid από την καρτέλα στελέχους)
+    ipcMain.handle('export:cadreLeave', async (_e, year: number, cid?: string) => {
+      try {
+        const r = await excel().cadreLeaveBook(store.state, Math.floor(+year) || +today().slice(0, 4), today(), cid);
+        const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
+        shell.openPath(out);
+        return { ok: true, file: out, warnings: [] };
+      } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
+    });
     ipcMain.handle('export:roster', async (_e, date: ISODate, print?: boolean, sigs?: Sig[], headId?: string) => {
       try {
         const r = await made('rosterPrint', date, store.state, sigs, undefined, headId);

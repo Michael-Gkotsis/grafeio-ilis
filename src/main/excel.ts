@@ -6,6 +6,7 @@ import { MONTHS, hkDate, nowMin, parseD, today, type ISODate } from '../shared/d
 import { rosterSheets, type RosterSheet } from '../shared/rosterLists';
 import { W_NUM, weaponSheets } from '../shared/weapons';
 import { cadreSheets } from '../shared/cadre';
+import { leaveSheets } from '../shared/cadreBalance';
 import { norm, collator, upper } from '../shared/text';
 import { everyBlock, fatherTxt, type AppState, type DutyKind } from '../shared/domain';
 import { live, absCode, rankTxt } from '../shared/ranks';
@@ -140,6 +141,11 @@ export async function rosterLists(s: AppState, d: ISODate): Promise<Made> {
 export async function cadreLists(s: AppState, d: ISODate): Promise<Made> {
   const wb = newBook(d); const marks = addSheets(wb, s, cadreSheets(s, d), 'main');
   return { name: fileNameOf(s.settings, 'cadre', d), data: await fitBook(Buffer.from(await wb.xlsx.writeBuffer())), marks };
+}
+// Άδειες και απαλλαγές στελεχών (Michael, 17/11): ΝΕΟ αρχείο, χωριστό από το ΣΤΕΛΕΧΗ.xlsx· υπόλοιπα όλων και, από την καρτέλα, η καρτέλα του στελέχους
+export async function cadreLeaveBook(s: AppState, year: number, d: ISODate, cid?: string): Promise<Made> {
+  const wb = newBook(d); const marks = addSheets(wb, s, leaveSheets(s, year, d, cid), 'main');
+  return { name: fileNameOf(s.settings, 'cadreLeave', { text: String(year) }), data: await fitBook(Buffer.from(await wb.xlsx.writeBuffer())), marks };
 }
 // Σταθερή ημερομηνία στις ιδιότητες: ίδια δεδομένα, ίδιο αρχείο
 function newBook(d: ISODate) {

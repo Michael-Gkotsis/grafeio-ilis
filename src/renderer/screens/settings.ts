@@ -17,6 +17,7 @@ import type { BackupInfo, ImportPreview } from '../../shared/api';
 import { usePrefs, type Prefs } from '../prefs';
 import { FoldersCard, RosterPreview, SourcesView } from './sources';
 import { ListsCard } from './lists';
+import { CadreLeaveCard } from './cadreLeave';
 import { FileNamesCard } from './fileNamesCard';
 import { UpdatesCard } from '../update';
 import { SiCard } from './si';
@@ -357,7 +358,7 @@ export function TemplatesScreen() {
       <p className="note" style=${{ marginTop: '10px' }}>Για να αλλάξεις ένα έντυπο (π.χ. νέα κεφαλίδα), άνοιξε τον φάκελο templates, βάλε εκεί το δικό σου αρχείο με το ίδιο όνομα. Τα κομμάτια βρίσκονται από τις λέξεις τους (τίτλοι, «Λ/Υ:», ονόματα βαθμών, επικεφαλίδες), όχι από τη θέση τους: κράτα τις λέξεις, τα κελιά μπορούν να μετακινηθούν. Η εφαρμογή γράφει μόνο τιμές και δεν αλλάζει τύπους, στυλ ή διάταξη σελίδας.</p>
       <${Button} variant="outline" onClick=${() => window.api.openFolder('templates')}>Άνοιξε τον φάκελο templates<//>
     </div>`;
-  const body = tab === 'unit' ? html`<div className="stack"><${SettingsCard}/><${SigsCard}/><${HkRowsCard}/></div>` : tab === 'heads' ? html`<${HeadsSection}/>` : tab === 'rooms' ? html`<${RoomsCard}/>` : tab === 'duty' ? html`<${DutySection}/>`
+  const body = tab === 'unit' ? html`<div className="stack"><${SettingsCard}/><${SigsCard}/><${HkRowsCard}/><${CadreLeaveCard}/></div>` : tab === 'heads' ? html`<${HeadsSection}/>` : tab === 'rooms' ? html`<${RoomsCard}/>` : tab === 'duty' ? html`<${DutySection}/>`
     : tab === 'lists' ? html`<${ListsCard}/>` : tab === 'import' ? html`<${ImportCard}/>` : tab === 'files' ? html`<div className="stack"><${SourcesView}/><${FoldersCard}/></div>`
     : tab === 'names' ? html`<${FileNamesCard}/>` : tab === 'excel' ? html`<${XlLookCard}/>` : tab === 'look' ? html`<div className="stack"><${BrandCard}/><${AppearanceCard}/></div>` : tab === 'backup' ? html`<${BackupsCard}/>` : tab === 'update' ? html`<${UpdatesCard}/>` : tab === 'esso' ? html`<${EssoCards}/>` : tab === 'clock' ? html`<${ClockCard}/>` : templates;
   return html`<div>

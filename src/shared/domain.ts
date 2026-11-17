@@ -439,6 +439,7 @@ export const OUTS_FMT: [OutsFmt, string][] = [['cur', 'Τωρινή'], ['all', '
 // Η παλιά μορφή «Σε 4 πίνακες» ('tab4', Michael 30/10) αντικαταστάθηκε από την «Όλη η δύναμη»: οι αποθηκευμένες ρυθμίσεις με 'tab4' διαβάζονται ως 'all'
 export const isOutsAll = (st: { outsFmt?: OutsFmt | 'tab4' }) => st.outsFmt === 'all' || st.outsFmt === 'tab4';
 export interface Settings {
+  cadreLeave?: Partial<CadreLeaveCfg>;   // άδειες και απαλλαγές στελεχών (Ρυθμίσεις › Μονάδα και έντυπα)· ό,τι λείπει παίρνει την προεπιλογή (shared/cadreBalance.ts)
   fileNames?: FileNames;                 // ονόματα αρχείων: όνομα, διαχωριστικό και μορφή ημερομηνίας (fileNames.ts)
   unit: [string, string, string];        // κεφαλίδα 3 γραμμών
   unitName: string;                      // π.χ. 4ης ΙΛΗΣ
@@ -602,6 +603,7 @@ export interface AppState {
   hkaiManual: Record<ISODate, HkaiManual>;
   cadreList: Cadre[];                    // στελέχη με ονόματα (αν είναι κενό, η ΗΚΑΙ παίρνει τους αριθμούς των Ρυθμίσεων)
   cadreAbs: CadreAbs[];                  // απουσίες στελεχών
+  cadreGrants?: CadreGrant[];            // έξτρα άδειες, υπόλοιπο από πέρσι και αρχική απαλλαγών ανά στέλεχος (kv «cadreGrants», shared/cadreBalance.ts)
   requests: PersonRequest[];             // αιτήσεις στρατιωτών (ΗΚΑΙ, 5. ΑΙΤΗΣΕΙΣ)
   dutyLog: DutyLog;                      // υπηρεσίες με ημερομηνία αλλά χωρίς θέση (από Excel με σκέτο «Θ», «Μ», «Σ»)
   nightTraining: Record<ISODate, true>;  // μέρες με βραδινή εκπαίδευση: δεν μετράνε στη στέρηση εξόδου
@@ -656,13 +658,20 @@ export function markOldRequests(s: AppState, today: ISODate): AppState | null {
 // στις θέσεις (commands.ts assign), όχι μόνο όσοι έχουν monthMax. weapon/wtype/rack/wpos: όπλο στελέχους, όπως του Person (ένοπλες θέσεις)
 export interface Cadre { id: string; rank: string; origin?: string; hk: string; last: string; first: string; spec?: string; am?: string; phone?: string; role?: string; active: boolean; pos?: number; monthMax?: number; pid?: number; weapon?: string; wtype?: string; rack?: string; wpos?: string; eid?: string; iban?: string; amka?: string; afm?: string }
 export interface CadreAbs { id: string; cid: string; kind: string; from: ISODate; to: ISODate; note?: string }
+// Άδειες και απαλλαγές στελεχών (Michael, 17/11, πρόταση λοχία): ετήσιο υπόλοιπο ανά είδος άδειας (LeaveQuota, με δική σου λίστα:
+// Κανονική 30, ΑΜΔ 10, Γονική…) και καρτέλα απαλλαγών. Όλα προαιρετικά: χωρίς αυτά ισχύουν οι προεπιλογές του cadreBalance.ts.
+// kinds: κωδικοί καταστάσεων στελεχών (ή ονόματα δικών σου) που το καταναλώνουν · all: false = μόνο όσοι έχουν δοσμένες μέρες (π.χ. Γονική)
+export interface LeaveQuota { id: string; name: string; perYear: number; kinds: string[]; all: boolean }
+export interface CadreLeaveCfg { quotas: LeaveQuota[]; count: 'calendar' | 'working'; apalPerDuty: number; apalHolExtra: number; apalExpire: 'never' | 'year' }
+// extra: έξτρα μέρες της χρονιάς · carry: υπόλοιπο από πέρσι · start: αρχικό υπόλοιπο απαλλαγών (quota 'apal') για ό,τι έγινε πριν την εφαρμογή
+export interface CadreGrant { id: string; cid: string; year: number; quota: string; days: number; kind: 'extra' | 'carry' | 'start'; note?: string }
 // Καταστάσεις στελέχους = οι στήλες της ΗΚΑΙ (Michael, 17/10: «οι καταστάσεις τους να αφορούν τις καταστάσεις της ΗΚΑΙ»):
 // [κωδικός, όνομα, στήλη ΗΚΑΙ]. Πρώτα οι κωλυόμενοι, μετά οι απόντες, όπως στο έντυπο· «Άλλο» μένει μόνο στη λίστα.
 // Οι παλιοί κωδικοί (ka, an, eid, nos, fp, ekp, allh, other) κρατούν το ίδιο όνομα, για όσες έχουν ήδη γραφτεί.
 export const CADRE_ABS: [string, string, string][] = [
   ['yp', 'Υπηρεσία εντός στρατοπέδου', 'yp'], ['ey', 'Ελεύθερος υπηρεσίας', 'ey'], ['tim', 'Τιμωρημένος', 'tim'], ['os', 'Ο/Σ', 'os'],
   ['mag', 'Μαγειρεία', 'mag'], ['sid', 'Σιδηρουργείο', 'sid'], ['kin', 'Σε κίνηση', 'kin'],
-  ['ka', 'Κανονική άδεια', 'ka'], ['an', 'Αναρρωτική άδεια', 'an'], ['eid', 'Ειδική άδεια', 'eid'], ['nos', 'Νοσοκομείο', 'nos'], ['prat', 'Πρατήριο', 'prat'],
+  ['ka', 'Κανονική άδεια', 'ka'], ['amd', 'Άδεια μικρής διάρκειας', 'ka'], ['an', 'Αναρρωτική άδεια', 'an'], ['eid', 'Ειδική άδεια', 'eid'], ['nos', 'Νοσοκομείο', 'nos'], ['prat', 'Πρατήριο', 'prat'],
   ['adik', 'Αγνοούμενος / αδικαιολογήτως', 'adik'], ['fp', 'Φύλλο πορείας', 'fp'], ['fyl', 'Φυλάκιο', 'fyl'], ['apal', 'Απαλλαγή', 'apal'],
   ['ekp', 'Εκπαίδευση', 'ekp'], ['allh', 'Απόσπαση σε άλλη μονάδα', 'allh'], ['other', 'Άλλο (μόνο στη λίστα)', '']
 ];
