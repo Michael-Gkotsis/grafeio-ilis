@@ -1,6 +1,6 @@
 // «Όλη η δύναμη» (Michael, 30/10): κάθε άτομο της δύναμης μία φορά, σε μία ομάδα, και το άθροισμα κλείνει (Α + Β + Γ = ενεργοί).
 //  Α. βγαίνουν σήμερα (ήταν μέσα): A1 ΔΝ, A2 εξοδούχοι, A3 φεύγουν για άδεια
-//  Β. είναι ήδη έξω (έφυγαν πριν): B1 άδεια, B2 νοσοκομείο, B3 ΔΝ/έξοδος από χθες που δεν γύρισε
+//  Β. είναι ήδη έξω (έφυγαν πριν): B1 άδεια, B2 νοσοκομείο, B3 ΔΝ/έξοδος από χθες που δεν γύρισε, B4 υπηρεσία εκτός στρατοπέδου (BlockDef.hkCol σε στήλη απόντων, Michael 17/11)
 //  Γ. μένουν μέσα απόψε: G1 υπηρεσία, G2 ποινή, G3 ΣΤΕΠ/κωλυόμενοι/ιατρικά, G4 γυρίζουν σήμερα και μένουν, G5 δεν βγήκαν
 // Οι κανόνες ταξινόμησης έχουν σειρά προτεραιότητας και βγαίνουν μόνο από τις συναρτήσεις που ήδη χρησιμοποιούν η οθόνη και τα άλλα Excel
 // (returnOf, leaveEnd, retFor, stillOut, outHeldBy, postOf, statusesFrom, dayTimes): μία πηγή. Ελέγχονται στα test/outs-day.test.ts και outs-combos.test.ts.
@@ -8,7 +8,7 @@ import type { ISODate } from './dates';
 import { addDays, dm } from './dates';
 import { TYPES, type AppState, type Person, type Status } from './domain';
 import { mins } from './hours';
-import { activePeople, postOf, statusesFrom } from './rules';
+import { activePeople, dutyColsOn, hasSvcAway, postOf, statusesAt, statusesFrom, svcAwayOf } from './rules';
 import { awayOn, dayTimes, leaveEnd, leaveOut, outHeldBy, retDay, retFor, retOrd, returnOf, stillOut, type Ret } from './returns';
 import { byRoom } from './outsStay';
 import { statNoOut } from './stat';
@@ -16,13 +16,13 @@ import { live, isAway } from './ranks';
 import { dutyAt } from './weekend';
 import { upper } from './text';
 
-export type DayGroup = 'A1' | 'A2' | 'A3' | 'B1' | 'B2' | 'B3' | 'G1' | 'G2' | 'G3' | 'G4' | 'G5';
+export type DayGroup = 'A1' | 'A2' | 'A3' | 'B1' | 'B2' | 'B3' | 'B4' | 'G1' | 'G2' | 'G3' | 'G4' | 'G5';
 // st: η έξοδος/ΔΝ της μέρας (αλλιώς η άδεια, ή η έξοδος/ΔΝ που κρατά ακόμα έξω)· lv: η άδεια/νοσοκομείο της μέρας· warn: ΠΡΟΣΟΧΗ για το γραφείο
 export interface DayRow { p: Person; g: DayGroup; r: Ret | null; why: string; st?: Status; lv?: Status; warn?: string }
 // Οι ομάδες με τη σειρά του εντύπου: [ομάδα, ενότητα Α/Β/Γ, τίτλος]
 export const DAY_GROUPS: [DayGroup, 'A' | 'B' | 'G', string][] = [
   ['A1', 'A', 'ΜΕ ΔΝ'], ['A2', 'A', 'ΕΞΟΔΟΥΧΟΙ'], ['A3', 'A', 'ΦΕΥΓΟΥΝ ΓΙΑ ΑΔΕΙΑ'],
-  ['B1', 'B', 'ΣΕ ΑΔΕΙΑ'], ['B2', 'B', 'ΝΟΣΟΚΟΜΕΙΟ'], ['B3', 'B', 'ΔΝ ΑΠΟ ΧΘΕΣ / ΔΕΝ ΓΥΡΙΣΑΝ'],
+  ['B1', 'B', 'ΣΕ ΑΔΕΙΑ'], ['B2', 'B', 'ΝΟΣΟΚΟΜΕΙΟ'], ['B3', 'B', 'ΔΝ ΑΠΟ ΧΘΕΣ / ΔΕΝ ΓΥΡΙΣΑΝ'], ['B4', 'B', 'ΥΠΗΡΕΣΙΑ ΕΚΤΟΣ ΣΤΡΑΤΟΠΕΔΟΥ'],
   ['G1', 'G', 'ΥΠΗΡΕΣΙΑ'], ['G2', 'G', 'ΠΟΙΝΗ'], ['G3', 'G', 'ΣΤΕΠ / ΚΩΛΥΟΜΕΝΟΙ / ΙΑΤΡΙΚΑ'], ['G4', 'G', 'ΓΥΡΙΖΟΥΝ ΣΗΜΕΡΑ ΚΑΙ ΜΕΝΟΥΝ'], ['G5', 'G', 'ΔΕΝ ΒΓΗΚΑΝ']
 ];
 const isOut = (x: Status) => TYPES[x.type].cat === 'out';
@@ -31,6 +31,8 @@ const back = (s: AppState, pid: number, x: ISODate) => returnOf(s, pid, x) ?? le
 
 export function dayBook(s: AppState, d: ISODate): DayRow[] {
   const y = addDays(d, -1), T = mins(dayTimes(s, d).out), rows: DayRow[] = [];
+  // υπηρεσία εκτός στρατοπέδου: απών στην ώρα εξόδου, όπως στη Δύναμη (strengthOf, ίδια συνάρτηση)
+  const dmap = hasSvcAway(s.settings) ? dutyColsOn(s, d) : null;
   for (const p of activePeople(s)) {
     const now = awayOn(s, p.id, d), outs = now.filter(isOut), lv = now.filter(x => !isOut(x));
     const R = (g: DayGroup, r: Ret | null, why = '', x: Partial<DayRow> = {}) => rows.push({ p, g, r, why, ...x });
@@ -75,6 +77,7 @@ export function dayBook(s: AppState, d: ISODate): DayRow[] {
     const post = postOf(s, d, p.id);
     if (h && !post) { R('B3', h.r, 'held', { st: h.st }); continue; }
     if (post) {
+      if (dmap && svcAwayOf(s, statusesAt(s, p.id, d, T), dmap.get(p.id), d, T)) { R('B4', null, 'υπηρεσία εκτός στρατοπέδου'); continue; }
       // η υπηρεσία μετρά πάνω από τη διόρθωση, αλλά το γραφείο πρέπει να το ξέρει
       R('G1', null, '', stillOut({ ...s, guards: {} }, p.id, d) ? { warn: 'ΠΡΟΣΟΧΗ: Η ΔΙΟΡΘΩΣΗ ΛΕΕΙ ΕΞΩ' } : {}); continue;
     }

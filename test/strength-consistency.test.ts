@@ -13,7 +13,7 @@ import { absKeysOf, isAway as isAwaySt, LEAVE_AWAY_NO_COL, leaveCol, svcAbsent, 
 import type { ISODate } from '../src/shared/dates';
 
 const TIMES = ['08:00', '09:30', '12:00', '13:30', '16:59', '17:00', '18:30', '21:59', '22:00', '23:30'];
-// outside: υπηρεσίες εκτός στρατοπέδου (BlockDef.hkCol σε στήλη απόντων): απόντες και στο Σήμερα/Δύναμη, όπως στην ΗΚΑΙ (το ΔΥΝΑΜΗ του Excel δεν τις ξέρει)
+// outside: υπηρεσίες εκτός στρατοπέδου (BlockDef.hkCol σε στήλη απόντων): απόντες και στο Σήμερα/Δύναμη, όπως στην ΗΚΑΙ, και στο ΔΥΝΑΜΗ του Excel (ομάδα Β4)
 function check(s: AppState, d: ISODate, outside = false): string[] {
   const errs: string[] = []; const E = (t: string) => errs.push(d + ' ' + t);
   const people = activePeople(s), total = people.length, lists = s.settings.lists;
@@ -41,7 +41,7 @@ function check(s: AppState, d: ISODate, outside = false): string[] {
     const awayIds = new Set(awayList.map(p => p.id));
     for (const b of shown) if (!b.r.open && !b.r.pending && b.r.day === d && b.r.time && mins(b.r.time) <= at && !awayIds.has(b.p.id)) E(t + ' p' + b.p.id + ' γύρισε ήδη αλλά φαίνεται');
   }
-  if (!outside) {
+  {
     // ΔΥΝΑΜΗ του Excel (στην ώρα εξόδου): Α + Β = οι απόντες της Δύναμης εκείνη την ώρα, Γ = παρόντες + κωλυόμενοι, σύνολο = Στρατιώτες
     const T = mins(dayTimes(s, d).out), book = dayBook(s, d), cT = strengthOf(s, d, T);
     if (book.length !== total) E('ΔΥΝΑΜΗ ' + book.length + ' ≠ ' + total);
@@ -131,12 +131,12 @@ const withOutside = (s: AppState): AppState => {
 };
 describe('και με υπηρεσίες εκτός στρατοπέδου (στήλη απόντων)', () => {
   for (const realistic of [true, false]) it(realistic ? 'όπως τα αφήνει η οθόνη' : 'και παρά τους κανόνες', () => {
-    const errs: string[] = []; let svc = 0;
+    const errs: string[] = []; let svc = 0, b4 = 0;
     for (let seed = 1; seed <= 25; seed++) {
       const s = withOutside(genState(seed * 7919 + (realistic ? 0 : 1), realistic, 30));
-      for (const d of DAYS) { errs.push(...check(s, d, true).map(e => 's' + seed + ' ' + e)); svc += strengthOf(s, d, hkMin(s.rules)).awaySvc.length; }
+      for (const d of DAYS) { errs.push(...check(s, d, true).map(e => 's' + seed + ' ' + e)); svc += strengthOf(s, d, hkMin(s.rules)).awaySvc.length; b4 += dayBook(s, d).filter(r => r.g === 'B4').length; }
     }
-    expect(svc).toBeGreaterThan(40);
+    expect(svc).toBeGreaterThan(40); expect(b4).toBeGreaterThan(20);   // το ΔΥΝΑΜΗ του Excel τους βάζει στο Β4
     expect(errs.slice(0, 25)).toEqual([]);
   });
 });
