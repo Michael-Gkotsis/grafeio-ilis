@@ -152,6 +152,7 @@ export function mockApi(): Api {
     exportCadrePlan: async ym => ({ ok: true, file: '(δοκιμή) ΠΡΟΓΡΑΜΜΑ ΑΔΕΙΩΝ ΣΤΕΛΕΧΩΝ ' + ym + '.xlsx', warnings: [] }),
     exportCadreDuty: async ym => ({ ok: true, file: '(δοκιμή) ΥΠΗΡΕΣΙΕΣ ΣΤΕΛΕΧΩΝ ' + ym + '.xlsx', warnings: [] }),
     exportAssets: async () => ({ ok: true, file: '(δοκιμή) ΜΗΤΡΩΟ ΟΠΛΙΣΜΟΥ.xlsx', warnings: [] }),
+    exportVehicles: async () => ({ ok: true, file: '(δοκιμή) ΚΑΤΑΣΤΑΣΗ ΟΧΗΜΑΤΩΝ.xlsx', warnings: [] }),
     exportCadre: async date => ({ ok: true, file: '(δοκιμή) ΔΥΝΑΜΙΚΟ ΣΤΕΛΕΧΩΝ ' + date + '.xlsx', warnings: [] }),
     exportHd: async req => ({ ok: true, file: '(δοκιμή) ΗΜΕΡΗΣΙΑ ΔΙΑΤΑΓΗ ' + req.date + '.docx', warnings: [] }),
     pickHdTpl: async () => ({ ok: false, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),

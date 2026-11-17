@@ -457,17 +457,20 @@ function HkaiMovesCard({ date }: { date: string }) {
 function HkaiSectionsCard() {
   const { state, run } = useStore(); const toast = useToast();
   const cur: HkaiSettings = state.settings.hkai || {};
-  const [veh, setVeh] = useState<HkVehicle>(() => ({ type: '1/4 τόνων', ...(cur.veh || {}) }));
+  const vehDef = (): HkVehicle => ({ type: cur.vehReg ? '' : '1/4 τόνων', ...(cur.veh || {}) });   // από το μητρώο: το κενό είδος γεμίζει μόνο του
+  const [veh, setVeh] = useState<HkVehicle>(vehDef);
+  useEffect(() => { setVeh(vehDef()); }, [cur.vehReg]);   // eslint-disable-line react-hooks/exhaustive-deps
   const [prov, setProv] = useState<Record<string, number>>(() => ({ ...(cur.prov || {}) }));
   const save = (hkai: HkaiSettings, text: string) => run({ t: 'setSettings', settings: { hkai }, text: HK() + ', ' + text }, false);
   const toggle = async (k: HkSection, on: boolean) => { if (await save(hkToggle(cur, k, on), (on ? 'άνοιξε: ' : 'έκλεισε: ') + HK_SECTIONS.find(x => x[0] === k)![1].toLowerCase())) toast({ text: (on ? 'Άνοιξε: ' : 'Έκλεισε: ') + HK_SECTIONS.find(x => x[0] === k)![1] }); };
   const num = (v: string) => (v.trim() === '' ? undefined : Math.max(0, +v || 0));
-  const vehDirty = JSON.stringify(veh) !== JSON.stringify({ type: '1/4 τόνων', ...(cur.veh || {}) });
+  const vehDirty = JSON.stringify(veh) !== JSON.stringify(vehDef());
   const provDirty = JSON.stringify(prov) !== JSON.stringify(cur.prov || {});
   const VF: [keyof HkVehicle, string][] = [['prov', 'Προβλέπονται'], ['kin', 'Σε κίνηση'], ['maint', 'Για συντήρηση'], ['dmg', 'Λόγω βλάβης ή ατυχήματος']];
   return html`<${Card} title="Ενότητες της ${HK()}">
     <p className="note" style=${{ marginTop: 0 }}>Κλείσε όσα ${UNIT().nom === 'Λόχος' ? 'ο Λόχος' : 'η Ίλη'} δεν συμπληρώνει (π.χ. οχήματα, αν δεν έχετε): δεν φαίνονται εδώ και δεν γράφονται στο έντυπο.</p>
     ${HK_SECTIONS.map(([k, l, help]) => html`<label key=${k} className="rule"><input type="checkbox" className="ui-check" checked=${hkOn(state.settings, k)} onChange=${(e: any) => toggle(k, e.target.checked)}/><span><b>${l}</b><small>${help}</small></span></label>`)}
+    ${hkOn(state.settings, 'veh') && html`<label className="rule"><input type="checkbox" className="ui-check" checked=${!!cur.vehReg} onChange=${async (e: any) => { const on = e.target.checked; if (await save({ ...cur, vehReg: on || undefined }, on ? 'κατάσταση οχημάτων από το μητρώο' : 'κατάσταση οχημάτων με το χέρι')) toast({ text: on ? 'Η κατάσταση οχημάτων γεμίζει από το μητρώο οχημάτων' : 'Η κατάσταση οχημάτων γράφεται όπως την έχεις ορίσει εδώ' }); }}/><span><b>Από το μητρώο οχημάτων</b><small>Προβλέπονται, σε κίνηση (km ή γέμισμα τη μέρα), για συντήρηση (επισκευή ή καθυστέρηση), ακινησία και είδος βγαίνουν από την οθόνη Οχήματα. Ό,τι γράψεις παρακάτω υπερισχύει· άφησε κενό ό,τι θες να υπολογίζεται.</small></span></label>`}
     ${hkOn(state.settings, 'veh') && html`<div className="field" style=${{ marginTop: '10px' }}><span className="field__label">Όχημα (ίδιο κάθε μέρα)</span>
       <div className="settings-grid"><label className="field"><span className="field__help">Είδος</span><input className="ui-input" value=${veh.type} onChange=${(e: any) => setVeh({ ...veh, type: e.target.value })}/></label>
       ${VF.map(([k, l]) => html`<label key=${k} className="field"><span className="field__help">${l}</span><input className="ui-input" type="number" min="0" value=${veh[k] ?? ''} onChange=${(e: any) => setVeh({ ...veh, [k]: num(e.target.value) })}/></label>`)}</div>
@@ -639,6 +642,7 @@ export function CommandPalette({ onClose }: P) {
     { t: 'Εξοδούχοι αύριο', k: 'ΕΞΟΔΟΥΧΟΙ ΑΥΡΙΟ ΕΞΟΔΟΣ', fn: () => nav.go('outs', { outDate: tomorrow }) },
     { t: 'Ιατρικά που έληξαν', k: 'ΙΑΤΡΙΚΑ ΕΛΗΞΑΝ ΛΗΞΗ', fn: () => nav.go('records', { recTab: 'expired' }) },
     { t: HK() + ' (η αναφορά)', k: HK() + ' ΗΜΕΡΗΣΙΑ ΑΝΑΦΟΡΑ ΕΚΤΥΠΩΣΗ ΜΠΡΟΣΤΙΝΟ ΠΙΣΩ', fn: () => nav.go('hkai', { hkTab: 'hkai' }) },
+    { t: 'Οχήματα', k: 'ΟΧΗΜΑΤΑ ΟΧΗΜΑ ΠΙΝΑΚΙΔΑ ΚΑΥΣΙΜΑ ΓΕΜΙΣΜΑ ΧΙΛΙΟΜΕΤΡΑ ΣΥΝΤΗΡΗΣΗ ΑΚΙΝΗΣΙΑ ΟΔΗΓΟΣ', fn: () => nav.go('vehicles') },
     { t: 'Οπλισμός', k: 'ΟΠΛΙΣΜΟΣ ΟΠΛΑ ΟΠΛΟ ΟΠΛΟΣΤΑΣΙΟ ΤΥΦΕΚΙΟ', fn: () => nav.go('weapons') },
     { t: 'Οπλισμός › Κινήσεις', k: 'ΚΙΝΗΣΕΙΣ ΟΠΛΩΝ ΕΝΤΟΣ ΕΚΤΟΣ ΧΡΕΩΣΗ', fn: () => nav.go('weapons', { wtab: 'moves' }) },
     { t: 'Έξοδος όπλων…', k: 'ΕΞΟΔΟΣ ΟΠΛΩΝ ΟΠΛΙΣΜΟΣ ΕΚΤΟΣ ΒΓΑΛΕ ΟΠΛΑ ΣΑΡΩΣΗ ΘΕΣΗ ΑΡΙΘΜΟΣ ΟΠΛΟΥ', fn: () => nav.go('weapons', { wtab: 'weapons', wfocus: 'scan' }) },

@@ -32,8 +32,8 @@ const cadreOf = (s: AppState) => s.cadreList[0];
 describe('Μητρώο: προεπιλογές και ρυθμίσεις', () => {
   it('οι κατηγορίες, οι λέξεις θέσης και οι μέρες προειδοποίησης έχουν προεπιλογές', () => {
     const c = assetCfgOf(fakeState(1).settings);
-    expect(c.cats.map(x => x.name)).toEqual(['Τυφέκια', 'Πιστόλια', 'Πολυβόλα', 'Αντιαρματικά', 'Πυροβόλα', 'Διόπτρες', 'Ασύρματοι', 'Ιματισμός', 'Λοιπό υλικό']);
-    expect(c.cats.map(x => x.kind)).toEqual(['weapon', 'weapon', 'weapon', 'weapon', 'weapon', 'material', 'material', 'material', 'material']);
+    expect(c.cats.map(x => x.name)).toEqual(['Τυφέκια', 'Πιστόλια', 'Πολυβόλα', 'Αντιαρματικά', 'Πυροβόλα', 'Διόπτρες', 'Ασύρματοι', 'Ιματισμός', 'Λοιπό υλικό', 'Τροχοφόρα', 'Ερπυστριοφόρα', 'Πολιτικού τύπου']);
+    expect(c.cats.map(x => x.kind)).toEqual(['weapon', 'weapon', 'weapon', 'weapon', 'weapon', 'material', 'material', 'material', 'material', 'vehicle', 'vehicle', 'vehicle']);
     expect(c.cats[0].types).toEqual(expect.arrayContaining(['G3A3', 'G3A4', 'M16A2', 'M4']));
     expect(c.cats[1].types).toEqual(['Μ1911 Α1']); expect(c.cats[2].types).toEqual(['MG3A1', 'ΠΟΛ 0,50']);
     expect(c.cats[2].fields).toEqual([{ id: 'barrel', name: 'Αριθμός κάνης' }, { id: 'spare', name: 'Εφεδρική κάνη' }]);

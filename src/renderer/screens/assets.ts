@@ -7,7 +7,8 @@ import { Select } from '../select';
 import { ChoiceField, DateField, PersonPicker } from '../common';
 import { useNav, useStore } from '../store';
 import { ASSET_FILTERS, STATE_TXT, EVENT_TXT, assetCfgOf, assetHistory, assetView, catCounts, catOf, heldGroups, holderOut, holderText, maintState, maintTxt, placeText, registry, sameNo, type AssetFilter, type AssetRow } from '../../shared/assets';
-import { addMonths } from '../../shared/assets';
+import { addMonths, heldBy } from '../../shared/assets';
+import { drivenBy } from '../../shared/vehicles';
 import { dmy } from '../../shared/dates';
 import { weaponKey } from '../../shared/weapons';
 import { pickPeople } from '../../shared/rules';
@@ -138,8 +139,8 @@ function AssetCard({ row, all, cfg, today, onDlg, onClose }: P) {
 
 // ---------- Παράθυρα ----------
 const rowAsset = (r: AssetRow) => r.a;
-const same = (r: AssetRow) => (r.stored ? { id: r.key } : { id: r.key, base: rowAsset(r) });
-function useDo() {
+export const same = (r: AssetRow) => (r.stored ? { id: r.key } : { id: r.key, base: rowAsset(r) });
+export function useDo() {
   const { run, undoMark } = useStore(); const toast = useToast();
   return async (cmd: any, msg: string, warn?: string, close?: () => void) => {
     if (await run(cmd, false) === null) return false;
@@ -168,8 +169,8 @@ function StateDialog({ row, mode, onClose }: P) {
       <div className="field"><label className="field__label" htmlFor="as-w">${back ? 'Σημείωση (προαιρετικά)' : 'Λόγος (προαιρετικά)'}</label><input id="as-w" className="ui-input" value=${why} onChange=${(e: any) => setWhy(e.target.value)} placeholder=${mode === 'repair' ? 'π.χ. σκανδάλη' : 'π.χ. φθορά, καταστροφή'} data-autofocus=""/></div>
       ${mode === 'gone' && html`<p className="note" style=${{ margin: 0 }}>Το είδος φεύγει από τον πίνακα και από το Excel. Το ιστορικό του μένει και αναιρείται με Ctrl+Z.</p>`}</div><//>`;
 }
-const KINDS: [string, string][] = [['soldier', 'Οπλίτης'], ['cadre', 'Στέλεχος'], ['unit', 'Άλλη μονάδα'], ['ext', 'Φυσικό πρόσωπο'], ['none', 'Κανείς (αχρέωτο)']];
-function AssignDialog({ row, onClose }: P) {
+export const KINDS: [string, string][] = [['soldier', 'Οπλίτης'], ['cadre', 'Στέλεχος'], ['unit', 'Άλλη μονάδα'], ['ext', 'Φυσικό πρόσωπο'], ['none', 'Κανείς (αχρέωτο)']];
+export function AssignDialog({ row, onClose }: P) {
   const { state, today } = useStore(); const doIt = useDo(); const a: Asset = row.a; const nm = [a.type, a.no].filter(Boolean).join(' ');
   const weapon = row.cat?.kind === 'weapon';
   const [kind, setKind] = useState('soldier'); const [who, setWho] = useState<{ h: AssetHolder; label: string } | null>(null); const [name, setName] = useState(''); const [date, setDate] = useState(today);
@@ -229,13 +230,18 @@ function AssetEditDialog({ row, all, cfg, defCat, onClose, onSaved }: P) {
 }
 
 // ---------- «Χρεωμένα» στην καρτέλα ατόμου/στελέχους ----------
+// Και τα οχήματα που κρατά ή οδηγεί («οδηγός»): πάνε στην οθόνη Οχήματα
 export function HeldBlock({ pid, cid }: { pid?: number; cid?: string }) {
   const { state } = useStore(); const nav = useNav();
   const h: AssetHolder = cid ? { k: 'cadre', cid } : { k: 'person', pid: pid! };
-  const groups = useMemo(() => heldGroups(registry(state), h), [state.people, state.cadreList, state.assets, state.settings, pid, cid]);
-  if (!groups.length) return null;
+  const all = useMemo(() => registry(state), [state.people, state.cadreList, state.assets, state.settings]);
+  const groups = useMemo(() => heldGroups(all.filter(r => r.cat?.kind !== 'vehicle'), h), [all, pid, cid]);
+  const vehs = useMemo(() => { const held = heldBy(all, h).filter(r => r.cat?.kind === 'vehicle'); const drv = drivenBy(all, h); return [...held.map(r => ({ r, drv: drv.includes(r) })), ...drv.filter(r => !held.includes(r)).map(r => ({ r, drv: true, only: true }))]; }, [all, pid, cid]);
+  if (!groups.length && !vehs.length) return null;
   const who = cid ? state.cadreList.find(c => c.id === cid) : state.people.find(p => p.id === pid);
   const n = groups.reduce((a, g) => a + g[1].length, 0);
   return html`<dt>Χρεωμένα</dt><dd data-held="">${groups.map(([name, l]) => html`<div key=${name}><span className="muted">${name}:</span> ${l.map((r, i) => html`${i ? ', ' : ''}<b>${[r.a.type, r.a.no].filter(Boolean).join(' ')}</b>${(r.a.qty || 0) > 1 ? ' ×' + r.a.qty : ''}`)}</div>`)}
-    <button type="button" className="linkish" onClick=${() => nav.go('weapons', { wtab: 'mitroo', aq: who ? who.last : '' })} data-tip="Δες τα στο Μητρώο οπλισμού και υλικού">Στο Μητρώο (${n})</button></dd>`;
+    ${vehs.length > 0 && html`<div data-held-veh=""><span className="muted">Οχήματα:</span> ${vehs.map((v: any, i: number) => html`${i ? ', ' : ''}<b>${[v.r.a.type, v.r.a.plate || v.r.a.no].filter(Boolean).join(' ')}</b>${v.drv ? html` <small className="muted">(οδηγός)</small>` : ''}`)}</div>`}
+    ${n > 0 && html`<button type="button" className="linkish" onClick=${() => nav.go('weapons', { wtab: 'mitroo', aq: who ? who.last : '' })} data-tip="Δες τα στο Μητρώο οπλισμού και υλικού">Στο Μητρώο (${n})</button>`}
+    ${vehs.length > 0 && html`${n > 0 ? ' ' : ''}<button type="button" className="linkish" onClick=${() => nav.go('vehicles', { vsel: vehs[0].r.key })} data-tip="Δες τα στην οθόνη Οχήματα">Στα Οχήματα (${vehs.length})</button>`}</dd>`;
 }

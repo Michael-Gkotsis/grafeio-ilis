@@ -15,6 +15,7 @@ import { noNotes, cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, isAway, it
 import { insertCadre, isManualOrder } from './cadre';
 import { clearRange, setNoDuty } from './cadrePlan';
 import { assetCfgOf, catOf, cleanAsset, doMaint, holderText, registry, sameHolder, STATE_TXT } from './assets';
+import { doVehMaint, driverText, kmTxt, numTxt, vehName, withKm } from './vehicles';
 import { cleanPerson, dutyCfgOf, serviceOf } from './cadreDuty';
 import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
@@ -53,8 +54,12 @@ export type Command =
   | { t: 'setCadreDutyOf'; cid: string; person: CadreDutyPerson | null }
   // Μητρώο οπλισμού και υλικού (shared/assets.ts): id = αληθινή εγγραφή, ή base = η εικονική γραμμή (από το Δυναμολόγιο) που γίνεται εγγραφή με την πρώτη αλλαγή
   | { t: 'saveAsset'; asset: Omit<Asset, 'id'> & { id?: string }; date: ISODate }
-  | { t: 'assetMaint'; id: string; base?: Asset; date: ISODate; note?: string }
-  | { t: 'assetState'; id: string; base?: Asset; state: 'ok' | 'repair' | 'writeoff'; why?: string; date: ISODate }
+  | { t: 'assetMaint'; id: string; base?: Asset; date: ISODate; note?: string; km?: number }
+  | { t: 'assetState'; id: string; base?: Asset; state: 'ok' | 'repair' | 'writeoff' | 'immobile'; why?: string; date: ISODate }
+  // Οχήματα (shared/vehicles.ts): γέμισμα (λίτρα + km), χιλιόμετρα, οδηγός
+  | { t: 'assetFuel'; id: string; base?: Asset; date: ISODate; litres: number; km?: number }
+  | { t: 'assetKm'; id: string; base?: Asset; date: ISODate; km: number }
+  | { t: 'assetDriver'; id: string; base?: Asset; date: ISODate; driver: Asset['driver'] | null }
   | { t: 'assetHolder'; id: string; base?: Asset; holder: AssetHolder | null; date: ISODate }
   | { t: 'assetGone'; id: string; base?: Asset; why?: string; date: ISODate }
   | { t: 'deleteAsset'; id: string }
@@ -444,9 +449,9 @@ export function apply(s: AppState, c: Command, ctx: Ctx): Result {
   return state === r.state ? r : { ...r, state, files: r.files.includes('Ποινές') ? r.files : [...r.files, 'Ποινές'] };
 }
 // Μητρώο οπλισμού και υλικού: κάθε αλλαγή είναι εντολή (αναίρεση) και γράφει γεγονός στο ιστορικό της εγγραφής
-function assetCmd(s: AppState, c: Extract<Command, { t: 'saveAsset' | 'assetMaint' | 'assetState' | 'assetHolder' | 'assetGone' | 'deleteAsset' }>, ctx: Ctx): Result {
+function assetCmd(s: AppState, c: Extract<Command, { t: 'saveAsset' | 'assetMaint' | 'assetState' | 'assetHolder' | 'assetGone' | 'deleteAsset' | 'assetFuel' | 'assetKm' | 'assetDriver' }>, ctx: Ctx): Result {
   const list = s.assets || []; const log = s.assetLog || []; const cfg = assetCfgOf(s.settings);
-  const ev = (aid: string, date: ISODate, what: AssetEvent['what'], text?: string): AssetEvent => ({ id: 'e' + ctx.newId(), aid, date, what, ...(text ? { text } : {}) });
+  const ev = (aid: string, date: ISODate, what: AssetEvent['what'], text?: string, more?: Pick<AssetEvent, 'litres' | 'km'>): AssetEvent => ({ id: 'e' + ctx.newId(), aid, date, what, ...(text ? { text } : {}), ...(more || {}) });
   const label = (a: Asset) => [a.type, a.no].filter(Boolean).join(' ');
   if (c.t === 'deleteAsset') {
     const a = list.find(x => x.id === c.id); if (!a) throw new Error('Δεν βρέθηκε η εγγραφή');
@@ -467,8 +472,23 @@ function assetCmd(s: AppState, c: Extract<Command, { t: 'saveAsset' | 'assetMain
   const put = (a: Asset, st: AppState = s, e?: AssetEvent): AppState => ({ ...st, assets: cur ? (st.assets || list).map(y => (y.id === cur.id ? a : y)) : [...(st.assets || list), a], assetLog: e ? [...(st.assetLog || log), e] : st.assetLog });
   const nm = label(a0);
   if (c.t === 'assetMaint') {
-    const a = { ...a0, maint: doMaint(a0, catOf(cfg, a0.cat), c.date) };
-    return { state: put(a, s, ev(a.id, c.date, 'maint', c.note?.trim() || undefined)), text: 'Μητρώο: συντήρηση ' + nm, files: [] };
+    const veh = catOf(cfg, a0.cat)?.kind === 'vehicle'; const km = veh && c.km != null && isFinite(c.km) && c.km >= 0 ? c.km : undefined;
+    const a = withKm({ ...a0, maint: veh ? doVehMaint(a0, catOf(cfg, a0.cat), c.date, km) : doMaint(a0, catOf(cfg, a0.cat), c.date) }, km, c.date);
+    return { state: put(a, s, ev(a.id, c.date, 'maint', c.note?.trim() || undefined, km != null ? { km } : undefined)), text: 'Μητρώο: συντήρηση ' + nm, files: [] };
+  }
+  // οχήματα: γέμισμα (λίτρα, και km του οδομέτρου), χιλιόμετρα, οδηγός. Τα km/kmOn ενημερώνονται αν η μέρα δεν είναι παλιότερη από την τελευταία καταγραφή
+  if (c.t === 'assetFuel') {
+    if (!(c.litres > 0)) throw new Error('Γράψε πόσα λίτρα');
+    const km = c.km != null && isFinite(c.km) && c.km >= 0 ? c.km : undefined; const cat = catOf(cfg, a0.cat);
+    return { state: put(withKm(a0, km, c.date), s, ev(a0.id, c.date, 'fuel', numTxt(c.litres) + ' λίτρα' + (km != null ? ' στα ' + kmTxt(km, cat) : ''), { litres: c.litres, ...(km != null ? { km } : {}) })), text: 'Οχήματα: γέμισμα ' + vehName(a0), files: [] };
+  }
+  if (c.t === 'assetKm') {
+    if (!isFinite(c.km) || c.km < 0) throw new Error('Γράψε τα χιλιόμετρα');
+    return { state: put(withKm(a0, c.km, c.date), s, ev(a0.id, c.date, 'km', kmTxt(c.km, catOf(cfg, a0.cat)), { km: c.km })), text: 'Οχήματα: χιλιόμετρα ' + vehName(a0), files: [] };
+  }
+  if (c.t === 'assetDriver') {
+    const a: Asset = { ...a0 }; if (c.driver) a.driver = c.driver; else delete a.driver;
+    return { state: put(a, s, ev(a.id, c.date, 'assign', c.driver ? 'οδηγός: ' + driverText(s, c.driver) : 'χωρίς οδηγό')), text: 'Οχήματα: οδηγός ' + vehName(a0), files: [] };
   }
   if (c.t === 'assetState') {
     const why = (c.why || '').replace(/\s+/g, ' ').trim(); const was = a0.state;
@@ -751,7 +771,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const p = c.person && cleanPerson(c.person); const rest = { ...(s.cadreDutyOf || {}) }; if (p) rest[x.id] = p; else delete rest[x.id];
       return { state: { ...s, cadreDutyOf: rest }, text: 'Στέλεχος: ' + rankTxt(x) + ' ' + x.last + ', στοιχεία υπηρεσιών' + (p ? '' : ' (καθαρίστηκαν)'), files: [] };
     }
-    case 'saveAsset': case 'assetMaint': case 'assetState': case 'assetHolder': case 'assetGone': case 'deleteAsset': return assetCmd(s, c, ctx);
+    case 'saveAsset': case 'assetMaint': case 'assetState': case 'assetHolder': case 'assetGone': case 'deleteAsset': case 'assetFuel': case 'assetKm': case 'assetDriver': return assetCmd(s, c, ctx);
     case 'addRequest': case 'updateRequest': {
       const p = pm.get(c.req.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
       const lv = c.req.leave;

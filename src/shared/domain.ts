@@ -448,6 +448,7 @@ export interface AssetCat {
   fields: { id: string; name: string }[];
   every?: number;                        // συντήρηση κάθε N μήνες (προεπιλογή της κατηγορίας)
   everyKm?: number;                      // οχήματα: και κάθε N χλμ
+  hours?: boolean;                       // οχήματα: μετρά ώρες κινητήρα αντί για χιλιόμετρα (ετικέτα «ώρ.»)· επέκταση του σχήματος της φάσης 5
 }
 export interface PlaceWord { word: string; means: 'rack' | 'box' | 'duty' | 'leave' | 'guard' | 'store' | 'other'; note?: string }
 export interface AssetCfg { cats: AssetCat[]; places: PlaceWord[]; warnDays: number }
@@ -546,7 +547,8 @@ export type HkSection = 'veh' | 'acc' | 'grd' | 'prov' | 'lv';
 export const HK_DEFAULT_OFF: HkSection[] = ['lv'];
 export interface HkVehicle { type: string; prov?: number; kin?: number; maint?: number; dmg?: number }
 // head: η κεφαλίδα της ΗΚΑΙ (2 γραμμές πάνω αριστερά, π.χ. ΚΕΤΘ / 2Η ΕΠΧΙΑ)· κενή = ό,τι έχει το έντυπο
-export interface HkaiSettings { off?: HkSection[]; on?: HkSection[]; veh?: HkVehicle; prov?: Record<string, number>; head?: string[] }
+// vehReg: «Από το μητρώο οχημάτων» (προεπιλογή κλειστό): τα κενά της κατάστασης οχημάτων γεμίζουν από το μητρώο (shared/vehicles.ts)· ό,τι γράφεις υπερισχύει
+export interface HkaiSettings { off?: HkSection[]; on?: HkSection[]; veh?: HkVehicle; vehReg?: boolean; prov?: Record<string, number>; head?: string[] }
 export const hkOn = (st: Settings, k: HkSection) => (HK_DEFAULT_OFF.includes(k) ? (st.hkai?.on || []).includes(k) : !(st.hkai?.off || []).includes(k));
 // Ανοίγει ή κλείνει μία ενότητα, στη λίστα που της αντιστοιχεί (off για όσες είναι ανοιχτές από προεπιλογή, on για τις άλλες)
 export function hkToggle(h: HkaiSettings, k: HkSection, on: boolean): HkaiSettings {

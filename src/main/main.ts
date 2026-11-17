@@ -1173,6 +1173,16 @@ else {
         return { ok: true, file: out, warnings };
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
     });
+    // Οχήματα: νέο αρχείο «ΚΑΤΑΣΤΑΣΗ ΟΧΗΜΑΤΩΝ» (φύλλο ανά κατηγορία, ΚΑΥΣΙΜΑ, ΣΥΝΤΗΡΗΣΕΙΣ)· print: προεπισκόπηση εκτύπωσης
+    ipcMain.handle('export:vehicles', async (_e, print?: boolean) => {
+      try {
+        const r = await excel().vehicleBook(store.state, today());
+        const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
+        const warnings: string[] = [];
+        if (print) { const p = await printPreview(out); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else shell.openPath(out);
+        return { ok: true, file: out, warnings };
+      } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
+    });
     ipcMain.handle('export:roster', async (_e, date: ISODate, print?: boolean, sigs?: Sig[], headId?: string) => {
       try {
         const r = await made('rosterPrint', date, store.state, sigs, undefined, headId);
