@@ -164,12 +164,14 @@ export function mapHkBack(rows: XlValue[][], merges: Rect[], place: string): HkB
   out.egr = right(/^1\s*\.?\s*ΕΓΓΡΑΦΕΣ(?![\p{L}\d])/u); out.dia = right(/^2\s*\.?\s*ΔΙΑΓΡΑΦΕΣ(?![\p{L}\d])/u); out.leaves = right(/^3\s*\.?\s*ΑΔΕΙΕΣ(?![\p{L}\d])/u);
   out.puns = right(/^4\s*\.?\s*ΠΟΙΝΕΣ(?![\p{L}\d])/u); out.reqs = right(/^5\s*\.?\s*ΑΙΤΗΣΕΙΣ(?![\p{L}\d])/u); out.loi = right(/^6\s*\.?\s*ΛΟΙΠΑ(?![\p{L}\d])/u);
   const below = (re: RegExp, k = 1) => { const x = find(re); if (!x) return undefined; const r = (mergeOf(merges, x.r, x.c)?.r2 ?? x.r) + k; return ref(x.c, r); };
-  out.off = below(/^ΑΞΙΩΜΑΤΙΚΟΙ\s*:?$/); out.ly = below(/^ΥΠΑΞΙΩΜΑΤΙΚΟΙ\s*:?$/); out.dy = below(/^ΥΠΑΞΙΩΜΑΤΙΚΟΙ\s*:?$/, 2);
+  // και με συντομογραφίες, μόνο με «:» («Αξκοι:», «Υπξκοι:»· χωρίς «:» είναι επικεφαλίδες στηλών, π.χ. στις φρουρές)
+  const UPX = /^(ΥΠΑΞΙΩΜΑΤΙΚΟΙ\s*:?|(ΥΠΑΞΚΟΙ|ΥΠΞΚΟΙ)\s*:)$/;
+  out.off = below(/^(ΑΞΙΩΜΑΤΙΚΟΙ\s*:?|ΑΞΚΟΙ\s*:)$/); out.ly = below(UPX); out.dy = below(UPX, 2);
   const pl = tnorm(place).replace(/[^Α-ΩA-Z]/g, '');
   const d = pl ? cs.filter(x => x.t.replace(/[^Α-ΩA-Z,]/g, '').startsWith(pl + ',')).sort((a, b) => b.r - a.r)[0] : undefined;
   if (d) out.date = ref(d.c, d.r);
   // φρουρές: η στήλη «Στρατιώτες» της επικεφαλίδας, στις γραμμές «Νυκτοφρουρές» και «24ώρες»
-  const night = find(/^ΝΥΚΤΟΦΡΟΥΡ/), day = find(/^24\s*ΩΡ/);
+  const night = find(/^ΝΥ[ΚΧ]ΤΟΦΡΟΥΡ/), day = find(/^24\s*ΩΡ/);
   const strat = (x: TCell | undefined) => x && cs.filter(y => y.r < x.r && /^ΣΤΡΑΤΙΩΤΕΣ$/.test(y.t)).sort((a, b) => b.r - a.r)[0];
   const sn = strat(night), sd = strat(day);
   if (night && sn) out.night = ref(sn.c, night.r);

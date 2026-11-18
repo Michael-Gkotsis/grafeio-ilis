@@ -233,12 +233,25 @@ export function fillTitle(t: string, o: { unit: string; d: ISODate; fmt: BackFor
 export const frame = (t: string, filled: string[] = []) => { let x = t; for (const f of filled) if (f) x = x.split(f).join(''); return x.replace(BLANK_RUN, '').toUpperCase().replace(new RegExp('(?<![\\p{L}])(?:' + HK_MON.join('|') + '|ΜΑΪ)(?![\\p{L}])', 'gu'), '').replace(/[\s_…./\d]+/g, ''); };
 
 // ------------------------------------------------------------------ the loose texts of the front
-export interface FrontPlan { writes: { sheet: string; r: number; c: number; value: string; over: string }[]; warnings: string[]; found: { title: boolean; date: boolean; sigs: number }; sigsDone: string[]; sigsLost: string[] }
+export interface FrontPlan { writes: { sheet: string; r: number; c: number; value: string | number; over: string }[]; warnings: string[]; found: { title: boolean; date: boolean; sigs: number }; sigsDone: string[]; sigsLost: string[]; dates: { r: number; c: number; old: Date }[] }
+// «ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ … ΤΗΣ» | 14/8/2024 · «Πυλί, Κως,» | 14-Αυγ-24: η ημερομηνία σε δικό της κελί δεξιά (κελί με μορφή ημερομηνίας, όχι τύπος).
+// Το πρώτο μη κενό κελί δεξιά στην ίδια γραμμή· αν είναι κάτι άλλο, δεν υπάρχει τέτοιο κελί.
+function dateRight(g: Grid, sh: SheetModel, r: number, c: number): { r: number; c: number; old: Date } | null {
+  const from = (g.mergeOf(r, c)?.c2 ?? c) + 1;
+  for (let cc = from; cc < from + 30; cc++) {
+    const m = g.mergeOf(r, cc); if (m && (m.r1 !== r || m.c1 !== cc)) continue;
+    const v = sh.rows[r]?.[cc]; if (v == null || v === '' || (typeof v === 'string' && !v.trim())) continue;
+    return v instanceof Date && !g.isFormula(r, cc) ? { r, c: cc, old: v } : null;
+  }
+  return null;
+}
 const SIGROLE = /^(Ο|Η|ΤΟ|ΟΙ)\s+(?!ΑΠΟ\b)[Α-Ω0-9ΆΈΉΊΌΎΏ][^:]{2,40}$/;
 const NAMELINE = /^[\s_…\-–.]*(?:[_…]{3,}|\.{4,})[\s_…\-–.]*$/;
-export function frontTexts(sh: SheetModel, o: { unit: string; place: string; d: ISODate; fmt: BackFormat['date']; sigs: { art: string; title: string; name?: string }[]; skipRows?: (r: number, c: number) => boolean }): FrontPlan {
-  const g = new Grid(sh); const plan: FrontPlan = { writes: [], warnings: [], found: { title: false, date: false, sigs: 0 }, sigsDone: [], sigsLost: [] };
+export function frontTexts(sh: SheetModel, o: { unit: string; place: string; d: ISODate; fmt: BackFormat['date']; sigs: { art: string; title: string; name?: string }[]; skipRows?: (r: number, c: number) => boolean; serial?: number }): FrontPlan {
+  const g = new Grid(sh); const plan: FrontPlan = { writes: [], warnings: [], found: { title: false, date: false, sigs: 0 }, sigsDone: [], sigsLost: [], dates: [] };
   const put = (r: number, c: number, over: string, value: string) => { if (value !== over) plan.writes.push({ sheet: sh.name, r, c, value, over }); };
+  // η ημερομηνία στο κελί δεξιά: ο αριθμός της μέρας του Excel (η μορφή του κελιού μένει όπως την έχει το έντυπο)
+  const putDate = (x: { r: number; c: number; old: Date }) => { if (o.serial == null) return false; plan.writes.push({ sheet: sh.name, r: x.r, c: x.c, value: o.serial, over: '' }); plan.dates.push(x); return true; };
   for (let r = 0; r < g.nRows; r++) {
     const row = sh.rows[r]; if (!row) continue;
     for (let c = 0; c < row.length; c++) {
@@ -248,12 +261,14 @@ export function frontTexts(sh: SheetModel, o: { unit: string; place: string; d: 
       if (/(^|\s)ΗΜΕΡΗΣΙΑ[ΣΣ]?\s+ΑΝΑΦΟΡΑ[ΣΣ]?(?![\p{L}])/u.test(n)) {
         plan.found.title = true;
         const res = fillTitle(raw, { unit: upper(o.unit), d: o.d, fmt: o.fmt });
-        if (!res.date) plan.warnings.push('Ο τίτλος «' + t.slice(0, 40) + '» δεν έχει κενό ή ημερομηνία: δεν γράφτηκε');
+        if (!res.date) { const dr = dateRight(g, sh, r, c); if (!(dr && putDate(dr))) plan.warnings.push('Ο τίτλος «' + t.slice(0, 40) + '» δεν έχει κενό ή ημερομηνία: δεν γράφτηκε'); }
         else if (frame(res.text, [upper(o.unit), fmtDate(o.d, 'hk'), fmtDate(o.d, 'slash'), fmtDate(o.d, 'slash4')]) !== frame(raw, [])) plan.warnings.push('Ο τίτλος δεν γράφτηκε (θα άλλαζε λέξεις του εντύπου)');
         else put(r, c, raw, res.text);
         for (const s of res.skipped) plan.warnings.push('Στον τίτλο: ' + s + ': δεν γράφτηκε');
         continue;
       }
+      // «Πυλί, Κως,» και η ημερομηνία σε δικό της κελί δεξιά
+      if (/^[^\d:]{1,40},$/u.test(t.trim())) { const dr = dateRight(g, sh, r, c); if (dr && putDate(dr)) { plan.found.date = true; continue; } }
       // «Τόπος, 25/09/26» · «Τόπος, / /» · «……, ημερομηνία» (a short text, a comma, then the date or its blank)
       const pd = /^([^\d,:]{0,40}?|[_….\s]+),\s*(.*)$/u.exec(t);
       if (pd && (DATE_SLASH.test(pd[2]) || DATE_WORD.test(pd[2])) && !/\p{L}{4,}\s+\p{L}{4,}\s+\p{L}{4,}/u.test(pd[1]) && pd[2].replace(DATE_SLASH, '').replace(DATE_WORD, '').replace(/[_….\s]/g, '') === '') {

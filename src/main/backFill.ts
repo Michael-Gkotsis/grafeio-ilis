@@ -4,8 +4,8 @@
 //   a category the form has no section for: it is counted and reported, not put in another section
 // Lines that do not fit the rows of a section continue on a copy of the template's own continuation sheet («ΕΠΕΚΤΑΣΗ ΣΕΛΙΔΑΣ»), if it has one, else they are reported.
 import type { Workbook } from './xlsx';
-import { colName, splitRef, type XlValue } from './xlsx';
-import { mapHkBack } from './tplmap';
+import { colName, splitRef, toSerial, type XlValue } from './xlsx';
+import { mapHkBack, type HkBack } from './tplmap';
 import { textPx } from './textfit';
 import type { PlannedWrite } from './safeWrite';
 import type { SheetModel } from '../shared/sheetModel';
@@ -20,7 +20,8 @@ import { hkWho } from '../shared/punish';
 import { postBy, seatMap } from '../shared/rules';
 import { rankTxt } from '../shared/ranks';
 import { hkOffText } from '../shared/cadre';
-import { hkaiVeh } from '../shared/vehicles';
+import { hkaiVeh, vehHkai, vehRowOf, vehicleRows } from '../shared/vehicles';
+import { assetCfgOf, catOf } from '../shared/assets';
 import { upper } from '../shared/text';
 import { SEC_NAME, continuationOf, dateIn, formatOf, frontTexts, numLabel, pickBack, slotsOfContinuation, wrapText, type BackForm, type BackFormat, type BackSection, type SecId, type Slot } from '../shared/backForm';
 import { sigsCustom, sigsFor, sigsSaved, type Sig } from '../shared/sigs';
@@ -83,14 +84,25 @@ export async function planExtras(wb: Workbook, sheets: SheetModel[], front: stri
   const sigsIn = o.sigs ?? (sigsCustom(s.settings, 'hkai') ? sigsSaved(s.settings, 'hkai') : null);
   const sigs = sigsIn ? sigsFor(s.settings, sigsIn) : [];
   const texts = new Set<string>([front]); if (pick) texts.add(pick.sheet.name);
-  const sigFound = new Set<string>();
+  const sigFound = new Set<string>(); const frontDates: { r: number; c: number; old: Date }[] = [];
   for (const name of texts) {
     const sh = sheets.find(x => x.name === name)!;
-    const fp = frontTexts(sh, { unit: s.settings.unitName || '', place: s.settings.place || '', d, fmt: fmt.date, sigs });
+    const fp = frontTexts(sh, { unit: s.settings.unitName || '', place: s.settings.place || '', d, fmt: fmt.date, sigs, serial: toSerial(d, wb.date1904) });
     for (const w of fp.writes) plan.push({ sheet: w.sheet, r: w.r, c: w.c, value: w.value, exact: true, over: w.over });
     warnings.push(...fp.warnings); for (const t of fp.sigsDone) sigFound.add(t);
     rep.front.title ||= fp.found.title; rep.front.date ||= fp.found.date; rep.front.sigs = Math.max(rep.front.sigs, fp.found.sigs);
+    if (name === front) frontDates.push(...fp.dates);
     if (name === front && !fp.found.title) warnings.push('Δεν βρέθηκε τίτλος «Ημερήσια αναφορά…» στο έντυπο: η ημερομηνία δεν γράφτηκε στον τίτλο');
+  }
+  // η ίδια ημερομηνία στην ίδια θέση των άλλων φύλλων (π.χ. η πίσω όψη με ημερομηνία στο U4 όπως η μπροστινή): μόνο κελί ημερομηνίας,
+  // όχι τύπος, ως έναν μήνα από την παλιά ημερομηνία της μπροστινής
+  if (frontDates.length) for (const x of sheets) {
+    if (x.name === front) continue;
+    for (const f of frontDates) {
+      const v = x.rows[f.r]?.[f.c]; if (!(v instanceof Date) || x.fx.has(f.r + ':' + f.c) || Math.abs(v.getTime() - f.old.getTime()) > 31 * 86400000) continue;
+      if (plan.some(w => w.sheet === x.name && w.r === f.r && w.c === f.c)) continue;
+      plan.push({ sheet: x.name, r: f.r, c: f.c, value: toSerial(d, wb.date1904), exact: true, over: '' });
+    }
   }
   for (const x of sigs) if (x.name && x.title && !sigFound.has(x.title)) warnings.push('Η υπογραφή «' + [x.art, x.title].filter(Boolean).join(' ') + '» δεν βρέθηκε στο έντυπο (ή δεν έχει γραμμή για το όνομα): το όνομα δεν γράφτηκε');
   if (!pick) { if (entries.length) warnings.push('Δεν βρέθηκε πίσω όψη με ενότητες (Εγγραφές, Διαγραφές, Αιτήσεις…): ' + entries.length + ' γραμμές δεν γράφτηκαν'); return { plan, warnings, report: rep, blocked }; }
@@ -156,29 +168,62 @@ export async function planExtras(wb: Workbook, sheets: SheetModel[], front: stri
     for (const x of rep.sections) if (x.unplaced > 0) { const n = left.get(x.id) || 0; warnings.push('Στην ενότητα «' + x.text + '» δεν χωράνε ' + n + ' γραμμές' + (cont ? '' : ' (το έντυπο δεν έχει σελίδα συνέχειας)') + ': δεν γράφτηκαν'); }
   }
   // ---- the left column: officers of the day, guards, vehicles (found by their labels, as the bundled form does)
-  const rows = await wb.values(form.sheet, 400, 40) as XlValue[][];
-  const B = mapHkBack(rows, ws.merges(), s.settings.place);
-  const put = (refS: string | undefined, v: string | number | null, what: string) => {
-    if (!refS) { if (v != null && v !== '') warnings.push('Το έντυπο δεν έχει «' + what + '»: δεν γράφτηκε'); return; }
-    const { r, c } = splitRef(refS); plan.push({ sheet: form.sheet, r: r - 1, c: c - 1, value: v });
+  // στο φύλλο της πίσω όψης· ό,τι δεν είναι εκεί, στα άλλα φύλλα του βιβλίου (μονάδα με τις ΜΕΤΑΒΟΛΕΣ στη μπροστινή σελίδα και
+  // τις φρουρές/οχήματα στην «Πίσω Όψη», Michael 18/11)
+  const found: { sheet: string; B: HkBack; rows: XlValue[][] }[] = [];
+  for (const name of [form.sheet, ...sheets.map(x => x.name).filter(n => n !== form.sheet)]) {
+    const w = await wb.sheet(name); const rv = await wb.values(name, 400, 40) as XlValue[][];
+    found.push({ sheet: name, B: mapHkBack(rv, w.merges(), s.settings.place), rows: rv });
+  }
+  const at = (k: keyof HkBack) => found.find(x => x.B[k]);
+  const put = (k: keyof HkBack, v: string | number | null, what: string, from = at(k)) => {
+    const refS = from?.B[k];
+    if (!from || !refS) { if (v != null && v !== '') warnings.push('Το έντυπο δεν έχει «' + what + '»: δεν γράφτηκε'); return; }
+    const { r, c } = splitRef(refS); plan.push({ sheet: from.sheet, r: r - 1, c: c - 1, value: v });
   };
-  const off = hkOffText(s, d); if (off) put(B.off, off, 'Αξιωματικοί:');
+  const off = hkOffText(s, d); if (off) put('off', off, 'Αξιωματικοί:');
   const pm = seatMap(s); const og = hkOrgans(s, d); const ly = og.ly != null ? pm.get(og.ly) : undefined, dy = og.dy != null ? pm.get(og.dy) : undefined;
   const who = (p: Person) => [rankTxt(p), p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
-  if (ly) put(B.ly, 'Λ/Υ: ' + who(ly), 'Υπαξιωματικοί:'); if (dy) put(B.dy, 'Δ/Υ: ' + who(dy), 'Υπαξιωματικοί:');
+  if (ly) put('ly', 'Λ/Υ: ' + who(ly), 'Υπαξιωματικοί:'); if (dy) put('dy', 'Δ/Υ: ' + who(dy), 'Υπαξιωματικοί:');
   const g = s.guards[d] || {}; let night = 0, day24 = 0;
   for (const k in g) { const p = postBy(s, k); if (!p) continue; if (p.kind === 'th' || p.kind === 'sk' || p.kind === 'op') night++; else day24++; }
-  if (hkOn(s.settings, 'grd')) { put(B.night, night || null, 'Νυκτοφρουρές'); put(B.day24, day24 || null, '24ώρες'); }
+  if (hkOn(s.settings, 'grd')) { put('night', night || null, 'Νυκτοφρουρές'); put('day24', day24 || null, '24ώρες'); }
   const v = hkaiVeh(s, d);
+  const vf = at('vType');
   if (hkOn(s.settings, 'veh') && v) {
     // the table of the unit has its OWN vehicle types: the numbers go only to the row whose type is the one given, never to another type's row
-    const typeCell = B.vType ? splitRef(B.vType) : null; const have = typeCell ? String(rows[typeCell.r - 1]?.[typeCell.c - 1] ?? '').trim() : '';
-    if (have && v.type && phraseKey(have) !== phraseKey(v.type)) warnings.push('Στον πίνακα οχημάτων η πρώτη γραμμή είναι «' + have + '», όχι «' + v.type + '»: τα οχήματα δεν γράφτηκαν');
-    else if (have && !v.type) warnings.push('Στον πίνακα οχημάτων δεν ξέρω ποιο είδος είναι τα νούμερα: δεν γράφτηκαν');
+    const typeCell = vf ? splitRef(vf.B.vType!) : null; const have = typeCell ? String(vf!.rows[typeCell.r - 1]?.[typeCell.c - 1] ?? '').trim() : '';
+    if (have && v.type && phraseKey(have) !== phraseKey(v.type)) {
+      if (!vehTable(vf!, typeCell!)) warnings.push('Στον πίνακα οχημάτων η πρώτη γραμμή είναι «' + have + '», όχι «' + v.type + '»: τα οχήματα δεν γράφτηκαν');
+    } else if (have && !v.type) warnings.push('Στον πίνακα οχημάτων δεν ξέρω ποιο είδος είναι τα νούμερα: δεν γράφτηκαν');
     else {
-      if (v.type && !have) put(B.vType, v.type, 'Είδη οχημάτων');
-      for (const [r2, x, w] of [[B.vProv, v.prov, 'Προβλέπονται'], [B.vKin, v.kin, 'Σε κίνηση'], [B.vMaint, v.maint, 'Για συντήρηση'], [B.vDmg, v.dmg, 'Λόγω βλάβης']] as const) put(r2, x ?? null, w + ' (οχήματα)');
+      if (v.type && !have) put('vType', v.type, 'Είδη οχημάτων', vf);
+      for (const [k, x, w] of [['vProv', v.prov, 'Προβλέπονται'], ['vKin', v.kin, 'Σε κίνηση'], ['vMaint', v.maint, 'Για συντήρηση'], ['vDmg', v.dmg, 'Λόγω βλάβης']] as const) put(k, x ?? null, w + ' (οχήματα)', vf);
     }
+  }
+  // Πίνακας με μία γραμμή ανά είδος της μονάδας («1/4 τόνων», «3/4 τόνων»… «ΣΥΝΟΛΟ»): κάθε όχημα του μητρώου στη γραμμή του είδους του
+  // (vehRowOf). Μόνο με «Από το μητρώο οχημάτων»· τα νούμερα με το χέρι είναι ένα είδος και δεν μοιράζονται σε γραμμές.
+  function vehTable(f: { sheet: string; B: HkBack; rows: XlValue[][] }, tc: { r: number; c: number }): boolean {
+    const labels: { r: number; t: string }[] = []; let total: number | null = null;
+    for (let r = tc.r; r < tc.r + 12; r++) {
+      const t = String(f.rows[r - 1]?.[tc.c - 1] ?? '').replace(/\s+/g, ' ').trim(); if (!t) break;
+      if (/^ΣΥΝΟΛ/.test(upper(t))) { total = r; break; } labels.push({ r, t });
+    }
+    if (labels.length < 2) return false;
+    if (!s.settings.hkai?.vehReg) { warnings.push('Ο πίνακας οχημάτων του εντύπου έχει γραμμή ανά είδος («' + labels.map(x => x.t).join('», «') + '»): γεμίζει μόνο με «Από το μητρώο οχημάτων» (Ρυθμίσεις της ΗΚΑΙ)· δεν γράφτηκε'); return true; }
+    const cfg = assetCfgOf(s.settings); const idx = new Map<string, number | null>(); let none = 0, many = 0;
+    for (const r of vehicleRows(s)) { const i = vehRowOf(r, labels.map(x => x.t), catOf(cfg, r.a.cat)?.name || ''); idx.set(r.key, i); if (i == null) none++; else if (i < 0) many++; }
+    const model = sheets.find(x => x.name === f.sheet); const isF = (r: number, c: number) => !!model?.fx.has((r - 1) + ':' + (c - 1));
+    const cols = (['vProv', 'vKin', 'vMaint', 'vDmg'] as const).map(k => (f.B[k] ? splitRef(f.B[k]!).c : null));
+    const sum = [0, 0, 0, 0];
+    labels.forEach((l, i) => {
+      const x = vehHkai(s, d, r => idx.get(r.key) === i)!; const vals = [x.prov ?? 0, x.kin ?? 0, x.maint ?? 0, x.dmg ?? 0];
+      vals.forEach((n, j) => { sum[j] += n; const c = cols[j]; if (c != null && !isF(l.r, c)) plan.push({ sheet: f.sheet, r: l.r - 1, c: c - 1, value: n || null }); });
+    });
+    if (total != null) sum.forEach((n, j) => { const c = cols[j]; if (c != null && !isF(total!, c)) plan.push({ sheet: f.sheet, r: total! - 1, c: c - 1, value: n }); });
+    if (none) warnings.push((none === 1 ? '1 όχημα δεν ταιριάζει' : none + ' οχήματα δεν ταιριάζουν') + ' σε γραμμή του πίνακα οχημάτων («' + labels.map(x => x.t).join('», «') + '») και δεν μετρήθηκε/αν. Γράψε στον τύπο του οχήματος ή σε ένα πεδίο του το είδος της γραμμής (π.χ. «1/4»)');
+    if (many) warnings.push((many === 1 ? '1 όχημα ταιριάζει' : many + ' οχήματα ταιριάζουν') + ' σε περισσότερες από μία γραμμές του πίνακα οχημάτων και δεν μετρήθηκε/αν');
+    return true;
   }
   return { plan, warnings, report: rep, blocked };
 }
