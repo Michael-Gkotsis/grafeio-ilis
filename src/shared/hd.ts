@@ -6,7 +6,8 @@ import { hkaiCadreLeaveLines, hkaiDiaLines, hkaiEgrLines, hkaiPunLines, hkaiSold
 import { hkOffText, orderedCadre } from './cadre';
 import { rankTxt } from './ranks';
 import { mondayOf } from './imer';
-import { upper } from './text';
+import { normGreek, upper } from './text';
+import { dutyCfgOf, serviceOf } from './cadreDuty';
 import type { DocHead, HeadItem } from './docHead';
 import { zonesOf } from './headLayout';
 import type { AppState, Cadre, Settings } from './domain';
@@ -24,13 +25,33 @@ export const cadreTxt = (c: Cadre) => upper([rankTxt(c), c.spec ? '(' + c.spec +
 export const hdCadreNames = (s: Pick<AppState, 'cadreList'>): string[] => orderedCadre(s.cadreList || []).filter(c => c.active).map(cadreTxt);
 const texts = (ls: Line[]) => ls.map(lineText);
 
+// ΑΥΔΜ και Ίλαρχος εβδομάδας από το πρόγραμμα υπηρεσιών στελεχών (Ρυθμίσεις › Υπηρεσίες στελεχών): ποια υπηρεσία είναι ποια φαίνεται από το όνομά της
+// (κεφαλαία, χωρίς τόνους, τελείες και κενά): «ΑΥΔΜ», «Α.Υ.Δ.Μ.» → ΑΥΔΜ· «Ίλαρχος εβδομάδας», «Ιλχος» → Ιλχος
+export const HD_ROSTER: { key: 'aydm' | 'ilxos'; re: RegExp }[] = [{ key: 'aydm', re: /ΑΥΔΜ/ }, { key: 'ilxos', re: /ΙΛΑΡΧ|ΙΛΧ/ }];
+const svcWord = (t: string) => normGreek(t).replace(/[^Α-ΩA-Z0-9]/g, '');
+export function hdRosterOn(s: Pick<AppState, 'settings' | 'cadreDuties' | 'cadreList'>, d: ISODate): { aydm: string; ilxos: string } {
+  const out = { aydm: '', ilxos: '' }; const cfg = dutyCfgOf(s.settings); if (!cfg.groups.length) return out;
+  const cl = new Map((s.cadreList || []).map(c => [c.id, c]));
+  for (const { key, re } of HD_ROSTER) {
+    const who: string[] = [];
+    for (const x of s.cadreDuties || []) {
+      if (x.date !== d) continue;
+      const v = serviceOf(cfg, x.svc)?.svc; const c = cl.get(x.cid);
+      if (v && c && (re.test(svcWord(v.name)) || re.test(svcWord(v.short))) && !who.includes(cadreTxt(c))) who.push(cadreTxt(c));
+    }
+    out[key] = who.join(', ');
+  }
+  return out;
+}
+
 // η προηγούμενη ΗΔ (πριν από τη μέρα d) και η τελευταία της ίδιας εβδομάδας (Δευτέρα–Κυριακή)
 const before = (s: Pick<AppState, 'hd'>, d: ISODate): ISODate[] => Object.keys(s.hd || {}).filter(x => x < d).sort();
 export function hdAuto(s: AppState, d: ISODate): HdDoc {
   const prev = before(s, d); const last = prev.length ? s.hd![prev[prev.length - 1]] : undefined;
   const wk = prev.filter(x => mondayOf(x) === mondayOf(d)); const lastWk = wk.length ? s.hd![wk[wk.length - 1]] : undefined;
+  const ro = hdRosterOn(s, d);   // το πρόγραμμα στελεχών της μέρας νικά το αντίγραφο της προηγούμενης ΗΔ· ό,τι έχει γραφτεί με το χέρι στη ΗΔ της μέρας (s.hd) δεν περνά από εδώ
   return {
-    aydm: last?.aydm || '', dn: hkOffText(s, d), ilxos: lastWk?.ilxos || '',
+    aydm: ro.aydm || last?.aydm || '', dn: hkOffText(s, d), ilxos: ro.ilxos || lastWk?.ilxos || '',
     ax: [[], [], texts(hkaiCadreLeaveLines(s, d)), [], []],
     op: [texts(hkaiEgrLines(s, d)), texts(hkaiDiaLines(s, d)), texts(hkaiSoldierLeaveLines(s, d)), texts(hkaiPunLines(s, d)), []],
     t2: last?.t2 || '', t3: last?.t3 || ''

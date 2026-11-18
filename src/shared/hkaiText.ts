@@ -8,7 +8,7 @@ import { collator, upper } from './text';
 import { genitive } from './greek';
 import { HK } from './unit';
 import { isUnit } from './mode';
-import { live, cadreAbsOf, cadreLeaveKey, leaveName, leavePhrase, leaveTextOf, rankTxt, type UserLists } from './ranks';
+import { live, cadreAbsOf, cadreLeaveKey, hkColOwn, leaveName, leavePhrase, leaveTextOf, rankTxt, type UserLists } from './ranks';
 import { cadreStatusOf, orderedCadre } from './cadre';
 
 // Κομμάτι κειμένου· u = υπογραμμισμένο (η διάρκεια της ποινής)
@@ -96,13 +96,15 @@ export function hkRange(x: Pick<Status, 'from' | 'to' | 'fromTime' | 'toTime' | 
 // Πρώτα τα στελέχη σε δύναμη (σειρά ιεραρχίας) με άδεια στις στήλες Κ.Άδ., Ειδ. ή Αναρρωτική της ΗΚΑΙ, μετά οι στρατιώτες σε δύναμη,
 // με μία αρίθμηση· στο τέλος το ελεύθερο κείμενο της οθόνης, χωρίς αριθμό.
 const CADRE_LEAVE_COLS = ['ka', 'eid', 'an'];
+// και η δική σου στήλη της ομάδας «Απόντες» (Ρυθμίσεις › Δικές μου στήλες ΗΚΑΙ): μετρά ως άδεια όπως η Κ.Άδ.
+const isLeaveCol = (col: string, lists?: UserLists) => CADRE_LEAVE_COLS.includes(col) || hkColOwn(col, lists)?.grp === 'abs';
 // οι γραμμές χωρίς αρίθμηση, χωριστά για στελέχη και στρατιώτες (η Ημερήσια Διαταγή τις θέλει σε δύο πίνακες)
 function leaveParts(s: AppState, d: ISODate, force = false): { cadre: Line[]; soldiers: Line[] } {
   if (!force && !hkLvOn(s, d)) return { cadre: [], soldiers: [] };
   const pm = personMap(s.people);
   const leave = (x: Status) => x.type === 'LEAVE' || x.type === 'HON' || x.type === 'SICK';
   const cadre = orderedCadre(s.cadreList || []).filter(c => c.active).flatMap(c => (s.cadreAbs || []).filter(a => a.cid === c.id && a.from === d)
-    .map(a => ({ c, st: cadreStatusOf(a, s.settings.lists) })).filter(x => CADRE_LEAVE_COLS.includes(x.st.col))
+    .map(a => ({ c, st: cadreStatusOf(a, s.settings.lists) })).filter(x => isLeaveCol(x.st.col, s.settings.lists))
     .sort((a, b) => a.st.abs.id.localeCompare(b.st.abs.id)));
   return {
     cadre: cadre.map(({ c, st }): Line => [{ t: upper([rankTxt(c), c.spec ? '(' + c.spec + ')' : '', c.last, c.first].filter(Boolean).join(' ') + ': ' + cadreLeaveHk(st.abs.kind, st.label, s.settings.lists) + ' ' + hkRange(st.abs) + '.') }]),
