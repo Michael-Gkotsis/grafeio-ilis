@@ -50,12 +50,13 @@ src/shared/     pure rules and types shared by main + renderer (domain.ts types,
                 dutyGrid.ts + dutyUnit.ts = monthly duty grid of ANOTHER unit (detection, code vocabulary, profile → unitCodes/unitOut overlay)
                 unitLists.ts + listMap.ts = lists of ANOTHER unit: services as a vertical list, outs/leaves side by side, room lists with VLOOKUP (detection, matching, write plans, screen model)
                 rosterUnit.ts + rosterUnitWrite.ts = roster (Δυναμολόγιο) of ANOTHER unit: master list + derived lists, mixed cadre/soldiers, own words (reading, screen model, write plan; used only when the binding has own:true)
+                weaponUnit.ts = weapons file of ANOTHER unit read into the registry (assets.ts): sheets, columns, type/place words, plan «Τι θα αλλάξει» (READ only, never writes their file; command importWeapons)
 src/main/       main.ts (entry, IPC handlers), db.ts (sql.js database), xlsx.ts (own Excel engine), exports.ts
                 (ΦΡΟΥΡΑ/ΗΚΑΙ/Εξοδούχοι forms), hdDocx.ts (Word ΗΔ), print.ts, sources.ts (unit Excel files),
                 worker.ts + offload.ts (Excel work off the main thread), update.ts + updater.ts,
                 tplLists.ts (fill + screen model of those lists; fillFroura / fillOuts call it when a saved mapping matches the file)
 src/preload/    preload.ts (IPC bridge), print.ts
-src/renderer/   app.ts (shell, nav, shortcuts), screens/*.ts (one per screen; dutyMap.ts, listMap.ts, rosterMap.ts = «Αντιστοίχιση…» dialogs), store.ts, mockApi.ts, styles.css
+src/renderer/   app.ts (shell, nav, shortcuts), screens/*.ts (one per screen; dutyMap.ts, listMap.ts, rosterMap.ts = «Αντιστοίχιση…» dialogs; weaponMap.ts = the same for a weapons file, opened from Οπλισμός › Μητρώο), store.ts, mockApi.ts, styles.css
 templates/      the official .xlsx templates (rule 1)
 ```
 - The renderer never imports from `src/main`; it reaches main only through the preload API (`src/shared/api.ts`).

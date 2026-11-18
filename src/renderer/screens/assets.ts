@@ -2,6 +2,7 @@
 // φίλτρα πάνω, πίνακας στη μέση και καρτέλα του επιλεγμένου δεξιά. Τα κύρια όπλα των ατόμων φαίνονται από το Δυναμολόγιο ως «εικονικές»
 // γραμμές και γίνονται εγγραφές με την πρώτη αλλαγή. Κάθε αλλαγή είναι εντολή (αναίρεση) και γράφει γεγονός στο ιστορικό. Τίποτα δεν μπλοκάρεται.
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { WeaponMapDialog } from './weaponMap';
 import { html, cx, Alert, Badge, Button, Dialog, VirtualList, useToast, useViewportHeight } from '../ui';
 import { Select } from '../select';
 import { ChoiceField, DateField, PersonPicker } from '../common';
@@ -59,6 +60,8 @@ export function MitrooView() {
       else if (!print) toast({ text: 'Βγήκε ' + r.file.split(/[\\/]/).pop() + ': ένα φύλλο ανά τύπο όπλου, ένα ανά κατηγορία υλικού και ΣΥΝΟΛΑ (όπως φαίνεται το φίλτρο).' });
     } finally { setXl(false); }
   };
+  const [book, setBook] = useState<P | null>(null);
+  const pickFile = async () => { const r = await window.api.wpnPick(); if (!r) return; if (!r.ok) { toast({ text: r.error }); return; } setBook(r); };
   const clear = () => { setQ(''); setFilter('all'); setCat(''); };
   const renderRow = useCallback((r: AssetRow, i: number, style: P) => {
     const a = r.a; const out = holderOut(state, a.holder);
@@ -72,10 +75,12 @@ export function MitrooView() {
   }, [sel, state, GRID, cfg, today, fields]);
   const chips = ASSET_FILTERS(cfg.warnDays);
   return html`<div className="mit" data-mitroo="">
+    ${book && html`<${WeaponMapDialog} book=${book} onClose=${() => setBook(null)}/>`}
     <div className="filters mit__chips" role="group" aria-label="Φίλτρα μητρώου">${chips.map(([k, l, tip]) => html`<button key=${k} type="button" className=${cx('ui-chip ui-chip--sm', (k === 'due' || k === 'writeoff' || k === 'repair') && (fcounts[k] || 0) > 0 && 'ui-chip--warn')} aria-pressed=${filter === k} data-tip=${tip} onClick=${() => setFilter(k)}>${l}<span className="cnt">${fcounts[k] || 0}</span></button>`)}</div>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση στο μητρώο" placeholder="Αριθμός, τύπος, κάτοχος ή θέση (χωρίς τόνους)" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
       <${Button} onClick=${() => setDlg({ t: 'edit' })}>+ Νέο…<//>
       <${Button} variant="outline" disabled=${xl} onClick=${() => exportXl(false)} data-tip="Νέο αρχείο «ΜΗΤΡΩΟ ΟΠΛΙΣΜΟΥ»: ένα φύλλο ανά τύπο όπλου, ένα ανά κατηγορία υλικού και ΣΥΝΟΛΑ. Βγάζει ό,τι φαίνεται (κατηγορία, φίλτρο, αναζήτηση).">Excel<//>
+      <${Button} variant="outline" onClick=${pickFile} data-tip="Έχει η μονάδα σου δικό της αρχείο οπλισμού (ένα φύλλο ανά τύπο όπλου, με δικές της λέξεις θέσης); Δείξε τι είναι κάθε φύλλο, στήλη και λέξη και πέρασέ το στο Μητρώο. Το αρχείο σου δεν αλλάζει ποτέ">Αρχείο οπλισμού μονάδας…<//>
       <${Button} variant="outline" disabled=${xl} onClick=${() => exportXl(true)} data-tip="Προεπισκόπηση εκτύπωσης του ίδιου αρχείου">Εκτύπωση<//>
       <span className="toolbar__count">${rows.length} ${rows.length === 1 ? 'είδος' : 'είδη'}</span></div>
     <div className="mit__grid">

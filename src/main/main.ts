@@ -16,7 +16,8 @@ import { off, useWorker, warmWorker, workerUp } from './offload';
 import type { Fail, LayoutPv, LayoutReq } from '../shared/api';
 import type { LayoutSheet } from '../shared/layout';
 import type { Boot, CmdResult, Diag, ExcelBusy, WriteTime, DirTarget, EssoArchiveInfo, EssoInfo, EssoResult, EssoStart, ExportKind, ExportOpts, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
-import { PREV_EVERY, SourceMetaStore, OldFormatError, holdPatch, bookNow, setBookReader, locateCheck, locateNow, writeGroup, type WriteOutcome, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
+import { PREV_EVERY, SourceMetaStore, OldFormatError, holdPatch, bookNow, setBookReader, locateCheck, locateNow, writeGroup, type WriteOutcome, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, MAX_COLS, type SourceMeta } from './sources';
+import { DEFAULT_CONVERTERS } from './xlsConvert';
 import { withRoomExtras } from '../shared/roomExtra';
 import { totalsTouched } from '../shared/totals';
 import { planSourceOwn, ownSnap } from '../shared/rosterUnitWrite';
@@ -1395,6 +1396,11 @@ else {
     ipcMain.handle('src:pick', async (_e, kind: ListKind | null) => {
       const file = await pickXlsx(kind ? 'Excel για ' + KIND[kind].label : 'Εισαγωγή Excel'); if (!file) return null;
       try { return await bookOf(file); } catch (e) { return fail(e instanceof OldFormatError ? e.message : e); }
+    });
+    // Αρχείο οπλισμού άλλης μονάδας: μόνο ανάγνωση, με τους τύπους (fx) κάθε φύλλου και μετατροπή του .xls σε αντίγραφο
+    ipcMain.handle('wpn:pick', async () => {
+      const file = await pickXlsx('Αρχείο οπλισμού της μονάδας'); if (!file) return null;
+      try { const r = await readBook(file, 2000, MAX_COLS, DEFAULT_CONVERTERS); return { ok: true, file, name: path.basename(file), mtime: r.mtime, size: r.size, sheets: r.sheets.map(x => ({ name: x.name, rows: x.rows.slice(0, 1000), fx: x.fx })), hits: [] }; } catch (e) { return fail(e instanceof OldFormatError ? e.message : e); }
     });
     ipcMain.handle('src:read', async (_e, kind: ListKind) => { try { const b = await current(kind); if (!b) return fail('Δεν έχει οριστεί αρχείο'); return { ...(await bookOf(b.file)), binding: b }; } catch (e) { return fail(e); } });
     ipcMain.handle('src:save', async (_e, kind: ListKind, b: SourceBinding | null) => {

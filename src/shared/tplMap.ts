@@ -9,6 +9,7 @@ import { detectBook, type BookShape, type MatrixRegion } from './shape';
 import { cellRef, colLetter, key as cellKey, valueText, type SheetModel } from './sheetModel';
 import { ignoreMark, learnedNames, profileOf, setByUser, teach } from './tplProfile';
 import type { ProfileKind, TplProfile } from './tplStore';
+import type { PlaceWord } from './domain';
 import { ABS_KEYS, KOL_KEYS, asColRule, asRowRule, defaultColRule, defaultRowRule, mapMatrix, pickFront, resolveRow, type ColRule, type FrontMap, type RowRule, type RuleCtx, type TotalKind } from './hkRules';
 import { HK_A, HK_K, hkRowList, type UserLists } from './ranks';
 import { HK_MANUAL } from './rules';
@@ -35,6 +36,9 @@ export type TplCreate =
   | { k: 'hkRow'; name: string; grp: 'off' | 'nco'; after?: string; ranks?: string[] }
   | { k: 'leaveKind'; name: string; col: string }
   | { k: 'subUnit'; name: string }            // Δυναμολόγιο άλλης μονάδας: νέος Λόχος / Ίλα στη λίστα των Ρυθμίσεων
+  | { k: 'placeWord'; name: string; means: PlaceWord['means'] }                        // αρχείο οπλισμού άλλης μονάδας: νέα λέξη θέσης στα Μητρώο (Ρυθμίσεις)
+  | { k: 'assetType'; name: string; cat: string }                                      // νέος τύπος σε κατηγορία του Μητρώου
+  | { k: 'assetCat'; name: string; kind: 'weapon' | 'material' }                       // νέα κατηγορία του Μητρώου
   | { k: 'service'; name: string };           // έλεγχος υπηρεσιών: νέα υπηρεσία (ανενεργή, είδος «άλλη», με δική της στήλη στις δυνατότητες)· στο προφίλ είναι η θέση «@new:όνομα»
 
 // ------------------------------------------------------------------ names on screen

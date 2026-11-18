@@ -51,6 +51,7 @@ const api: Api = {
   importBackup: () => ipcRenderer.invoke('backups:import'),
   srcPick: kind => ipcRenderer.invoke('src:pick', kind),
   srcRead: kind => ipcRenderer.invoke('src:read', kind),
+  wpnPick: () => ipcRenderer.invoke('wpn:pick'),
   srcSave: (kind, b) => ipcRenderer.invoke('src:save', kind, b),
   srcImport: (kind, b, choices, keepRemoved, keepApp) => ipcRenderer.invoke('src:import', kind, b, choices, !!keepRemoved, keepApp || []),
   srcKeys: kind => ipcRenderer.invoke('src:keys', kind),

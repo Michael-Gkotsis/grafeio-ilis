@@ -1018,3 +1018,64 @@ export async function genUnitRoster(seed: number): Promise<UnitRoster> {
   sm.put(0, 0, 'ΔΥΝΑΜΗ'); codes.forEach((c, i) => { sm.put(1, i + 1, c, { b: true }); sm.put(2, i + 1, 0, { f: `COUNTIF('${master}'!${colName(cols.sub + 1)}:${colName(cols.sub + 1)},"${c}")` }); formulaCells.push(colName(i + 2) + '3'); });
   return { buf: Buffer.from(await wb.xlsx.writeBuffer()), master, abs, pres, summary, people, vacant, header: hr, cols, mode, codes, words, unknownWords, formulaCells };
 }
+
+// ------------------------------------------------------------------ Αρχείο οπλισμού ΑΛΛΗΣ μονάδας (phase 5): φύλλο ανά τύπο, κάνες, «_» = αχρέωτο, λέξεις θέσης δικές τους, ονομαστική + λίστα με τύπους
+// Η αλήθεια κάθε όπλου (κάτοχος, κατηγορία, θέση) γράφεται από τον ίδιο τον γεννήτορα. Κατηγορίες: tyfekia (G3A3, G3A4), pistolia (Μ1911 Α1, φύλλο χωρίς τύπο), polyvola (MG3A1), antiarm (άγνωστος τύπος ΖΧ-7).
+export interface WpnHolder { k: 'person' | 'cadre'; id: number | string; last: string; first: string; rank: string }
+export interface WpnTruth { sheet: string; r: number; no: string; type: string; cat: string; holder: 'free' | 'person' | 'absent' | 'wait'; hk?: 'person' | 'cadre'; id?: number | string; seat?: { rack: string; wpos: string }; word?: string; barrel?: string; spare?: string; dup?: boolean; note?: string }
+export interface UnitWeapons { buf: Buffer; truth: WpnTruth[]; master: string; derived: string; itemSheets: string[]; blankSheet: string; unkSheet: string; unkType: string; waitWord: string }
+export async function genUnitWeapons(seed: number, holders: WpnHolder[]): Promise<UnitWeapons> {
+  const r = rng(seed * 104729 + 7); const wb = new ExcelJS.Workbook(); const truth: WpnTruth[] = [];
+  const master = pick(r, ['ΟΝΟΜΑΣΤΙΚΗ', 'ΟΝΟΜΑΣΤΙΚΗ G3A4-G3A3']), derived = 'ΠΑΡΟΝΤΩΝ';
+  const used = new Set<string>(); const num = () => { let n = ''; do { n = String(int(r, 10000, 3999999)); if (chance(r, 0.1)) n = '0' + n; } while (used.has(n)); used.add(n); return n; };
+  const waitWord = 'ΑΥΔΜ'; const places = ['', '', 'Α.Ο.', 'Α.Ο (ΑΔΕΙΑ)', 'ΚΙΒΩΤΙΟ 5', '12/13', 'Ε6', 'ΟΠΛΟΒΑΣΤΟ', 'ΠΛΑΚΑΛΑΚΙ'];
+  const RANKS = ['ΣΤΡ', 'ΔΝΕΑΣ', 'ΛΧΙΑΣ']; void RANKS;
+  const free = shuffle(r, holders); let hi = 0;
+  const nextHolder = () => (hi < free.length ? free[hi++] : null);
+  type Spec = { sheet: string; title: string; type: string | (() => string); cat: string; n: number; head: string; barrels?: boolean; keepType?: boolean };
+  const spec: Spec[] = [
+    { sheet: master, title: 'ΟΝΟΜΑΣΤΙΚΗ ΚΑΤΑΣΤΑΣΗ ΟΠΛΙΣΜΟΥ', type: () => pick(r, ['G3A3', 'G3A4']), cat: 'tyfekia', n: int(r, 6, 12), head: 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ' },
+    { sheet: 'G3A3', title: 'ΚΑΤΑΣΤΑΣΗ ΤΥΦΕΚΙΩΝ G3A3', type: 'G3A3', cat: 'tyfekia', n: int(r, 8, 20), head: 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ' },
+    { sheet: 'G3A4', title: 'ΚΑΤΑΣΤΑΣΗ ΤΥΦΕΚΙΩΝ G3A4', type: 'G3A4', cat: 'tyfekia', n: int(r, 8, 20), head: 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ' },
+    { sheet: '(Ο,45)', title: 'ΚΑΤΑΣΤΑΣΗ ΠΙΣΤΟΛΙΩΝ Μ1911', type: 'Μ1911 Α1', cat: 'pistolia', n: int(r, 4, 9), head: 'ΑΡΙΘΜΟΣ ΠΙΣΤΟΛΙΟΥ' },
+    { sheet: 'ΠΟΛ MG3', title: 'ΚΑΤΑΣΤΑΣΗ ΠΟΛΥΒΟΛΩΝ MG3', type: 'MG3A1', cat: 'polyvola', n: int(r, 3, 7), head: 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ', barrels: true },
+    { sheet: 'ΣΗΜΑΤΟΔΟΣΙΑΣ', title: 'ΚΑΤΑΣΤΑΣΗ ΠΙΣΤΟΛΙΩΝ ΣΗΜΑΤΟΔΟΣΙΑΣ', type: '', cat: 'pistolia', n: int(r, 2, 5), head: 'ΑΡΙΘΜΟΣ ΠΙΣΤΟΛΙΟΥ', keepType: true },
+    { sheet: 'ΑΝΤΙΑΡΜΑΤΙΚΑ', title: 'ΚΑΤΑΣΤΑΣΗ ΑΝΤΙΑΡΜΑΤΙΚΩΝ', type: 'ΖΧ-7', cat: 'antiarm', n: int(r, 2, 4), head: 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ' }
+  ];
+  const dupFrom: string[] = [];
+  for (const sp of spec) {
+    const ws = wb.addWorksheet(sp.sheet); const s = new S(ws); const top = int(r, 0, 3);
+    s.put(top, 0, sp.title); s.merge(top, 0, top, 6);
+    const hr = top + 2; const heads = ['Α/Α', 'ΒΑΘΜΟΣ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΤΥΠΟΣ   ΟΠΛΟΥ', sp.head, sp.barrels ? 'ΑΡΙΘΜΟΣ ΚΑΝΗΣ' : 'ΘΕΣΗ ΣΤΟΝ ΟΠΛΟΒΑΣΤΟ', sp.barrels ? 'ΑΡΙΘΜΟΣ ΕΦΕΔΡΙΚΗΣ ΚΑΝΗΣ' : 'ΠΑΡΑΤΗΡΗΣΕΙΣ'];
+    heads.forEach((t, c) => s.put(hr, c, t, { b: true, box: true }));
+    let y = hr + 2;
+    for (let i = 0; i < sp.n; i++) {
+      const isDup = sp.sheet !== master && dupFrom.length > 0 && chance(r, 0.12);
+      const no = isDup ? pick(r, dupFrom) : num(); const type = typeof sp.type === 'function' ? sp.type() : sp.type;
+      const t: WpnTruth = { sheet: sp.sheet, r: y, no, type, cat: sp.cat, holder: 'free', ...(isDup ? { dup: true } : {}) };
+      let nameCell = '_', rankCell = '_'; const x = r();
+      if (!sp.barrels || x < 0.5) {
+        if (x < 0.3) { const h = nextHolder(); if (h) { const v = r(); nameCell = v < 0.5 ? h.last + ' ' + h.first : v < 0.8 ? h.first + ' ' + h.last : h.last + ' ' + h.first.charAt(0) + '.'; rankCell = h.rank; Object.assign(t, { holder: 'person', hk: h.k, id: h.id }); } }
+        else if (x < 0.36) { nameCell = 'ΞΕΝΟΣΚΑΛΟΣ ' + pick(r, ['ΓΙΩΡΓΟΣ', 'ΝΙΚΟΣ']); t.holder = 'absent'; }
+        else if (x < 0.4) { nameCell = waitWord; t.holder = 'wait'; }
+        else if (x < 0.46) { nameCell = 'Α.Ο.'; t.word = 'Α.Ο.'; }
+      }
+      let place = ''; let note = '';
+      if (!sp.barrels) {
+        place = t.word ? '' : pick(r, places);
+        if (/^\d+\/\d+$/.test(place)) t.seat = { rack: '', wpos: place }; else if (place === 'Ε6') t.seat = { rack: 'Ε', wpos: '6' }; else if (place) t.word = place;
+        note = t.holder === 'free' ? pick(r, ['ΑΧΡΕΩΤΟ', '', 'ΧΡΕΩΜΕΝΟ', 'ΠΑΡΑΤΗΡΗΣΗ ΔΟΚΙΜΗΣ']) : pick(r, ['', 'ΧΡΕΩΜΕΝΟ']);
+        if (note === 'ΠΑΡΑΤΗΡΗΣΗ ΔΟΚΙΜΗΣ') t.note = note;
+      } else { t.barrel = no + '/1'; t.spare = chance(r, 0.5) ? no + '/2' : ''; place = t.barrel; note = t.spare; }
+      s.put(y, 0, i + 1); s.put(y, 1, rankCell); s.put(y, 2, nameCell); s.put(y, 3, sp.keepType ? null : type); s.put(y, 4, no);
+      s.put(y, 5, sp.barrels ? t.barrel! : place || null); s.put(y, 6, sp.barrels ? t.spare || null : note || null);
+      truth.push(t); if (!isDup) dupFrom.push(no); y++;
+    }
+    if (sp.sheet === master) { for (let i = 0; i < sp.n; i++) { const c = ws.getCell(hr + 2 + i + 1, 10); c.value = { formula: 'IF(E' + (hr + 3 + i) + '<>"","ΠΑΡΟΝ","")', result: 'ΠΑΡΟΝ' } as ExcelJS.CellFormulaValue; } }
+  }
+  // λίστα που βγαίνει από την ονομαστική: όλα τύποι
+  const dws = wb.addWorksheet(derived); const ds = new S(dws); ds.put(0, 0, 'ΠΑΡΟΝΤΕΣ ΟΠΛΑ'); ['Α/Α', 'ΒΑΘΜΟΣ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΤΥΠΟΣ   ΟΠΛΟΥ', 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ', 'ΘΕΣΗ ΣΤΟΝ ΟΠΛΟΒΑΣΤΟ', 'ΠΑΡΑΤΗΡΗΣΕΙΣ'].forEach((t, c) => ds.put(2, c, t, { b: true }));
+  const nm = master.includes(' ') ? "'" + master + "'" : master;
+  for (let i = 0; i < 8; i++) for (let c = 0; c < 7; c++) dws.getCell(5 + i, c + 1).value = { formula: nm + '!' + colName(c + 1) + (5 + i), result: '' } as ExcelJS.CellFormulaValue;
+  return { buf: Buffer.from(await wb.xlsx.writeBuffer()), truth, master, derived, itemSheets: spec.map(x => x.sheet), blankSheet: 'ΣΗΜΑΤΟΔΟΣΙΑΣ', unkSheet: 'ΑΝΤΙΑΡΜΑΤΙΚΑ', unkType: 'ΖΧ-7', waitWord };
+}
