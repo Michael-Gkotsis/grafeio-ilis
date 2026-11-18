@@ -571,6 +571,7 @@ function importWeapons(s: AppState, ap: WeaponApply, source: string, date: ISODa
       st = { ...st, cadreList: st.cadreList.map(q => (q === x ? { ...q, weapon: p.weapon, ...(p.wtype && !q.wtype ? { wtype: normWeapon(p.wtype) } : {}), ...(p.rack && !q.rack ? { rack: p.rack } : {}), ...(p.wpos && !q.wpos ? { wpos: p.wpos } : {}) } : q)) };
     }
     have.add(key); prim++;
+    if (p.rec) { const x = cleanAsset({ ...p.rec, holder: p.owner }, 'a' + ctx.newId()); list.push(x); log.push({ id: 'e' + ctx.newId(), aid: x.id, date, what: 'note', text: 'καταχωρήθηκε από αρχείο οπλισμού' }); }
   }
   for (const a of ap.assets) {
     const key = weaponKey(a.no); if (!key || !a.cat || have.has(key)) continue;

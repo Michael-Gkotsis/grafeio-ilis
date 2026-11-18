@@ -278,7 +278,8 @@ export function resolveWeapons(o: WIn): WResolved {
 }
 
 // ------------------------------------------------------------------ σχέδιο εισαγωγής
-export interface PrimaryPut { owner: Extract<AssetHolder, { k: 'person' | 'cadre' }>; weapon: string; wtype: string; rack: string; wpos: string; label: string }
+// rec: όταν το κύριο όπλο έχει κάτι που το Δυναμολόγιο δεν κρατά (κιβώτιο, αποθήκη ή άλλη λέξη θέσης, κάνη, σημείωση), μπαίνει και εγγραφή Μητρώου με τον ίδιο αριθμό
+export interface PrimaryPut { owner: Extract<AssetHolder, { k: 'person' | 'cadre' }>; weapon: string; wtype: string; rack: string; wpos: string; label: string; rec?: Omit<Asset, 'id'> }
 export interface WeaponApply { primary: PrimaryPut[]; assets: Omit<Asset, 'id'>[] }
 export interface PlanLine { kind: 'primary' | 'asset' | 'same' | 'conflict' | 'dup' | 'wait' | 'skip'; text: string }
 export interface WeaponCounts {
@@ -327,6 +328,17 @@ export function planWeapons(o: WIn & { state: Pick<AppState, 'people' | 'cadreLi
     }
     ok.push({ it, res, cat: res.cat, holder, absent, label: lab });
   }
+  // Η εγγραφή Μητρώου ενός όπλου του αρχείου: κάτοχος, θέση οπλοβαστού, λέξη θέσης (κιβώτιο, αποθήκη…), κάνες, σημείωση
+  const recOf = (x: Ok): Omit<Asset, 'id'> => {
+    const a: Omit<Asset, 'id'> = { cat: x.cat.id, type: x.res.type, no: normWeapon(x.it.no), state: 'ok' };
+    if (x.holder) a.holder = x.holder;
+    const r = x.res.seat; if (r) { if (r.rack) a.rack = r.rack; if (r.wpos) a.wpos = r.wpos; }
+    if (x.res.word && !x.res.wordIgnored) { a.fileWord = normPos(x.res.word); if (!r && (!x.res.wordMeans || x.res.wordMeans === 'box' || x.res.wordMeans === 'store' || x.res.wordMeans === 'other')) a.place = normPos(x.res.word); }
+    const extra: Record<string, string> = {}; if (x.it.barrel && !blankWord(x.it.barrel)) extra.barrel = x.it.barrel; if (x.it.spare && !blankWord(x.it.spare)) extra.spare = x.it.spare;
+    if (Object.keys(extra).length) a.extra = extra;
+    const note = [x.res.note, x.absent ? 'Στο αρχείο: ' + x.absent : ''].filter(Boolean).join(' · '); if (note) a.note = note;
+    return a;
+  };
   // ---- κύριο όπλο ή δεύτερο: ανά κάτοχο, με τη σειρά των κατηγοριών και του αρχείου
   const order = new Map(cfg.cats.map((c, i) => [c.id, i]));
   const byOwner = new Map<string, Ok[]>(); for (const x of ok) if (x.holder) { const k = holderKey(x.holder); const l = byOwner.get(k); if (l) l.push(x); else byOwner.set(k, [x]); }
@@ -342,8 +354,9 @@ export function planWeapons(o: WIn & { state: Pick<AppState, 'people' | 'cadreLi
       if (x) {
         asPrimary.add(x);
         const r = x.res.seat; const rackOk = !cur.rack && !cur.wpos;
-        apply.primary.push({ owner: h, weapon: normWeapon(x.it.no), wtype: !cur.wtype ? x.res.type : '', rack: rackOk && r ? r.rack : '', wpos: rackOk && r ? r.wpos : '', label: x.label });
-        counts.primary++; lines.push({ kind: 'primary', text: x.label + ' → κύριο όπλο του ' + who(h) + ' στο Δυναμολόγιο' + (r ? ' (θέση ' + seatTxt(r.rack, r.wpos) + (rackOk ? '' : ', η θέση του Δυναμολογίου μένει' ) + ')' : '') });
+        const rec = recOf(x); const more = rec.place || rec.fileWord || rec.extra || rec.note;
+        apply.primary.push({ owner: h, weapon: normWeapon(x.it.no), wtype: !cur.wtype ? x.res.type : '', rack: rackOk && r ? r.rack : '', wpos: rackOk && r ? r.wpos : '', label: x.label, ...(more ? { rec } : {}) });
+        counts.primary++; lines.push({ kind: 'primary', text: x.label + ' → κύριο όπλο του ' + who(h) + ' στο Δυναμολόγιο' + (r ? ' (θέση ' + seatTxt(r.rack, r.wpos) + (rackOk ? '' : ', η θέση του Δυναμολογίου μένει' ) + ')' : '') + (!r && rec.place ? ' (θέση ' + rec.place + ')' : '') });
       }
     } else {
       // έχει ήδη κύριο όπλο: άλλο όπλο της ίδιας κατηγορίας με το δικό του είναι σύγκρουση, άλλης κατηγορίας δεύτερο όπλο
@@ -353,13 +366,7 @@ export function planWeapons(o: WIn & { state: Pick<AppState, 'people' | 'cadreLi
   for (const x of ok) {
     if (asPrimary.has(x) && apply.primary.some(p => p.label === x.label)) continue;
     if (asPrimary.has(x)) continue;
-    const a: Omit<Asset, 'id'> = { cat: x.cat.id, type: x.res.type, no: normWeapon(x.it.no), state: 'ok' };
-    if (x.holder) a.holder = x.holder;
-    const r = x.res.seat; if (r) { if (r.rack) a.rack = r.rack; if (r.wpos) a.wpos = r.wpos; }
-    if (x.res.word && !x.res.wordIgnored) { a.fileWord = normPos(x.res.word); if (!x.res.wordMeans && !r) a.place = normPos(x.res.word); }
-    const extra: Record<string, string> = {}; if (x.it.barrel && !blankWord(x.it.barrel)) extra.barrel = x.it.barrel; if (x.it.spare && !blankWord(x.it.spare)) extra.spare = x.it.spare;
-    if (Object.keys(extra).length) { a.extra = extra; counts.barrels++; }
-    const note = [x.res.note, x.absent ? 'Στο αρχείο: ' + x.absent : ''].filter(Boolean).join(' · '); if (note) a.note = note;
+    const a = recOf(x); if (a.extra) counts.barrels++;
     apply.assets.push(a); counts.assets++;
     if (x.holder) { counts.second++; lines.push({ kind: 'asset', text: x.label + ' (' + x.cat.name + ') → ' + who(x.holder) + ' (δεύτερο όπλο ή όπλο εκτός κύριου)' }); }
     else { counts.unassigned++; lines.push({ kind: 'asset', text: x.label + ' (' + x.cat.name + ') → ' + (x.absent ? 'αχρέωτο· στο αρχείο: ' + x.absent + (x.res.holder.t === 'ambiguous' ? ' (πολλά άτομα με αυτό το όνομα)' : x.res.holder.t === 'rankdiff' ? ' (ο βαθμός δεν ταιριάζει)' : ' (δεν υπάρχει στο Δυναμολόγιο)') : 'αχρέωτο') }); }
