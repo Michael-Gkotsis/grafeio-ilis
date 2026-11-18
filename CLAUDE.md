@@ -1,0 +1,78 @@
+# CLAUDE.md: rules for working in this repo (branch `main`)
+
+"Γραφείο Λοχία" (grafeio-ilis): offline Electron desktop app for a Greek army squadron ("Ίλη") office:
+personnel, duties, outs, medical, penalties, ΗΚΑΙ, and Excel/Word outputs filled from templates.
+Target: Windows 7 x64, Intel Atom, 2 GB RAM, no internet. Runtime: Electron 22 = Chromium 108 / V8 10.8 / Node 16.17
+(the last Electron for Win7). npm, TypeScript, React + htm. All user-facing texts (screens, Excel, Word, guide) are
+Greek. Code comments on main are Greek too: match the file you edit.
+
+## Commands (repo root; CI `.github/workflows/elegxos.yml` runs the first three on every PR)
+- `npm run typecheck`: `tsc --noEmit` over src, test, bench. Must pass.
+- `npm test`: vitest over `test/**/*.test.ts` (rules, Excel/Word output, print, UI render). Must pass.
+- `npm run build`: esbuild main/preload/worker + vite renderer into `dist/`. Must pass.
+- One test file: `npx vitest run test/<name>.test.ts`
+- Optional checks: `npm run bench` (hot paths), `npm run bench:full` (main/db), `npm run bench:ui` (screen timings;
+  headless Linux: `xvfb-run -a npm run bench:ui`), `npm run bench:golden` (writes every output and prints hashes).
+- Never run `package:*`: releases are built by CI (`paketo.yml`) on every merge to main. Never build or attach
+  zip/exe/deb packages.
+- There is no linter or formatter on main.
+
+## Hard rules
+1. **Outputs and templates.** Never change on your own initiative the `templates/` files or what the app writes into
+   Excel/Word: ΗΚΑΙ/ΗΚΑΛ, Ημερήσια Διαταγή (.docx), Υπηρεσίες/ΦΡΟΥΡΑ, Εξοδούχοι, Δυναμολόγιο; headings, columns, fonts,
+   capitals, signatures, print layout, pagination. An output may change only as part of a feature Michael asked for;
+   the PR says which outputs change. Never update a snapshot (`vitest -u`) or loosen an output test to make a PR pass.
+2. Everything the app writes into Excel is in CAPITALS. Dates are shown dd/mm/yyyy. Seat codes are exact (e.g. `Θ1α`).
+3. **Frozen data contracts** (users upgrade in place; breaking one loses data or settings):
+   - `data/ilh.db`: tables, `SCHEMA_VERSION`, `KV_KEYS`/`KV_ENTRIES` (`src/main/db.ts`) and the undo patch format
+     (actions of the previous version must stay undoable). A new KV key is added, never renamed or removed.
+   - Files `data/meta.json`, `sources.json`, `forms.json`, `flags.json`, folder `data/Πρότυπα εντύπων`,
+     backups `data/backups/ilh_YYYY-MM-DD_*.db`, folders `GrafeioIlis`, `Έγγραφα\Γραφείο Ίλης`, USB backup copies.
+   - localStorage keys `grafeio.prefs`, `grafeio.nav`, `grafeio.people`, `grafeio.recent`, `grafeio.quickAdd`.
+   - Auto-update: release file names and the manifest format `src/main/update.ts` reads (old versions must update;
+     breaking it once forced users to install by hand, #236).
+   - Existing keyboard shortcuts and Ctrl+K commands. The worker entry `src/main/worker.ts` (`scripts/build.mjs`).
+4. **Platform limits (Win7 / Electron 22).** Syntax can be modern (transpiled); built-in APIs are NOT transpiled:
+   use only what exists in V8 10.8 / Node 16.
+   - Forbidden in `src/main`, `src/shared`, `src/preload` (`test/node16.test.ts`): `toSorted`, `toReversed`,
+     `toSpliced`, `findLast`/`findLastIndex`, `structuredClone`, `fetch`. Use `[...a].sort()` etc.
+   - Avoid everywhere (no test checks these): `with`, `Object.groupBy`/`Map.groupBy`, Set methods (`union`...),
+     `Promise.withResolvers`, `Array.fromAsync`.
+   - No CSS nesting (needs Chromium 112).
+   - No new heavy runtime dependency (2 GB RAM, Atom): measure the size and justify it. ExcelJS is heavy and is
+     loaded only in `src/main/excel.ts`.
+5. Never delete, skip or loosen a test, and never remove a feature or setting, unless Michael asked for it.
+
+## Architecture
+```
+src/shared/     pure rules and types shared by main + renderer (domain.ts types, commands.ts = every user action
+                with undo, rules, dates, ΗΚΑΙ, outs, duty); no fs, Electron, React or htm imports
+src/main/       main.ts (entry, IPC handlers), db.ts (sql.js database), xlsx.ts (own Excel engine), exports.ts
+                (ΦΡΟΥΡΑ/ΗΚΑΙ/Εξοδούχοι forms), hdDocx.ts (Word ΗΔ), print.ts, sources.ts (unit Excel files),
+                worker.ts + offload.ts (Excel work off the main thread), update.ts + updater.ts
+src/preload/    preload.ts (IPC bridge), print.ts
+src/renderer/   app.ts (shell, nav, shortcuts), screens/*.ts (one per screen), store.ts, mockApi.ts, styles.css
+templates/      the official .xlsx templates (rule 1)
+```
+- The renderer never imports from `src/main`; it reaches main only through the preload API (`src/shared/api.ts`).
+- Colours are tokens in `src/renderer/styles.css` (`test/contrast.test.ts` checks both themes).
+- Branch `rewrite` (paused) restructures this code into another layout with its own CLAUDE.md. Never base main work
+  on it and never merge it: the `rewrite` -> main merge is Michael's only.
+
+## Workflow
+- PRs target main, one concern each. Michael's standing rule (13/10): merge your own PR only when it is rebased on
+  latest main and typecheck, test and build pass; then report it.
+- WHEN a PR moves, renames or creates a file or folder this file names -> DO update this file in the same PR.
+
+## Behavioral Guidelines
+Bias toward caution over speed; use judgment on trivial tasks.
+
+1. **Think before coding.** State assumptions. If something is unclear or has several interpretations, name it and
+   ask — don't pick silently. If a simpler approach exists, say so.
+2. **Simplicity first.** Minimum code that solves the request. No speculative features, abstractions,
+   configurability, or handling for impossible cases.
+3. **Surgical changes.** Touch only what the request needs; match existing style. Don't refactor or reformat adjacent
+   code. Mention unrelated dead code, don't delete it. Remove only what your change made unused.
+4. **Goal-driven execution.** Turn tasks into verifiable goals (e.g. failing test first, then make it pass). For
+   multi-step work give a short plan: `1. step -> verify: check`. If a fix fails twice, stop and explain the blocker
+   before trying a third approach.
