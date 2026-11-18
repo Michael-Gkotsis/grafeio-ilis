@@ -296,3 +296,34 @@ describe('παλιές αποθηκευμένες τιμές τύπων', () => 
     }
   }, 300000);
 });
+
+// 18/11 (ΗΚΑΛ Λόχου Σκαπανέων): «ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ … - ΤΗΣ» με την ημερομηνία σε δικό της κελί δεξιά, «Πυλί, Κως,» | ημερομηνία,
+// και η πίσω όψη με ημερομηνία στην ίδια θέση. Έμεναν οι παλιές (14/8/2024).
+describe('ημερομηνία σε δικό της κελί', () => {
+  const calm = { originSplit: false, rankSplit: false, unknownRow: false, dropRows: false, drop: 0, typo: false, hospitalSplit: false, dupHeader: false, ownCols: 0, seps: false, adik: false, totals: 'formulas' as const, countifs: false };
+  it('δίπλα στον τίτλο και στον τόπο γράφεται η μέρα της αναφοράς· η ίδια θέση της πίσω όψης επίσης· τύπος, μακρινή ημερομηνία και άλλο κελί μένουν', async () => {
+    const m = await genFillMock(5, calm);
+    const wb = new ExcelJS.Workbook(); await wb.xlsx.load(m.buf);
+    const fr = wb.getWorksheet(m.sheet)!; const old = new Date(Date.UTC(2024, 7, 14)), old8 = new Date(Date.UTC(2024, 7, 8)), far = new Date(Date.UTC(2023, 0, 2));
+    const R = fr.rowCount + 3;
+    fr.getCell(R, 1).value = '            ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ ΛΟΧΟΥ ΣΚΑΠΑΝΕΩΝ - ΤΗΣ'; fr.getCell(R, 9).value = old; fr.getCell(R, 9).numFmt = 'd/m/yyyy';
+    fr.getCell(R + 2, 5).value = 'Πυλί, Κως,'; fr.getCell(R + 2, 7).value = old; fr.getCell(R + 2, 7).numFmt = 'd-mmm-yy';
+    fr.getCell(R + 4, 5).value = 'Αθήνα,'; fr.getCell(R + 4, 7).value = { formula: 'TODAY()', result: old } as never; fr.getCell(R + 4, 7).numFmt = 'd-mmm-yy';
+    fr.getCell(R + 6, 2).value = far; fr.getCell(R + 6, 2).numFmt = 'd/m/yyyy';
+    const back = wb.addWorksheet('Πίσω Όψη');
+    back.getCell(R, 9).value = old8; back.getCell(R, 9).numFmt = 'd-mmm-yy';           // ίδια θέση, 6 μέρες πριν: γράφεται
+    back.getCell(R + 2, 7).value = far; back.getCell(R + 2, 7).numFmt = 'd-mmm-yy';    // ίδια θέση, μακρινή: μένει
+    back.getCell(R + 3, 3).value = old; back.getCell(R + 3, 3).numFmt = 'd-mmm-yy';    // άλλη θέση: μένει
+    const tpl = Buffer.from(await wb.xlsx.writeBuffer());
+    const { buffer, report } = await fillAdaptive(tpl, m.s, m.date, m.profile);
+    expect(report.warnings.join('\n')).not.toContain('ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ ΛΟΧΟΥ');
+    const out = await modelOfBuffer(buffer); const f = out.find(x => x.name === m.sheet)!, b = out.find(x => x.name === 'Πίσω Όψη')!;
+    const day = (v: unknown) => (v instanceof Date ? v.toISOString().slice(0, 10) : String(v));
+    expect(day(f.rows[R - 1][8])).toBe(m.date); expect(day(f.rows[R + 1][6])).toBe(m.date);
+    expect(f.rows[R - 1][0]).toContain('ΤΗΣ'); expect(f.rows[R + 1][4]).toBe('Πυλί, Κως,');
+    expect(f.fx.has((R + 3) + ':6')).toBe(true); expect(day(f.rows[R + 5][1])).toBe('2023-01-02');
+    expect(day(b.rows[R - 1][8])).toBe(m.date); expect(day(b.rows[R + 1][6])).toBe('2023-01-02'); expect(day(b.rows[R + 2][2])).toBe('2024-08-14');
+    // η μορφή του κελιού μένει του εντύπου (ημερομηνία)
+    const wb2 = new ExcelJS.Workbook(); await wb2.xlsx.load(buffer); expect(wb2.getWorksheet(m.sheet)!.getCell(R + 2, 7).numFmt).toBe('d-mmm-yy');
+  }, 120000);
+});

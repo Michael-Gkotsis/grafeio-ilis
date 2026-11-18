@@ -4,7 +4,7 @@
 //   a category the form has no section for: it is counted and reported, not put in another section
 // Lines that do not fit the rows of a section continue on a copy of the template's own continuation sheet («ΕΠΕΚΤΑΣΗ ΣΕΛΙΔΑΣ»), if it has one, else they are reported.
 import type { Workbook } from './xlsx';
-import { colName, splitRef, type XlValue } from './xlsx';
+import { colName, splitRef, toSerial, type XlValue } from './xlsx';
 import { mapHkBack } from './tplmap';
 import { textPx } from './textfit';
 import type { PlannedWrite } from './safeWrite';
@@ -83,14 +83,25 @@ export async function planExtras(wb: Workbook, sheets: SheetModel[], front: stri
   const sigsIn = o.sigs ?? (sigsCustom(s.settings, 'hkai') ? sigsSaved(s.settings, 'hkai') : null);
   const sigs = sigsIn ? sigsFor(s.settings, sigsIn) : [];
   const texts = new Set<string>([front]); if (pick) texts.add(pick.sheet.name);
-  const sigFound = new Set<string>();
+  const sigFound = new Set<string>(); const frontDates: { r: number; c: number; old: Date }[] = [];
   for (const name of texts) {
     const sh = sheets.find(x => x.name === name)!;
-    const fp = frontTexts(sh, { unit: s.settings.unitName || '', place: s.settings.place || '', d, fmt: fmt.date, sigs });
+    const fp = frontTexts(sh, { unit: s.settings.unitName || '', place: s.settings.place || '', d, fmt: fmt.date, sigs, serial: toSerial(d, wb.date1904) });
     for (const w of fp.writes) plan.push({ sheet: w.sheet, r: w.r, c: w.c, value: w.value, exact: true, over: w.over });
     warnings.push(...fp.warnings); for (const t of fp.sigsDone) sigFound.add(t);
     rep.front.title ||= fp.found.title; rep.front.date ||= fp.found.date; rep.front.sigs = Math.max(rep.front.sigs, fp.found.sigs);
+    if (name === front) frontDates.push(...fp.dates);
     if (name === front && !fp.found.title) warnings.push('Δεν βρέθηκε τίτλος «Ημερήσια αναφορά…» στο έντυπο: η ημερομηνία δεν γράφτηκε στον τίτλο');
+  }
+  // η ίδια ημερομηνία στην ίδια θέση των άλλων φύλλων (π.χ. η πίσω όψη με ημερομηνία στο U4 όπως η μπροστινή): μόνο κελί ημερομηνίας,
+  // όχι τύπος, ως έναν μήνα από την παλιά ημερομηνία της μπροστινής
+  if (frontDates.length) for (const x of sheets) {
+    if (x.name === front) continue;
+    for (const f of frontDates) {
+      const v = x.rows[f.r]?.[f.c]; if (!(v instanceof Date) || x.fx.has(f.r + ':' + f.c) || Math.abs(v.getTime() - f.old.getTime()) > 31 * 86400000) continue;
+      if (plan.some(w => w.sheet === x.name && w.r === f.r && w.c === f.c)) continue;
+      plan.push({ sheet: x.name, r: f.r, c: f.c, value: toSerial(d, wb.date1904), exact: true, over: '' });
+    }
   }
   for (const x of sigs) if (x.name && x.title && !sigFound.has(x.title)) warnings.push('Η υπογραφή «' + [x.art, x.title].filter(Boolean).join(' ') + '» δεν βρέθηκε στο έντυπο (ή δεν έχει γραμμή για το όνομα): το όνομα δεν γράφτηκε');
   if (!pick) { if (entries.length) warnings.push('Δεν βρέθηκε πίσω όψη με ενότητες (Εγγραφές, Διαγραφές, Αιτήσεις…): ' + entries.length + ' γραμμές δεν γράφτηκαν'); return { plan, warnings, report: rep, blocked }; }
