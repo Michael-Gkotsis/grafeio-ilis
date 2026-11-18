@@ -11,6 +11,8 @@ import { widthChars } from './textfit';
 import { upper } from '../shared/text';
 import { isPersonRow, type RawSheet } from '../shared/roster';
 import { exactCountif } from '../shared/codes';
+import { safeWrite } from './safeWrite';
+import { relocateUnit } from '../shared/dutyGrid';
 import { itemKey, type UserLists } from '../shared/ranks';
 import type { AppState } from '../shared/domain';
 import { tablePart, xlLook, type XlLook } from '../shared/xlLook';
@@ -18,7 +20,7 @@ import type { ISODate } from '../shared/dates';
 import { planRoomExtras } from '../shared/roomExtra';
 import { planTotals } from '../shared/totals';
 import { sheetTotals } from '../shared/strengthView';
-import { HASH_V, ROOM_HEAD, canCreate, cellText, planDutiesNew, roomList, roomSheetNew, isStatusKind, listColumns, locateHeader, remapNeed, planRoomSheet, roomBlocks, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, timeCols, capExtraCols, titleSpans, stampHeads, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
+import { HASH_V, ROOM_HEAD, dutyDays, canCreate, cellText, planDutiesNew, roomList, roomSheetNew, isStatusKind, listColumns, locateHeader, remapNeed, planRoomSheet, roomBlocks, planSource, stepFin, stepRows, refitCols, tableHash, tableRows, timeCols, capExtraCols, titleSpans, stampHeads, type ListKind, type PersonSnap, type SourceBinding, type WVal } from '../shared/sources';
 // Πλάτος στήλης νέου πίνακα για μία τιμή (Calibri 11 του νέου αρχείου), με τα πραγματικά πλάτη των κεφαλαίων γραμμάτων
 // πλάτος στήλης για το κείμενο, με τα γράμματα των Ρυθμίσεων (Γράμματα Excel)
 const colChars = (v: unknown, L: XlLook, head = false) => { const p = tablePart(L, head ? 'head' : 'data'); return v == null || v === '' ? 0 : Math.ceil(widthChars(upper(String(v)), { name: L.font, sz: p.sz, b: p.b })); };
@@ -166,7 +168,7 @@ export async function locateNow(kind: ListKind, b: SourceBinding): Promise<Sourc
   let book; try { book = await bookNow(b.file); } catch { return b; }
   const sh = book?.sheets.find(x => x.name === b.sheet); if (!sh) return b;
   const h = locateHeader(kind, sh, b); const at = h === b.header ? b : { ...b, header: h };
-  return stampHeads(kind, sh, refitCols(kind, sh, at));
+  return stampHeads(kind, sh, refitCols(kind, sh, kind === 'duties' ? relocateUnit(sh, at) : at));
 }
 
 // Το ίδιο για τις αυτόματες διαδρομές (ανάγνωση απλών αλλαγών, εγγραφή): need = γιατί δεν γίνεται αυτόματα (στήλη που
@@ -174,7 +176,7 @@ export async function locateNow(kind: ListKind, b: SourceBinding): Promise<Sourc
 export async function locateCheck(kind: ListKind, b: SourceBinding): Promise<{ b: SourceBinding; need: string | null }> {
   let book; try { book = await bookNow(b.file); } catch { return { b, need: null }; }
   const sh = book?.sheets.find(x => x.name === b.sheet); if (!sh) return { b, need: null };
-  const h = locateHeader(kind, sh, b); const nb = stampHeads(kind, sh, refitCols(kind, sh, h === b.header ? b : { ...b, header: h }));
+  const h = locateHeader(kind, sh, b); const nb = stampHeads(kind, sh, refitCols(kind, sh, kind === 'duties' ? relocateUnit(sh, h === b.header ? b : { ...b, header: h }) : h === b.header ? b : { ...b, header: h }));
   return { b: nb, need: remapNeed(kind, sh, nb) };
 }
 
@@ -404,7 +406,13 @@ async function applyKind(wb: Workbook, kind: ListKind, b: SourceBinding, s: AppS
       }
     }
     for (const x of plan.sets) if (newCols.has(x.c) && ws.style(ref(x.r, x.c)) == null) { const st = ws.style(ref(x.r, x.c - 1)); if (st != null) ws.setStyle(ref(x.r, x.c), st); }
-    for (const x of plan.sets) await put(x.r, x.c, x.v, data);
+    if (kind === 'duties' && b.unit && plan.sets.length) {
+      // αρχείο άλλης μονάδας: οι εγγραφές περνούν από το safeWrite, μόνο μέσα στα κελιά των ημερών των ατόμων· τύποι, συγχωνεύσεις και ό,τι είναι έξω από αυτά δεν αγγίζονται
+      const dc = dutyDays(sheet, b); const rr = tableRows(sheet, b.header, b.cols).records.map(x => x.r);
+      const box = { sheet: b.sheet, r1: Math.min(...rr), c1: dc[0], r2: Math.max(...rr), c2: dc[dc.length - 1] };
+      const rep = await safeWrite(wb, plan.sets.map(x => ({ sheet: b.sheet, r: x.r, c: x.c, value: typeof x.v === 'string' || x.v == null ? x.v : String(x.v), exact: true })), { dataBoxes: [box] });   // exact: ο κωδικός γράφεται όπως τον έχει το αρχείο της (π.χ. Θ1α), όχι σε κεφαλαία
+      if (rep.refused.length) res.warn = [...(res.warn || []), (rep.refused.length === 1 ? '1 κελί δεν γράφτηκε' : rep.refused.length + ' κελιά δεν γράφτηκαν') + ': ' + [...new Set(rep.refused.map(x => x.detail))].join(', ') + '.'];
+    } else for (const x of plan.sets) await put(x.r, x.c, x.v, data);
     // νέο Δυναμολόγιο: τα σύνολα θαλάμων κάτω από τον πίνακα και το φύλλο ΘΑΛΑΜΟΙ (αν δεν υπάρχει ήδη)
     if (fresh && plan.extra?.length) {
       const head = await wb.tableStyle('head', L);

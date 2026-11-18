@@ -770,3 +770,83 @@ export async function genFillMock(seed: number, force: Partial<FillFlags> = {}):
   desc.unshift(JSON.stringify({ ...f, rows: rows.length, cols: colsT.length }));
   return { seed, buf, s, date: d, profile, flags: f, desc, sheet, truth, formulaCells, unmappedCols, ...(f.countifs ? { dataSheet: ds } : {}) };
 }
+
+// ------------------------------------------------------------------ μηνιαίο πλέγμα υπηρεσιών ΑΛΛΗΣ μονάδας (3α), με αλήθεια ανά κελί
+// Δικές της επικεφαλίδες (συνώνυμα, τυπογραφικά), στήλες συνόλων με COUNTIF, δικοί της κωδικοί, ελεύθερο κείμενο, άγνωστοι κωδικοί,
+// μήνες 28-31 ημερών, επικεφαλίδα σε δύο γραμμές, στήλη-ξένο σώμα στα αριστερά, γραμμές συνόλων από κάτω. Μόνο φανταστικά ονόματα.
+import type { RawSheet } from '../src/shared/roster';
+import type { Person } from '../src/shared/domain';
+export type UnitMeaning = { t: 'seat'; k: string } | { t: 'kind'; kind: string } | { t: 'status'; id: string } | { t: 'ignore' };
+export interface UnitCell { r: number; c: number; pid: number; day: number; code: string; meaning: UnitMeaning }
+export interface UnitGrid {
+  sheet: RawSheet; ym: string; days: number; people: Person[]; rowOf: Record<number, number>; dayCol0: number;
+  cells: UnitCell[]; vocab: Record<string, UnitMeaning>;   // vocab: κωδικός → τι σημαίνει (η αλήθεια)· κενό κελί = τίποτα
+  flags: string[]; sumCols: number[]; first: number; last: number;
+  heads: Record<string, string>;   // ρόλος (last/first/name) → η επικεφαλίδα που έβαλε η μονάδα (ό,τι δεν αναγνωρίζεται το δείχνει ο χρήστης)
+}
+const MONTHS_GR = ['ΙΑΝΟΥΑΡΙΟΥ', 'ΦΕΒΡΟΥΑΡΙΟΥ', 'ΜΑΡΤΙΟΥ', 'ΑΠΡΙΛΙΟΥ', 'ΜΑΪΟΥ', 'ΙΟΥΝΙΟΥ', 'ΙΟΥΛΙΟΥ', 'ΑΥΓΟΥΣΤΟΥ', 'ΣΕΠΤΕΜΒΡΙΟΥ', 'ΟΚΤΩΒΡΙΟΥ', 'ΝΟΕΜΒΡΙΟΥ', 'ΔΕΚΕΜΒΡΙΟΥ'];
+const MONTH_BY_LEN: [string, number][] = [['2026-02', 28], ['2024-02', 29], ['2026-09', 30], ['2026-10', 31]];
+const H_AA = ['Α/Α', 'Α.Α.', 'ΑΑ', 'Α/Α '], H_LAST = ['ΕΠΩΝΥΜΟ', 'ΕΠΩΝΥΜΟ ', 'Επώνυμο', 'ΕΠΩΝΥΜΟΝ', 'ΕΠΩΝΥΜΩ'], H_FIRST = ['ΟΝΟΜΑ', 'Όνομα', 'ΟΝΟΜΑ ', 'ΟΝΩΜΑ'];
+const H_NAME = ['ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΟΝ/ΜΟ', 'ΟΝΟΜ/ΜΟ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ ', 'ΟΝΟΜΑΤΕΠΟΝΥΜΟ'], H_POST = ['ΠΟΣΤΟ', 'Πόστο', 'ΠΟΣΤΟ '], H_ASM = ['ΑΣΜ', 'Α.Σ.Μ.'];
+const SUMS = ['Σ', 'ΚΑ', 'ΕΤΑΠ', 'ΤΙΜ', 'ΣΥΝΟΛΟ'];
+const FREE = ['6ΤΙΜ + 4ΚΑ', 'ΛΑΦ ΣΤΗ ΜΟΝΑΔΑ', 'ΑΝΑΜΟΝΗ (ΠΡΟΣΩΡΙΝΑ)', 'ΕΞΟΔΟΣ 14:00'];
+const OWNPRE: Record<string, string> = { th: 'ΘΛ', mg: 'ΜΓ', op: 'ΟΠΛ', sk: 'ΦΡ', ly: 'ΛΥΧ', dy: 'ΔΥΧ', tae: 'ΤΕ' };   // πρόθεμα δικού της κωδικού ανά οικογένεια θέσεων
+export function genUnitGrid(seed: number, people: Person[], seatsOf: Record<string, { k: string; code: string }[]>): UnitGrid {
+  const r = rng(seed * 6007 + 31); const flags: string[] = [];
+  const [ym, nd] = pick(r, MONTH_BY_LEN); const [yy, mm] = ym.split('-').map(Number);
+  const own = chance(r, 0.75);   // 25%: ο πίνακας έχει τους κωδικούς της εφαρμογής (Θ1α…)
+  const nPeople = Math.min(people.length, int(r, 8, 36)); const ppl = people.slice(0, nPeople);
+  // αριστερές στήλες
+  const split = chance(r, 0.6); const L: { h: string; v: (p: Person, i: number) => string | number; role?: string }[] = [];
+  if (chance(r, 0.85)) L.push({ h: pick(r, H_AA), v: (_p, i) => i + 1 });
+  if (chance(r, 0.3)) L.push({ h: pick(r, ['ΒΑΘΜΟΣ', 'ΒΑΘΜ', 'ΒΘΜ']), v: p => p.rank });
+  if (split) { L.push({ h: pick(r, H_LAST), v: p => p.last, role: 'last' }, { h: pick(r, H_FIRST), v: p => p.first, role: 'first' }); flags.push('split-name'); } else { L.push({ h: pick(r, H_NAME), v: p => p.last + ' ' + p.first, role: 'name' }); flags.push('one-name'); }
+  if (chance(r, 0.4)) L.push({ h: pick(r, H_ASM), v: p => p.asm });
+  if (chance(r, 0.5)) L.push({ h: pick(r, H_POST), v: p => p.post || 'ΓΡΑΦΕΙΟ' });
+  if (chance(r, 0.25)) { L.splice(int(r, 0, L.length), 0, { h: '', v: (_p, i) => 100 + i }); flags.push('junk-col'); }   // κρυφή στήλη με αριθμούς, χωρίς επικεφαλίδα
+  const d1 = L.length; const nSum = int(r, 0, 4); const sums = shuffle(r, SUMS).slice(0, nSum);
+  const twoRow = chance(r, 0.3); const title = chance(r, 0.7); const top = int(r, 0, 2);
+  const dayRow = top + (title ? 1 : 0) + (twoRow ? 1 : 0);
+  const rows: (string | number | null)[][] = []; const fx = new Set<string>();
+  const row = (i: number) => (rows[i] ||= []);
+  if (title) row(top)[0] = 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + MONTHS_GR[mm - 1] + ' ' + yy;
+  if (twoRow) { row(dayRow - 1)[d1] = 'ΜΕΡΕΣ ΤΟΥ ΜΗΝΟΣ'; flags.push('two-row'); }
+  L.forEach((x, c) => { row(dayRow)[c] = x.h || null; });
+  for (let d = 1; d <= nd; d++) row(dayRow)[d1 + d - 1] = d;
+  sums.forEach((s, i) => { row(dayRow)[d1 + nd + i] = s; });
+  // το λεξιλόγιο: τι κωδικό γράφει η μονάδα για κάθε θέση που χρησιμοποιεί
+  const vocab: Record<string, UnitMeaning> = {}; const cells: UnitCell[] = [];
+  const ownNo = new Map<string, number>();
+  const codeOfSeat = (f: string, s: { k: string; code: string }): string => { if (!own) return s.code; const n = (ownNo.get(f) || 0) + 1; ownNo.set(f, n); return (OWNPRE[f] || 'ΞΧ') + n + pick(r, ['', '', '-' + n, 'Δ']); };
+  // οι θέσεις που χρησιμοποιεί αυτή η μονάδα
+  const fam = Object.keys(seatsOf); const used = shuffle(r, fam).slice(0, int(r, 2, Math.min(5, fam.length)));
+  const pool: { code: string; m: UnitMeaning }[] = [];
+  for (const f of used) for (const s of seatsOf[f].slice(0, int(r, 1, 3))) pool.push({ code: codeOfSeat(f, s), m: { t: 'seat', k: s.k } });
+  if (chance(r, 0.6)) pool.push({ code: pick(r, ['ΘΛ', 'ΜΓ', 'ΟΠΛ']) + 'Χ', m: { t: 'kind', kind: pick(r, ['th', 'mg', 'op']) } });   // υπηρεσία χωρίς θέση (δικός της κωδικός)
+  const stats: { code: string; m: UnitMeaning }[] = [];
+  if (chance(r, 0.7)) stats.push({ code: pick(r, ['ΑΠΟΛΥΣΗ', 'ΑΠΟΛ']), m: { t: 'status', id: 'own:ΑΠΟΛΥΣΗ' } });
+  if (chance(r, 0.4)) stats.push({ code: 'ΑΔΕΙΑ ΑΠΟΛΥΣΕΩΣ', m: { t: 'status', id: 'own:ΑΔΕΙΑ ΑΠΟΛΥΣΕΩΣ' } });
+  if (chance(r, 0.4)) stats.push({ code: 'Κ', m: { t: 'status', id: 'status:ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ' } });
+  const free: { code: string; m: UnitMeaning }[] = chance(r, 0.6) ? shuffle(r, FREE).slice(0, int(r, 1, 2)).map(code => ({ code, m: { t: 'ignore' } as UnitMeaning })) : [];
+  if (free.length) flags.push('free-text');
+  for (const x of [...pool, ...stats, ...free]) vocab[x.code] = x.m;
+  // κελιά: κάθε άτομο το πολύ ένα κωδικό ανά μέρα· η ίδια θέση όχι σε δύο άτομα την ίδια μέρα
+  const rowOf: Record<number, number> = {}; const first = dayRow + 1;
+  ppl.forEach((p, i) => { rowOf[p.id] = first + i; L.forEach((x, c) => { row(first + i)[c] = x.v(p, i); }); });
+  for (let d = 1; d <= nd; d++) {
+    const takenSeat = new Set<string>(); const order = shuffle(r, ppl.map(p => p.id));
+    for (const pid of order) {
+      if (!chance(r, 0.16)) continue;
+      const x = chance(r, 0.78) ? pick(r, pool) : chance(r, 0.5) && stats.length ? pick(r, stats) : free.length ? pick(r, free) : pick(r, pool);
+      if (x.m.t === 'seat') { if (takenSeat.has(x.m.k)) continue; takenSeat.add(x.m.k); }
+      const rr = rowOf[pid]; const c = d1 + d - 1; row(rr)[c] = x.code; cells.push({ r: rr, c, pid, day: d, code: x.code, meaning: x.m });
+    }
+  }
+  // στήλες συνόλων: αριθμοί και τύπος COUNTIF (δεν είναι υπηρεσίες)
+  const cl = (c: number) => colName(c + 1);
+  ppl.forEach((p, i) => sums.forEach((_s, j) => { const c = d1 + nd + j; const rr = first + i; row(rr)[c] = cells.filter(x => x.pid === p.id).length; fx.add(rr + ':' + c); void cl; }));
+  if (chance(r, 0.4)) { const f = first + ppl.length; row(f)[0] = 'ΔΙΑΘΕΣΙΜΟΙ'; for (let d = 1; d <= nd; d++) row(f)[d1 + d - 1] = int(r, 3, 20); row(f + 1)[0] = 'ΥΠΗΡΕΣΙΕΣ'; for (let d = 1; d <= nd; d++) row(f + 1)[d1 + d - 1] = int(r, 0, 8); flags.push('footer'); }
+  const width = d1 + nd + sums.length; const out = rows.map(x => { const y = (x || []).slice(); while (y.length < width) y.push(null); return y; });
+  for (let i = 0; i < out.length; i++) if (!rows[i]) out[i] = new Array(width).fill(null);
+  return { sheet: { name: 'ΥΠΗΡΕΣΙΕΣ', rows: out, fx }, ym, days: nd, people: ppl, rowOf, dayCol0: d1, cells, vocab, flags: [...flags, own ? 'own-codes' : 'our-codes', 'days' + nd], heads: Object.fromEntries(L.filter(x => x.role).map(x => [x.role!, x.h])), sumCols: sums.map((_s, j) => d1 + nd + j), first, last: first + ppl.length - 1 };
+}

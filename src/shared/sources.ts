@@ -5,7 +5,8 @@
 import { addDays, type ISODate } from './dates';
 import { norm, normGreek, collator, upper } from './text';
 import { ADIK_TYPES, ADIK_WORD, CAP_ACC, KIND_NAME, OUT_NOTE, PUN_KINDS, TYPES, codeKey, everyBlock, fatherTxt, fullName, roomCfg, type AppState, type CapKey, type Settings, type DutyKind, type Person, type SeatlessDuty, type Status, type TypeKey } from './domain';
-import { bareOf, codeOf, isBareCode, readDuties, type CellDuty } from './codes';
+import { bareOf, codeOf, isBareCode, outCode, readDuties, type CellDuty } from './codes';
+import { withUnit } from './dutyUnit';
 import { dm, MONTHS as MONTH_NAMES } from './dates';
 import { DN_HEAD, DN_WORD, HEADERS, isDnYes, isPersonRow, stripDn, type CellValue, type RawSheet } from './roster';
 import { capCols, isHol, postBy, seatMap } from './rules';
@@ -33,6 +34,7 @@ export interface SourceBinding {
   write?: boolean;                   // η εφαρμογή γράφει εδώ τις αλλαγές της (μόνο για καταστάσεις)
   scope?: 'all' | 'active';          // τι γράφει: όλες τις εγγραφές ή μόνο όσες ισχύουν σήμερα και μετά (προεπιλογή από 30/10: active, τα ληγμένα σβήνονται)
   values?: Record<string, TypeKey>;  // τιμές του Excel που δεν αναγνωρίζονται μόνες τους (π.χ. «ΕΛ ΑΡΒ») → είδος
+  unit?: boolean;                    // έλεγχος υπηρεσιών: πλέγμα άλλης μονάδας με δικούς της κωδικούς (προφίλ kind 'duties', dutyUnit.ts)
   month?: string;                    // έλεγχος υπηρεσιών: ο μήνας του φύλλου (ΕΕΕΕ-ΜΜ), όταν ο τίτλος δεν τον γράφει
   autoRead?: boolean;                // καταστάσεις: απλές αλλαγές του Excel (νέες εγγραφές, άλλη ημερομηνία) περνούν μόνες τους (προεπιλογή ναι)
   heads?: Record<string, string>;    // επικεφαλίδα (headText) της στήλης κάθε πεδίου όπως ήταν όταν την είδε ο main (stampHeads): ξεχωρίζει «άλλαξε η στήλη του πεδίου» από «πάντα είχε δική σου επικεφαλίδα»
@@ -1539,7 +1541,8 @@ export interface DutiesPlan {
 export const dutiesCmd = (p: DutiesPlan): { days: Record<ISODate, DutyCell[]> } =>
   ({ days: Object.fromEntries(p.days.filter(x => x.adds.length).map(x => [x.date, x.cells.filter(c => !x.gone.some(g => g.pid === c.pid))])) });
 // synced: «μέρα|άτομο» που είχε δει η εφαρμογή στο Excel στην προηγούμενη ανάγνωση/εγγραφή
-export function planDuties(sheet: RawSheet, b: SourceBinding, s: AppState, month: string, today: ISODate, choices: Record<number, number | null> = {}, synced: string[] = []): DutiesPlan {
+export function planDuties(sheet: RawSheet, b: SourceBinding, s0: AppState, month: string, today: ISODate, choices: Record<number, number | null> = {}, synced: string[] = []): DutiesPlan {
+  const s = withUnit(s0, b);   // αρχείο άλλης μονάδας: οι κωδικοί του από το προφίλ της (αλλιώς το ίδιο s)
   const sp = sheetPeople(sheet, b, s.people, choices); const pm = seatMap(s);
   const plan: DutiesPlan = { month, days: [], changes: 0, same: 0, errors: [], future: [], noRow: [], keys: [], unknown: [], sp };
   const cols = dutyDays(sheet, b);
@@ -1675,10 +1678,11 @@ export function planCapsWrite(sheet: RawSheet, b: SourceBinding, s: AppState): S
 // Σβήνεται μόνο κελί που είχε δει η εφαρμογή (synced: «μέρα|άτομο» από την προηγούμενη ανάγνωση/εγγραφή) και δεν το έχει
 // πια: υπηρεσία του Excel που δεν πέρασε ποτέ στην εφαρμογή δεν σβήνεται ποτέ. Μέρα με τον ίδιο κωδικό θέσης δύο φορές
 // δεν διαβάζεται (planDuties), οπότε ούτε γράφεται. keys: ό,τι έχει δει η εφαρμογή μετά την εγγραφή.
-export function planDutiesWrite(sheet: RawSheet, b: SourceBinding, s: AppState, today: ISODate, synced: string[] = []): SourcePlan {
+export function planDutiesWrite(sheet: RawSheet, b: SourceBinding, s0: AppState, today: ISODate, synced: string[] = []): SourcePlan {
+  const s = withUnit(s0, b); const other = !!s.settings.unitOut;   // other: αρχείο άλλης μονάδας, γράφονται οι δικοί της κωδικοί
   const plan: SourcePlan = { sets: [], insert: null, header: [], keys: [], added: 0, changed: 0, cleared: 0, foreign: 0, notFound: [] };
   const month = bindingMonth(sheet, b, today); if (!month) { plan.notFound.push('(δεν βρέθηκε ο μήνας στον τίτλο του φύλλου)'); return plan; }
-  const exact = !sheet.countif?.length;
+  const exact = other || !sheet.countif?.length;
   if (!exact) plan.warn = ['Το φύλλο μετρά με COUNTIF σκέτο γράμμα (' + countifTxt(sheet.countif!) + '): γράφεται «Θ», «Μ»… αντί για τον κωδικό της θέσης. Άλλαξε στους τύπους το "Θ" σε "Θ*" (και το "Μ" σε "Μ*", το "Σ" σε "Σ*") για να γράφονται οι κωδικοί.'];
   const cols = dutyDays(sheet, b);
   const [y, m] = month.split('-').map(Number); const nDays = Math.min(cols.length, new Date(Date.UTC(y, m, 0)).getUTCDate());
@@ -1687,6 +1691,7 @@ export function planDutiesWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
   type Want = { k?: string; kind: DutyKind; code: string; more?: Want[] };   // more: 2η υπηρεσία της ίδιας μέρας (μονάδα, «Θ3/Μ2»)
   const unit = isUnit(s.settings);
   const pm = new Map(s.people.map(p => [p.id, p])); const want = new Map<number, Map<number, Want>>(); const days: number[] = [];
+  const noCode = new Set<string>(); const skipped = new Set<string>();   // other: υπηρεσίες της εφαρμογής που η μονάδα δεν έχει κωδικό γι' αυτές
   const put = (pid: number, i: number, w: Want) => {
     if (pid < 0) return; const x = want.get(pid) || new Map<number, Want>(); const cur = x.get(i);
     if (unit && cur?.k && w.k && cur.k !== w.k) { cur.more = [...(cur.more || []), w]; cur.code += '/' + w.code; }
@@ -1697,10 +1702,16 @@ export function planDutiesWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
     const d = dateOf(i); const g = s.guards[d] || {}; const log = s.dutyLog?.[d] || [];
     if (!Object.keys(g).length && !log.length && !seenDays.has(d)) continue;
     days.push(i);
-    for (const e of log) put(e.pid, i, { kind: e.kind, code: bareOf(undefined, e.kind) });
+    for (const e of log) {
+      const code = other ? outCode(s.settings, undefined, e.kind) : bareOf(undefined, e.kind);
+      if (code == null) { noCode.add(KIND_NAME[e.kind]); skipped.add(i + '|' + e.pid); continue; }
+      put(e.pid, i, { kind: e.kind, code });
+    }
     for (const [k, pid] of Object.entries(g)) {
       const post = postBy(s, k); if (!post) continue;
-      put(pid, i, { k, kind: post.kind, code: exact ? codeOf(s.settings, k, post.kind) : bareOf(k, post.kind) });
+      const code = other ? outCode(s.settings, k, post.kind) : exact ? codeOf(s.settings, k, post.kind) : bareOf(k, post.kind);
+      if (code == null) { noCode.add(post.label); skipped.add(i + '|' + pid); continue; }
+      put(pid, i, { k, kind: post.kind, code });
     }
   }
   if (!days.length) return plan;
@@ -1722,7 +1733,7 @@ export function planDutiesWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
   // συνονόματοι με δική του γραμμή ο καθένας: δεν ξέρουμε ποια είναι ποιανού, δεν γράφονται (μία μόνο γραμμή πάει στον ενεργό)
   const group = (m: { alts?: Person[] }) => (m.alts ? m.alts.map(p => p.id).sort((a, c) => a - c).join(',') : '');
   const nGroup = new Map<string, number>(); for (const { m } of recs) if (m.alts) nGroup.set(group(m), (nGroup.get(group(m)) || 0) + 1);
-  let unseen = 0;
+  let unseen = 0, kept = 0;
   for (const { r, m } of recs) {
     if (m.alts && (m.pid == null || nGroup.get(group(m))! > 1)) { m.alts.forEach(p => seen.add(p.id)); (plan.ambiguous = plan.ambiguous || []).push(r); continue; }
     const pid = m.pid; if (pid == null || seen.has(pid)) { plan.foreign++; continue; }
@@ -1731,6 +1742,9 @@ export function planDutiesWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
     for (const i of days) {
       const raw = cellText((sheet.rows[r] || [])[cols[i]]); const cur = readDuties(raw, s.settings); const wnt = x?.get(i);
       const duty = Array.isArray(cur) ? cur : null; const key = dateOf(i) + '|' + pid;
+      if (other && skipped.has(i + '|' + pid)) continue;
+      // αρχείο άλλης μονάδας: κελί με δικό της κείμενο (κατάσταση, ΕΞ, αριθμός, ελεύθερο κείμενο) που δεν είναι υπηρεσία δεν γράφεται ποτέ από πάνω
+      if (wnt && other && !duty && raw.trim() !== '') { kept++; continue; }
       if (wnt) { plan.keys.push(key); if (!duty || !ok(duty, wnt, i, pid)) { plan.sets.push({ r, c: cols[i], v: wnt.code }); ch = true; } }
       else if (duty && seenBefore.has(key)) { plan.sets.push({ r, c: cols[i], v: null }); ch = true; }   // την είχε η εφαρμογή και τη σβήσες εκεί
       else if (duty && dateOf(i) <= today) unseen++;
@@ -1739,6 +1753,8 @@ export function planDutiesWrite(sheet: RawSheet, b: SourceBinding, s: AppState, 
   }
   if (unseen) plan.warn = [...(plan.warn || []), (unseen === 1 ? '1 υπηρεσία' : unseen + ' υπηρεσίες') + ' του Excel δεν είναι ακόμα στην εφαρμογή και δεν σβήνονται· πάτα «Ανανέωση από Excel» για να περάσουν.'];
   for (const pid of want.keys()) if (!seen.has(pid) && pm.has(pid)) plan.notFound.push(nameOf(pm.get(pid)!));
+  if (kept) plan.warn = [...(plan.warn || []), (kept === 1 ? '1 κελί' : kept + ' κελιά') + ' του αρχείου έχουν δικό τους κείμενο (κατάσταση, ΕΞ, άδεια…) και δεν γράφτηκε υπηρεσία πάνω τους.'];
+  if (noCode.size) plan.warn = [...(plan.warn || []), 'Δεν γράφτηκαν οι υπηρεσίες ' + [...noCode].join(', ') + ': το αρχείο δεν έχει κωδικό γι\' αυτές (δείξε τον στην «Αντιστοίχιση…»).'];
   return plan;
 }
 // ------------------------------------------------------------------ νέος έλεγχος υπηρεσιών (όπως το δείγμα 03)

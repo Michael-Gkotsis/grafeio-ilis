@@ -29,6 +29,7 @@ import { CADRE_OPT, cadreMeta } from '../shared/cadreSource';
 import { designMade, fillFroura, fillHkai, fillOuts, signMade, sigsOf, TemplateError } from './exports';
 import { modelOfFile, profileFor, restoreCopy, tryFill, xlsxBuffer, xlsxFile } from './tplAdapt';
 import type { TplReq } from '../shared/tplMap';
+import { unresolvedCodes } from '../shared/dutyGrid';
 import { checkTemplate, makeHdDocx } from './hdDocx';
 import { headFor } from '../shared/docHead';
 import { cleanHd, hdHeadDate, hdTags, HD_SECTIONS, type HdDoc } from '../shared/hd';
@@ -396,7 +397,10 @@ async function sourceStatus(): Promise<SourceStatus[]> {
     // έλεγχος υπηρεσιών: ο μήνας του φύλλου, για την υπενθύμιση όταν αλλάζει ο μήνας
     let month: string | undefined;
     if (kind === 'duties' && t.exists) { try { const sh = (await bookNow(b.file))?.sheets.find(x => x.name === b.sheet); month = (sh && bindingMonth(sh, bindingOf(kind) || b, today())) || undefined; } catch { /* ξανά αργότερα */ } }
-    out.push({ kind, file: b.file, exists: t.exists, synced: !!m?.at, changed: t.changed, at: m?.at || '', error: m?.error, locked: m?.locked, pending: m?.pending, hold: m?.hold, month, ...(loc.need ? { remap: loc.need } : {}) });
+    // έλεγχος υπηρεσιών άλλης μονάδας: πόσοι κωδικοί του αρχείου δεν έχουν ακόμα νόημα («Αντιστοίχιση…»)
+    let dutyNeeds: number | undefined;
+    if (kind === 'duties' && b.unit && t.exists) { try { const sh = (await bookNow(b.file))?.sheets.find(x => x.name === b.sheet); if (sh) dutyNeeds = unresolvedCodes(sh, b, store.state.settings); } catch { /* ξανά αργότερα */ } }
+    out.push({ kind, file: b.file, exists: t.exists, synced: !!m?.at, changed: t.changed, at: m?.at || '', error: m?.error, locked: m?.locked, pending: m?.pending, hold: m?.hold, month, ...(loc.need ? { remap: loc.need } : {}), ...(dutyNeeds ? { dutyNeeds } : {}) });
   }
   return out;
 }

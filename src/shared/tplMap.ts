@@ -33,7 +33,8 @@ export const emptyChoices = (): Choices => ({ cols: {}, rows: {}, words: {} });
 // What «Δημιουργία» adds to the app's own settings (commands.ts adaptTpl)
 export type TplCreate =
   | { k: 'hkRow'; name: string; grp: 'off' | 'nco'; after?: string; ranks?: string[] }
-  | { k: 'leaveKind'; name: string; col: string };
+  | { k: 'leaveKind'; name: string; col: string }
+  | { k: 'service'; name: string };           // έλεγχος υπηρεσιών: νέα υπηρεσία (ανενεργή, είδος «άλλη», με δική της στήλη στις δυνατότητες)· στο προφίλ είναι η θέση «@new:όνομα»
 
 // ------------------------------------------------------------------ names on screen
 const CALC: Record<string, string> = {
