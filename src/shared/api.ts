@@ -49,6 +49,7 @@ export interface SourceStatus { kind: ListKind; file: string; exists: boolean; c
   hold?: string;      // δεν γράφει μόνη της μέχρι νέα ανάγνωση ή «Ενημέρωση Excel» (και γιατί)
   month?: string;     // έλεγχος υπηρεσιών: ο μήνας του φύλλου
   remap?: string;     // δεν διαβάζει ούτε γράφει μόνη της: οι στήλες δεν βρίσκονται με σιγουριά (και γιατί)
+  dutyNeeds?: number; // έλεγχος υπηρεσιών άλλης μονάδας: κωδικοί που η εφαρμογή δεν ξέρει ακόμα τι σημαίνουν («Αντιστοίχιση…»)
 }
 export interface WritePreview { ok: true; file: string; create: boolean; lines: PlanLine[]; total: number; foreign: number; notFound: string[]; ambiguous?: PlanLine[]; warn?: string[]; tidy?: string[] }   // tidy: μορφή που λείπει (τίτλος, λίστες επιλογής)
 export interface FormInfo { ok: true; file: string; custom: boolean; sheets: string[]; sheet: string; sheet2?: string; hkai?: { map: HkaiMap; found: number; total: number; missing: string[] };

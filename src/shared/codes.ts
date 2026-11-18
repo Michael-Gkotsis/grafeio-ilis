@@ -44,7 +44,17 @@ export type CellDuty = { k?: string; kind: DutyKind };
 // 'unknown' = δεν αναγνωρίζεται, null = κενό ή αριθμός
 export function readDuty(raw: string, settings: Settings): CellDuty | 'abs' | 'unknown' | null {
   const t = raw.trim(); if (!t || /^\d+$/.test(t)) return null;
-  const x = codeIdx(settings); const hit = x.map.get(codeKey(t)); if (hit) return { k: hit.k, kind: hit.kind };
+  const x = codeIdx(settings);
+  // αρχείο άλλης μονάδας (dutyUnit.ts): μόνο όσα είπε το προφίλ της· τίποτα δεν μαντεύεται από γράμματα
+  if (settings.unitCodes) {
+    const u = settings.unitCodes[codeKey(t)];
+    if (u === undefined) return 'unknown';
+    if (u === 'ignore') return null;
+    if (u === 'abs') return 'abs';
+    if (u.startsWith('kind:') && KIND_CODE[u.slice(5) as DutyKind]) return { kind: u.slice(5) as DutyKind };
+    return x.kinds.has(u) ? { k: u, kind: x.kinds.get(u)! } : 'unknown';
+  }
+  const hit = x.map.get(codeKey(t)); if (hit) return { k: hit.k, kind: hit.kind };
   // ό,τι είπες για έναν άγνωστο κωδικό στην ανάγνωση: θέση, είδος χωρίς θέση, ή «δεν είναι υπηρεσία»
   const al = settings.dutyCodeAliases?.[codeKey(t)];
   if (al === 'ignore') return null;
@@ -68,6 +78,16 @@ export function codeOf(settings: Settings, k: string, kind: DutyKind): string {
   const x = codeIdx(settings); return x.cur.get(k) || x.other.get(k) || bareOf(k, kind);
 }
 export const bareOf = (k: string | undefined, kind: DutyKind) => (k === 'dy' ? 'ΔΥ' : KIND_CODE[kind]);
+// Θέση της εφαρμογής από τον ακριβή κωδικό της (Θ1α)· ό,τι δεν είναι ακριβώς κωδικός θέσης δίνει null
+export function seatOfCode(settings: Settings, raw: string): { k: string; kind: DutyKind } | null {
+  return codeIdx(settings).map.get(codeKey(raw)) || null;
+}
+// Ο κωδικός που γράφεται στο αρχείο: της εφαρμογής, ή (αρχείο άλλης μονάδας) ο δικός τους· null = η μονάδα δεν έχει κωδικό γι' αυτό
+export function outCode(settings: Settings, k: string | undefined, kind: DutyKind): string | null {
+  const o = settings.unitOut;
+  if (!o) return k ? codeOf(settings, k, kind) : bareOf(undefined, kind);
+  return (k ? o[k] : o['kind:' + kind]) ?? null;
+}
 
 // Λάθη στους κωδικούς (για τις Ρυθμίσεις): κενός, ίδιος σε δύο θέσεις, σκέτο γράμμα είδους, κωδικός απουσίας.
 // only: μόνο όσα αφορούν μία υπηρεσία (την επεξεργασία της)· παλιό λάθος σε άλλη υπηρεσία δεν την εμποδίζει, φαίνεται

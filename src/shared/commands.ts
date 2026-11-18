@@ -1117,12 +1117,27 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
           const cur = st.settings.lists?.leaveKinds?.add || [];
           const lists = { ...(st.settings.lists || {}), leaveKinds: { ...(st.settings.lists?.leaveKinds || {}), add: [...cur, { name, col: m.col }] } };
           st = { ...st, settings: { ...st.settings, lists } }; made.push('κατάσταση «' + name + '»');
+        } else if (m.k === 'service') {
+          // νέα υπηρεσία του ελέγχου υπηρεσιών: όπως από τις Ρυθμίσεις (δική της στήλη στις δυνατότητες), ανενεργή ώστε να μη μπαίνει μόνη της στο πρόγραμμα
+          const ph = st.settings.phase;
+          if (blocksOf(st.settings, ph).some(b => itemKey(b.name) === itemKey(name))) continue;
+          st = run(st, { t: 'addBlock', phase: ph, name, kind: 'other', armed: false, n: 1, per: 1, hrs: '', off: true }, ctx).state; made.push('υπηρεσία «' + name + '»');
         }
       }
-      const prof = sanitizeProfiles([c.profile])[0]; if (!prof) throw new Error('Το πρότυπο δεν αποθηκεύεται (λάθος μορφή)');
+      // η θέση της νέας υπηρεσίας μπαίνει στο προφίλ στη θέση του «@new:όνομα»
+      let profile0 = c.profile;
+      if (profile0.duty) {
+        const codes = Object.fromEntries(Object.entries(profile0.duty.codes).map(([key, m]) => {
+          if (m.t !== 'seat' || !m.k.startsWith('@new:')) return [key, m];
+          const b = blocksOf(st.settings, st.settings.phase).find(x => itemKey(x.name) === itemKey(m.k.slice(5)));
+          return [key, b?.posts[0] ? { ...m, k: b.posts[0].k } : { t: 'ignore' as const, text: m.text }];
+        }));
+        profile0 = { ...profile0, duty: { ...profile0.duty, codes } };
+      }
+      const prof = sanitizeProfiles([profile0])[0]; if (!prof) throw new Error('Το πρότυπο δεν αποθηκεύεται (λάθος μορφή)');
       const all = profilesOf(st.settings); const at = all.findIndex(x => x.id === prof.id);
       const tplProfiles = at >= 0 ? all.map((x, i) => (i === at ? prof : x)) : [...all, prof];
-      return { state: { ...st, settings: { ...st.settings, tplProfiles } }, text: 'Πρότυπο μονάδας: ' + c.text + (made.length ? ' (νέα: ' + made.join(', ') + ')' : ''), files: [HK()] };
+      return { state: { ...st, settings: { ...st.settings, tplProfiles } }, text: 'Πρότυπο μονάδας: ' + c.text + (made.length ? ' (νέα: ' + made.join(', ') + ')' : ''), files: prof.kind === 'duties' ? [] : [HK()] };
     }
     case 'printed':
       return { state: { ...s, printed: { ...s.printed, [c.date]: c.at } }, text: 'Βγήκε ' + c.files.join(', '), files: c.files, undoable: false };
