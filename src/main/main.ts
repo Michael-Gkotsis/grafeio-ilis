@@ -8,7 +8,7 @@ import { addImage, copyImages, copyTemplates, readImage, restoreExtras } from '.
 import { copyDurable, dataDirOf, ownBinding, ownOsDir, writeAll, writeJson, freeName, isLocked, ChangedError, LockedError } from './files';
 import { preflight, hasErrors } from '../shared/preflight';
 import { apply, rosterChanges, type Command } from '../shared/commands';
-import { assetView, registry, ASSET_FILTER_IDS, type AssetFilter } from '../shared/assets';
+import { assetView, registry, ASSET_FILTER_IDS, type AssetFilter, type AssetRow } from '../shared/assets';
 import { dm, dow, nowHM, nowParts, pskDays, today, type ISODate } from '../shared/dates';
 import { Workbook, mergeFirstSheets, mergeSheets, sheetSafe } from './xlsx';
 import { zipHash } from './ziphash';
@@ -220,12 +220,25 @@ const X = {
   valuesHash: (b: Buffer) => off('valuesHash', [b], () => valuesHash(b))
 };
 // Τα Excel που φτιάχνει η εφαρμογή (excel.ts), με τις υπογραφές τους και ό,τι μετακίνησες πάνω στο χαρτί (Michael, 22/10)
-type MadeKind = 'check' | 'lists' | 'rosterPrint' | 'rosterPreview' | 'cadre' | 'weapons' | 'imer';
-const MADE_FORM: Record<MadeKind, SigForm> = { check: 'check', lists: 'roster', rosterPrint: 'roster', rosterPreview: 'roster', cadre: 'cadre', weapons: 'weapons', imer: 'imer' };
-async function made(what: MadeKind, date: ISODate, s: AppState, sigs?: Sig[] | null, imer?: ImerReq, headId?: string | null): Promise<{ name: string; data: Buffer; warnings: string[]; layout: LayoutSheet[] }> {
+type MadeKind = 'check' | 'lists' | 'rosterPrint' | 'rosterPreview' | 'cadre' | 'weapons' | 'imer' | 'cadreLeave' | 'cadrePlan' | 'cadreDuty' | 'assets' | 'vehicles';
+const MADE_FORM: Record<MadeKind, SigForm> = { check: 'check', lists: 'roster', rosterPrint: 'roster', rosterPreview: 'roster', cadre: 'cadre', weapons: 'weapons', imer: 'imer', cadreLeave: 'cadreLeave', cadrePlan: 'cadrePlan', cadreDuty: 'cadreDuty', assets: 'assets', vehicles: 'vehicles' };
+// Ό,τι χρειάζεται το κάθε Excel πέρα από την ημερομηνία: Ημερολόγιο (ImerReq), Άδειες (έτος, στέλεχος), Πρόγραμμα αδειών (μήνας, φίλτρο), Μητρώο οπλισμού (γραμμές της οθόνης)
+type MadeArg = ImerReq | { year: number; cid?: string } | { ym: string; filter?: string } | { rows: AssetRow[] };
+// Οι τιμές της προεπισκόπησης «Θέσεις στο χαρτί»: ο μήνας/έτος της ημέρας και όλο το μητρώο
+function previewArg(f: MadeKind, date: ISODate, s: AppState): MadeArg | undefined {
+  return f === 'cadreLeave' ? { year: +date.slice(0, 4) } : f === 'cadrePlan' ? { ym: date.slice(0, 7) } : f === 'cadreDuty' ? { ym: date.slice(0, 7) }
+    : f === 'assets' ? { rows: assetView(s, { filter: 'all', q: '' }, date, registry(s, { day: date, hm: nowHM() })) } : undefined;
+}
+async function made(what: MadeKind, date: ISODate, s: AppState, sigs?: Sig[] | null, arg?: MadeArg, headId?: string | null): Promise<{ name: string; data: Buffer; warnings: string[]; layout: LayoutSheet[] }> {
+  const x = excel();
   const m = what === 'check' ? await off('dutyCheck', [date.slice(0, 7)], () => excel().dutyCheck(s, date.slice(0, 7)), s)
-    : what === 'lists' ? await excel().rosterLists(s, date) : what === 'rosterPrint' ? await excel().rosterPrint(s, date) : what === 'rosterPreview' ? await excel().rosterPreview(s, date)
-    : what === 'cadre' ? await excel().cadreLists(s, date) : what === 'imer' ? await excel().imerBook(s, imer!) : await excel().weaponsBook(s, date);
+    : what === 'lists' ? await x.rosterLists(s, date) : what === 'rosterPrint' ? await x.rosterPrint(s, date) : what === 'rosterPreview' ? await x.rosterPreview(s, date)
+    : what === 'cadre' ? await x.cadreLists(s, date) : what === 'imer' ? await x.imerBook(s, arg as ImerReq)
+    : what === 'cadreLeave' ? await x.cadreLeaveBook(s, (arg as { year: number }).year, date, (arg as { cid?: string }).cid)
+    : what === 'cadrePlan' ? await x.cadrePlanBook(s, (arg as { ym: string }).ym, date, (arg as { filter?: string }).filter)
+    : what === 'cadreDuty' ? await x.cadreDutyBook(s, (arg as { ym: string }).ym, date)
+    : what === 'assets' ? await x.assetBook(s, (arg as { rows: AssetRow[] }).rows, date)
+    : what === 'vehicles' ? await x.vehicleBook(s, date) : await x.weaponsBook(s, date);
   const form = MADE_FORM[what];
   const r = await off('signMade', [m.data, form, m.marks, sigs, headId, date], () => signMade(m.data, s, form, m.marks, sigs, headId, date), s);
   return { name: m.name, ...r };
@@ -1136,54 +1149,54 @@ else {
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
     });
     // Άδειες και απαλλαγές στελεχών: νέο αρχείο (year, και cid από την καρτέλα στελέχους)
-    ipcMain.handle('export:cadreLeave', async (_e, year: number, cid?: string) => {
+    ipcMain.handle('export:cadreLeave', async (_e, year: number, cid?: string, sigs?: Sig[], headId?: string) => {
       try {
-        const r = await excel().cadreLeaveBook(store.state, Math.floor(+year) || +today().slice(0, 4), today(), cid);
+        const r = await made('cadreLeave', today(), store.state, sigs, { year: Math.floor(+year) || +today().slice(0, 4), cid }, headId);
         const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
         shell.openPath(out);
-        return { ok: true, file: out, warnings: [] };
+        return { ok: true, file: out, warnings: r.warnings };
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
     });
     // Πρόγραμμα αδειών στελεχών: νέο αρχείο για τον μήνα ym· print: ανοίγει η προεπισκόπηση εκτύπωσης αντί για τον Excel
-    ipcMain.handle('export:cadrePlan', async (_e, ym: string, print?: boolean, filter?: string) => {
+    ipcMain.handle('export:cadrePlan', async (_e, ym: string, print?: boolean, filter?: string, sigs?: Sig[], headId?: string) => {
       try {
         const m = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(ym)) ? String(ym) : today().slice(0, 7);
-        const r = await excel().cadrePlanBook(store.state, m, today(), typeof filter === 'string' ? filter : 'all');
+        const r = await made('cadrePlan', today(), store.state, sigs, { ym: m, filter: typeof filter === 'string' ? filter : 'all' }, headId);
         const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
-        const warnings: string[] = [];
+        const warnings: string[] = [...r.warnings];
         if (print) { const p = await printPreview(out); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else shell.openPath(out);
         return { ok: true, file: out, warnings };
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
     });
     // Υπηρεσίες στελεχών: νέο αρχείο για τον μήνα ym, δύο φύλλα (ανά άτομο, ανά ημέρα)· print: προεπισκόπηση εκτύπωσης
-    ipcMain.handle('export:cadreDuty', async (_e, ym: string, print?: boolean) => {
+    ipcMain.handle('export:cadreDuty', async (_e, ym: string, print?: boolean, sigs?: Sig[], headId?: string) => {
       try {
         const m = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(ym)) ? String(ym) : today().slice(0, 7);
-        const r = await excel().cadreDutyBook(store.state, m, today());
+        const r = await made('cadreDuty', today(), store.state, sigs, { ym: m }, headId);
         const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
-        const warnings: string[] = [];
+        const warnings: string[] = [...r.warnings];
         if (print) { const p = await printPreview(out); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else shell.openPath(out);
         return { ok: true, file: out, warnings };
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
     });
     // Μητρώο οπλισμού και υλικού: νέο αρχείο με ό,τι φαίνεται στην οθόνη (κατηγορία, φίλτρο, αναζήτηση)· print: προεπισκόπηση εκτύπωσης
-    ipcMain.handle('export:assets', async (_e, print?: boolean, view?: { cat?: string; filter?: string; q?: string }) => {
+    ipcMain.handle('export:assets', async (_e, print?: boolean, view?: { cat?: string; filter?: string; q?: string }, sigs?: Sig[], headId?: string) => {
       try {
         const v = view && typeof view === 'object' ? view : {}; const d = today();
         const rows = assetView(store.state, { cat: typeof v.cat === 'string' && v.cat ? v.cat : undefined, filter: ASSET_FILTER_IDS.includes(v.filter as AssetFilter) ? v.filter as AssetFilter : 'all', q: typeof v.q === 'string' ? v.q : '' }, d, registry(store.state, { day: d, hm: nowHM() }));
-        const r = await excel().assetBook(store.state, rows, d);
+        const r = await made('assets', d, store.state, sigs, { rows }, headId);
         const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
-        const warnings: string[] = [];
+        const warnings: string[] = [...r.warnings];
         if (print) { const p = await printPreview(out); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else shell.openPath(out);
         return { ok: true, file: out, warnings };
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
     });
     // Οχήματα: νέο αρχείο «ΚΑΤΑΣΤΑΣΗ ΟΧΗΜΑΤΩΝ» (φύλλο ανά κατηγορία, ΚΑΥΣΙΜΑ, ΣΥΝΤΗΡΗΣΕΙΣ)· print: προεπισκόπηση εκτύπωσης
-    ipcMain.handle('export:vehicles', async (_e, print?: boolean) => {
+    ipcMain.handle('export:vehicles', async (_e, print?: boolean, sigs?: Sig[], headId?: string) => {
       try {
-        const r = await excel().vehicleBook(store.state, today());
+        const r = await made('vehicles', today(), store.state, sigs, undefined, headId);
         const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
-        const warnings: string[] = [];
+        const warnings: string[] = [...r.warnings];
         if (print) { const p = await printPreview(out); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else shell.openPath(out);
         return { ok: true, file: out, warnings };
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
@@ -1303,7 +1316,7 @@ else {
           const s2 = q.layout ? { ...s, settings: { ...s.settings, layout: { ...s.settings.layout, [q.form]: q.layout } } } : s;
           const f = q.form;
           out = f === 'hkai' || f === 'froura' || f === 'outs' || f === 'check' ? await produce(f, q.date, s2, q.sigs, q.headId)
-            : await made((f === 'roster' ? 'rosterPreview' : f) as MadeKind, q.date, s2, q.sigs, undefined, q.headId);
+            : await made((f === 'roster' ? 'rosterPreview' : f) as MadeKind, q.date, s2, q.sigs, previewArg(f as MadeKind, q.date, s2), q.headId);
         }
         // φύλλα με την ίδια μορφή (ίδιο key, π.χ. ένα ανά φίλτρο): δείχνεται μόνο το πρώτο
         const ls = (out.layout || []).filter((l, i, a) => a.findIndex(x => x.key === l.key) === i); const wb = await Workbook.open(out.data);

@@ -11,10 +11,11 @@ import { upper } from './text';
 
 // art: η λέξη από πάνω («Ο», «Η», «ΤΟ» ή κενό) · title: η θέση («ΑΛΧΙΑΣ ΙΛΗΣ») · name: όνομα κάτω από την υπογραφή (προαιρετικό)
 export interface Sig { art: string; title: string; name?: string }
-export type SigForm = 'hkai' | 'froura' | 'outs' | 'check' | 'roster' | 'cadre' | 'weapons' | 'imer' | 'hd' | 'reports';
-export const SIG_FORMS: SigForm[] = ['hkai', 'froura', 'outs', 'check', 'roster', 'cadre', 'weapons', 'imer', 'hd', 'reports'];
+export type SigForm = 'hkai' | 'froura' | 'outs' | 'check' | 'roster' | 'cadre' | 'weapons' | 'imer' | 'hd' | 'cadreLeave' | 'cadrePlan' | 'cadreDuty' | 'assets' | 'vehicles' | 'reports';
+export const SIG_FORMS: SigForm[] = ['hkai', 'froura', 'outs', 'check', 'roster', 'cadre', 'weapons', 'imer', 'hd', 'cadreLeave', 'cadrePlan', 'cadreDuty', 'assets', 'vehicles', 'reports'];
 // Τα Excel που φτιάχνει η εφαρμογή από την αρχή (excel.ts): χωρίς υπογραφές μέχρι να βάλεις
-export const MADE_FORMS: SigForm[] = ['check', 'roster', 'cadre', 'weapons', 'imer', 'hd'];
+// (Άδειες, Πρόγραμμα αδειών, Υπηρεσίες στελεχών, Μητρώο οπλισμού, Οχήματα: ίδια, κενά αρχικά και «Όπως σήμερα» στην επικεφαλίδα· τα κλειδιά sigs/headUse/layout είναι προσθήκες)
+export const MADE_FORMS: SigForm[] = ['check', 'roster', 'cadre', 'weapons', 'imer', 'hd', 'cadreLeave', 'cadrePlan', 'cadreDuty', 'assets', 'vehicles'];
 export const ARTS = ['Ο', 'Η', 'ΤΟ', ''];
 
 const S = (art: string, title: string): Sig => ({ art, title });
@@ -23,13 +24,13 @@ const BASE: Record<Exclude<SigForm, 'reports'>, Sig[]> = {
   hkai: [S('Ο', 'ΑΛΧΙΑΣ ΙΛΗΣ'), S('Ο', 'ΔΙΟΙΚΗΤΗΣ ΙΛΗΣ')],
   froura: [S('Ο', 'ΑΛΧΙΑΣ ΙΛΗΣ'), S('Ο', 'ΔΚΤΗΣ ΙΛΗΣ'), S('ΤΟ', '2ο ΓΡΑΦΕΙΟ'), S('Ο', 'ΔΚΤΗΣ ΕΠΧΙΑΣ')],
   outs: [S('Ο', 'ΑΛΧΙΑΣ ΙΛΗΣ'), S('Ο', 'ΔΚΤΗΣ ΙΛΗΣ')],
-  check: [], roster: [], cadre: [], weapons: [], imer: [S('Ο', 'ΟΥΛΑΜΑΓΟΣ'), S('Ο', 'ΔΚΤΗΣ ΙΛΗΣ')], hd: [S('Ο', 'ΔΚΤΗΣ ΙΛΗΣ')]
+  check: [], roster: [], cadre: [], weapons: [], cadreLeave: [], cadrePlan: [], cadreDuty: [], assets: [], vehicles: [], imer: [S('Ο', 'ΟΥΛΑΜΑΓΟΣ'), S('Ο', 'ΔΚΤΗΣ ΙΛΗΣ')], hd: [S('Ο', 'ΔΚΤΗΣ ΙΛΗΣ')]
 };
 // Το έντυπο των υπογραφών για κάθε εξαγωγή (οι ΠΣΚ όπως τα μονά)
 export const sigFormOf = (k: ExportKind): Exclude<SigForm, 'reports'> =>
   k === 'hkai' ? 'hkai' : k === 'froura' || k === 'frouraPsk' ? 'froura' : k === 'check' ? 'check' : 'outs';
 // Τα ονόματα στις Ρυθμίσεις και στους διαλόγους (ΗΚΑΙ/ΗΚΑΛ: hk)
-export const sigLabel = (f: SigForm, hk = 'ΗΚΑΙ') => ({ hkai: hk, froura: 'ΦΡΟΥΡΑ', outs: 'Εξοδούχοι', check: 'Έλεγχος υπηρεσιών', roster: 'Δυναμολόγιο', cadre: 'Στελέχη', weapons: 'Οπλισμός', imer: 'Ημερολόγιο κωλυομένων', hd: 'Ημερήσια Διαταγή', reports: 'Έντυπα' }[f]);
+export const sigLabel = (f: SigForm, hk = 'ΗΚΑΙ') => ({ hkai: hk, froura: 'ΦΡΟΥΡΑ', outs: 'Εξοδούχοι', check: 'Έλεγχος υπηρεσιών', roster: 'Δυναμολόγιο', cadre: 'Στελέχη', weapons: 'Οπλισμός', imer: 'Ημερολόγιο κωλυομένων', hd: 'Ημερήσια Διαταγή', cadreLeave: 'Άδειες και απαλλαγές στελεχών', cadrePlan: 'Πρόγραμμα αδειών στελεχών', cadreDuty: 'Υπηρεσίες στελεχών', assets: 'Μητρώο οπλισμού και υλικού', vehicles: 'Κατάσταση οχημάτων', reports: 'Έντυπα' }[f]);
 
 // Η προεπιλογή όπως την έχει το έντυπο (στα Έντυπα: λοχίας και διοικητής, με τα ονόματα που είχες ήδη γράψει)
 export function sigDefaults(st: Pick<Settings, 'signers'>, form: SigForm): Sig[] {
