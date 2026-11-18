@@ -147,6 +147,13 @@ export const TYPES: Record<TypeKey, TypeDef> = {
 // Οι τρεις καταστάσεις της στήλης adik: πρόθεμα της πίσω όψης («ΣΕ ΑΓΝΟΙΑ», «ΕΠΕΣΤΡΕΨΕ … ΑΠΟ ΑΓΝΟΙΑ»)
 export const ADIK_TYPES: TypeKey[] = ['AGN', 'LIP', 'ADK'];
 export const ADIK_IN: Record<string, string> = { AGN: 'Σε άγνοια', LIP: 'Σε λιποταξία', ADK: 'Σε αδικαιολόγητη απουσία' };   // πώς λέγονται στις οθόνες (Σήμερα, Δύναμη, Εξοδούχοι)
+// Εξοδούχοι «Όλη η δύναμη», σελίδα ΔΥΝΑΜΗ: σε ποια ομάδα Β μπαίνει όποιος είναι σε Άγνοια / Λιποταξία / Αδικαιολόγητη απουσία (κλειδί = τύπος κατάστασης, προεπιλογή B5)
+export type AdikGroup = 'B1' | 'B2' | 'B3' | 'B4' | 'B5';
+export const ADIK_GROUPS: AdikGroup[] = ['B1', 'B2', 'B3', 'B4', 'B5'];
+export const ADIK_GROUP_DEFAULT: AdikGroup = 'B5';
+export const adikGroupOf = (st: { outsAdik?: Partial<Record<string, AdikGroup>> }, type: string): AdikGroup => {
+  const g = st.outsAdik?.[type]; return g && ADIK_GROUPS.includes(g) ? g : ADIK_GROUP_DEFAULT;
+};
 export const ADIK_WORD: Record<string, string> = { AGN: 'ΑΓΝΟΙΑ', LIP: 'ΛΙΠΟΤΑΞΙΑ', ADK: 'ΑΔΙΚΑΙΟΛΟΓΗΤΗ ΑΠΟΥΣΙΑ' };
 export const TYPE_KEYS = Object.keys(TYPES) as TypeKey[];
 export const effects = (t: TypeDef) =>
@@ -533,6 +540,7 @@ export interface Settings {
   dutyStart?: string;                    // πότε ξεκινά ο κύκλος των υπηρεσιών (ΩΩ:ΛΛ, κενό = 14:00): η μέρα της υπηρεσίας είναι από τότε ως την ίδια ώρα την επόμενη
   outsFmt?: OutsFmt | 'tab4';                     // Excel Εξοδούχων: 'cur' = Τωρινή (προεπιλογή), 'all' = Όλη η δύναμη (το παλιό 'tab4' διαβάζεται ως 'all', isOutsAll)· η τελευταία επιλογή μένει, και το αυτόματο ξαναγράψιμο την ακολουθεί
   outsSig2?: 'same' | 'none' | 'own';             // Εξοδούχοι «Όλη η δύναμη», σελίδα 2 (ΔΥΝΑΜΗ): 'same' = οι ίδιες υπογραφές με τη σελίδα 1 (προεπιλογή), 'none' = καμία, 'own' = δική της λίστα (outsSigs2)
+  outsAdik?: Partial<Record<string, AdikGroup>>;  // Εξοδούχοι «Όλη η δύναμη»: σε ποια ομάδα Β της ΔΥΝΑΜΗΣ μπαίνει κάθε κατάσταση Άγνοιας/Λιποταξίας/Αδικαιολόγητης απουσίας (AGN, LIP, ADK)· λείπει = B5
   outsSigs2?: Sig[];                              // οι υπογραφές της σελίδας 2 όταν outsSig2 = 'own' (κενό = όπως οι υπογραφές των Εξοδούχων)
   hdLeft?: boolean;                     // true: κεφαλίδα πάνω αριστερά και ημερομηνία πάνω δεξιά (παλιά διάταξη)· κενό = ημερομηνία αριστερά, κεφαλίδα δεξιά (layout.ts swapHeadDate)· η ΗΚΑΙ δεν αλλάζει ποτέ (κεφαλίδα αριστερά)
   heads?: DocHead[];                     // επικεφαλίδες εγγράφων που σχεδίασες (χωρίς την «Όπως σήμερα»), docHead.ts
