@@ -1117,6 +1117,10 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
           const cur = st.settings.lists?.leaveKinds?.add || [];
           const lists = { ...(st.settings.lists || {}), leaveKinds: { ...(st.settings.lists?.leaveKinds || {}), add: [...cur, { name, col: m.col }] } };
           st = { ...st, settings: { ...st.settings, lists } }; made.push('κατάσταση «' + name + '»');
+        } else if (m.k === 'subUnit') {
+          if (listRows(st.settings.lists, 'subUnits').some(x => itemKey(x.name) === itemKey(name))) continue;
+          const u = st.settings.lists?.subUnits || {};
+          st = { ...st, settings: { ...st.settings, lists: { ...(st.settings.lists || {}), subUnits: { ...u, add: [...(u.add || []), { name }] } } } }; made.push('Λόχος / Ίλα «' + name + '»');
         } else if (m.k === 'service') {
           // νέα υπηρεσία του ελέγχου υπηρεσιών: όπως από τις Ρυθμίσεις (δική της στήλη στις δυνατότητες), ανενεργή ώστε να μη μπαίνει μόνη της στο πρόγραμμα
           const ph = st.settings.phase;

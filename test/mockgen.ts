@@ -971,3 +971,50 @@ export function genRoomLists(seed: number, people: { last: string; first: string
   }
   return { wb, room: 'ΘΑΛΑΜΙΖΟΜΕΝΟΙ', data: 'ΛΙΣΤΑ', keyCol, rows, people: out, rankCol, flags };
 }
+
+// ------------------------------------------------------------------ Δυναμολόγιο ΑΛΛΗΣ μονάδας (phase 4): κύριος κατάλογος + λίστες απόντων/παρόντων + σύνοψη
+// Στελέχη και στρατιώτες μαζί, βαθμός με το όπλο σε παρένθεση, ΙΛΗ με κωδικούς, ΚΑΤΑΣΤΑΣΗ με λέξεις (και άγνωστες), αριθμημένες θέσεις χωρίς όνομα,
+// χωριστό ή ενιαίο ονοματεπώνυμο, τεράστια ουρά με μορφοποίηση. Η αλήθεια κάθε ατόμου γράφεται από τον ίδιο τον γεννήτορα.
+export interface UnitPerson { r: number; last: string; first: string; kind: 'cadre' | 'soldier'; rank: string; app: string; arm: string; code: string; word: string; asm: string }
+export interface UnitRoster { buf: Buffer; master: string; abs: string; pres: string; summary: string; people: UnitPerson[]; vacant: number; header: number; cols: Record<string, number>; mode: 'split' | 'swap' | 'one'; codes: string[]; words: string[]; unknownWords: string[]; formulaCells: string[] }
+const U_SYL = [['ΚΑΡ', 'ΜΑΝ', 'ΠΑΠ', 'ΣΤΑ', 'ΒΛΑ', 'ΔΗΜ', 'ΧΡΙ', 'ΛΥΚ'], ['ΑΛ', 'ΟΝ', 'ΕΡ', 'ΙΩ', 'ΥΡ', 'ΑΝ', 'ΟΥΛ', 'ΕΛ'], ['ΛΗΣ', 'ΤΗΣ', 'ΝΗΣ', 'ΔΗΣ', 'ΡΑΣ', 'ΚΟΣ', 'ΜΟΣ', 'ΣΟΣ']];
+const U_FIRST = ['ΓΕΩΡΓΙΟΣ', 'ΝΙΚΟΛΑΟΣ', 'ΙΩΑΝΝΗΣ', 'ΔΗΜΗΤΡΙΟΣ', 'ΚΩΝΣΤΑΝΤΙΝΟΣ', 'ΑΝΤΩΝΙΟΣ', 'ΧΡΗΣΤΟΣ', 'ΘΕΟΔΩΡΟΣ', 'ΠΑΝΑΓΙΩΤΗΣ', 'ΕΥΑΓΓΕΛΟΣ'];
+const uName = (i: number) => U_SYL[0][i % 8] + U_SYL[1][((i / 8) | 0) % 8] + U_SYL[2][((i / 64) | 0) % 8];
+export async function genUnitRoster(seed: number): Promise<UnitRoster> {
+  const r = rng(seed * 7919 + 13); const wb = new ExcelJS.Workbook();
+  const master = pick(r, ['ΑΛΦΑΒΗΤΙΚΗ ΚΑΤΑΣΤΑΣΗ', 'ΚΑΤΑΛΟΓΟΣ', 'ΔΥΝΑΜΗ ΑΛΦΑΒΗΤΙΚΑ']);
+  const abs = 'ΑΝΑΛΥΤΙΚΗ ΚΑΤΑΣΤΑΣΗ ΑΠΟΝΤΩΝ', pres = 'ΠΑΡΟΝΤΕΣ', summary = 'ΔΚΤΗΣ';
+  const s = new S(wb.addWorksheet(master)); const mode = pick(r, ['split', 'swap', 'one'] as const);
+  const heads = ['α/α', 'ΒΑΘΜΟΣ', ...(mode === 'split' ? ['ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ'] : mode === 'swap' ? ['ΟΝΟΜΑ', 'ΕΠΩΝΥΜΟ'] : ['ΕΠΩΝΥΜΟ ΟΝΟΜΑ']), 'ΙΛΗ', 'ΚΑΤΑΣΤΑΣΗ', 'ΠΑΡΑΤΗΡΗΣΕΙΣ'];
+  const top = int(r, 0, 2); s.put(top, 0, 'ΔΥΝΑΜΗ ΜΟΝΑΔΑΣ'); s.merge(top, 0, top, heads.length - 1);
+  const hr = top + 1; heads.forEach((t, c) => s.put(hr, c, t, { b: true, box: true }));
+  const cols: Record<string, number> = { aa: 0, rank: 1 }; if (mode === 'split') Object.assign(cols, { last: 2, first: 3 }); else if (mode === 'swap') Object.assign(cols, { first: 2, last: 3 }); else Object.assign(cols, { name: 2 });
+  const nc = heads.length; Object.assign(cols, { sub: nc - 3, status: nc - 2, remarks: nc - 1 });
+  const CADRE = ['ΑΝΘΣΤΗΣ (ΤΘ)', 'ΕΠΟΠ ΑΛΧΙΑΣ (ΤΘ)', 'ΛΓΟΣ (ΠΖ)', 'ΕΠΟΠ ΔΝΕΑΣ (ΠΖ)', 'ΥΠΛΓΟΣ (ΜΧ)', 'ΟΒΑ ΣΤΡ (ΠΖ)'];
+  const SOLD: [string, string][] = [['ΣΤΡ (ΠΖ)', 'ΣΤΡ'], ['ΣΤΡ (ΤΘ)', 'ΣΤΡ'], ['ΥΔΝΕΑΣ (ΠΖ)', 'ΥΔΝΕΑΣ'], ['ΔΝΕΑΣ (ΜΧ)', 'ΔΝΕΑΣ'], ['ΣΤΡ', 'ΣΤΡ']];
+  const codes = ['Α', 'Β', '2', 'ΕΠ.', 'Δ/Σ']; const words = ['ΠΑΡΩΝ', 'ΑΠΑΛΛΑΓΗ', 'ΔΙΑΘΕΣΗ', 'ΝΟΣΟΚΟΜΕΙΟ', 'ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ']; const unknownWords = ['ΣΤΗΝ ΚΑΛΑΜΑΤΑ', 'ΧΧΨ ΚΑΤ'];
+  const n = int(r, 25, 60); const people: UnitPerson[] = []; let y = hr + 1;
+  for (let i = 0; i < n; i++) {
+    const cadre = chance(r, 0.35); const last = uName(i * 3 + seed % 7), first = pick(r, U_FIRST);
+    const rank = cadre ? pick(r, CADRE) : (() => { const x = pick(r, SOLD); return x[0]; })(); const app = cadre ? '' : SOLD.find(x => x[0] === rank)![1]; const arm = /\(([^)]*)\)/.exec(rank)?.[1] || '';
+    const code = pick(r, codes); const word = chance(r, 0.1) ? pick(r, unknownWords) : pick(r, words); const asm = chance(r, 0.5) ? '' : '2' + int(r, 10, 99) + '/' + (1000 + i);
+    s.put(y, 0, i + 1); s.put(y, 1, rank);
+    if (mode === 'split') { s.put(y, 2, last); s.put(y, 3, first); } else if (mode === 'swap') { s.put(y, 2, first); s.put(y, 3, last); } else s.put(y, 2, last + ' ' + first);
+    s.put(y, cols.sub, code); s.put(y, cols.status, word); if (chance(r, 0.2)) s.put(y, cols.remarks, 'ΣΗΜΕΙΩΣΗ ΜΟΝΑΔΑΣ');
+    people.push({ r: y, last, first, kind: cadre ? 'cadre' : 'soldier', rank, app, arm, code, word, asm }); y++;
+  }
+  // αριθμημένες θέσεις χωρίς όνομα
+  const vacant = int(r, 5, 25); for (let i = 0; i < vacant; i++) { s.put(y, 0, n + i + 1); y++; }
+  // τεράστια ουρά με μορφοποίηση (κενά κελιά με πλαίσιο)
+  const tail = 1500; for (let i = 0; i < tail; i++) { const c = wb.getWorksheet(master)!.getCell(y + i + 1, 1); c.border = { top: { style: 'thin' } }; }
+  // ΑΠΟΝΤΕΣ με τίτλους ομάδων, ΠΑΡΟΝΤΕΣ
+  const a = new S(wb.addWorksheet(abs)); a.put(0, 0, 'ΑΝΑΛΥΤΙΚΗ ΚΑΤΑΣΤΑΣΗ ΑΠΟΝΤΩΝ'); a.merge(0, 0, 0, nc - 1); heads.forEach((t, c) => a.put(1, c, t, { b: true, box: true }));
+  let ay = 2; for (const w of words.slice(1)) { a.put(ay, 0, w); a.merge(ay, 0, ay, nc - 1); ay++; for (const p of people.filter(x => x.word === w).slice(0, 5)) { a.put(ay, 0, ay); a.put(ay, 1, p.rank); a.put(ay, 2, mode === 'swap' ? p.first : mode === 'one' ? p.last + ' ' + p.first : p.last); if (mode !== 'one') a.put(ay, 3, mode === 'swap' ? p.last : p.first); a.put(ay, cols.sub, p.code); a.put(ay, cols.status, p.word); ay++; } }
+  const pr = new S(wb.addWorksheet(pres)); heads.forEach((t, c) => pr.put(0, c, t, { b: true, box: true })); let py = 1;
+  for (const p of people.filter(x => x.word === 'ΠΑΡΩΝ')) { pr.put(py, 0, py); pr.put(py, 1, p.rank); pr.put(py, 2, mode === 'swap' ? p.first : mode === 'one' ? p.last + ' ' + p.first : p.last); if (mode !== 'one') pr.put(py, 3, mode === 'swap' ? p.last : p.first); pr.put(py, cols.sub, p.code); pr.put(py, cols.status, p.word); py++; }
+  for (let i = 0; i < 800; i++) wb.getWorksheet(pres)!.getCell(py + i + 2, 1).border = { top: { style: 'thin' } };
+  // σύνοψη με τύπους πάνω στον κατάλογο
+  const sm = new S(wb.addWorksheet(summary)); const formulaCells: string[] = [];
+  sm.put(0, 0, 'ΔΥΝΑΜΗ'); codes.forEach((c, i) => { sm.put(1, i + 1, c, { b: true }); sm.put(2, i + 1, 0, { f: `COUNTIF('${master}'!${colName(cols.sub + 1)}:${colName(cols.sub + 1)},"${c}")` }); formulaCells.push(colName(i + 2) + '3'); });
+  return { buf: Buffer.from(await wb.xlsx.writeBuffer()), master, abs, pres, summary, people, vacant, header: hr, cols, mode, codes, words, unknownWords, formulaCells };
+}

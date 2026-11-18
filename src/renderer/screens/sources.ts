@@ -24,6 +24,7 @@ import { base, useSourceStatus } from './srcStatus';
 import { TplMapDialog } from './tplMap';
 import { ListMapDialog } from './listMap';
 import { DutyMapDialog } from './dutyMap';
+import { RosterMapDialog } from './rosterMap';
 import { pickDuties } from '../../shared/dutyGrid';
 export { SourcesAlert } from './srcStatus';
 type P = any;
@@ -55,6 +56,10 @@ export function SourcesView() {
   const edit = async (kind: ListKind) => {
     const r = await window.api.srcRead(kind); if (!r.ok) { toast({ text: r.error }); return; }
     setLayer({ kind: 'map', list: kind, book: r, b: r.binding || sources[kind] });
+  };
+  const mapRoster = async () => {
+    const r = await window.api.srcRead('people'); if (!r.ok) { toast({ text: r.error }); return; }
+    setLayer({ kind: 'rostermap', book: r, b: r.binding || sources.people });
   };
   const mapDuties = async () => {
     const r = await window.api.srcRead('duties'); if (!r.ok) { toast({ text: r.error }); return; }
@@ -93,7 +98,7 @@ export function SourcesView() {
     <${Card} title="Αρχεία Excel ανά είδος" actions=${html`<${Button} disabled=${!!busy} onClick=${() => pick(null)}>${busy === 'new' ? 'Ανάγνωση…' : 'Εισαγωγή νέου Excel…'}<//>`}>
       <p className="note" style=${{ marginTop: 0 }}>Για κάθε είδος: από ποιο Excel, φύλλο και πίνακα διαβάζει η εφαρμογή, και πού γράφει τις αλλαγές σου. Αλλάζεις κάτι εδώ (π.χ. το Σ.Ι. κάποιου, μια ποινή) και γράφεται στο κελί του στο Excel. Η προηγούμενη έκδοση του αρχείου μένει στο <b>_προηγούμενα</b> δίπλα του.</p>
       <ul className="srclist">${KINDS.map(k => html`<${SourceRow} key=${k.id} kind=${k.id} b=${sources[k.id]} st=${st.sources.find(x => x.kind === k.id)} busy=${busy === k.id} saving=${!!saving}
-        onPick=${() => pick(k.id)} onEdit=${() => edit(k.id)} onRead=${() => read(k.id)} onDutyMap=${mapDuties} onWrite=${() => setLayer({ kind: 'write', list: k.id })} onNew=${() => newFile(k.id)} host=${!!(sheetHost(k.id) && sources[sheetHost(k.id)!])}
+        onPick=${() => pick(k.id)} onEdit=${() => edit(k.id)} onRead=${() => read(k.id)} onDutyMap=${mapDuties} onRosterMap=${mapRoster} onWrite=${() => setLayer({ kind: 'write', list: k.id })} onNew=${() => newFile(k.id)} host=${!!(sheetHost(k.id) && sources[sheetHost(k.id)!])}
         onRemove=${() => remove(k.id)} onToggle=${(on: boolean) => toggle(k.id, { write: on })} onAuto=${(on: boolean) => toggle(k.id, { autoRead: on })}/>`)}</ul>
     <//>
     <${FormsCard} outs=${st.forms}/>
@@ -101,6 +106,7 @@ export function SourcesView() {
     ${layer?.kind === 'map' && html`<${MapDialog} list=${layer.list} book=${layer.book} initial=${layer.b} onClose=${() => setLayer(layer.back || null)}
       onSaved=${(b: SourceBinding, andRead: boolean) => { if (andRead) read(layer.list, b, layer.list === 'people' ? undefined : layer.book); else if (layer.list === 'people' && !layer.back) setLayer({ kind: 'write', list: 'people' }); else setLayer(layer.back || null); }}/>`}
     ${layer?.kind === 'dutymap' && html`<${DutyMapDialog} book=${layer.book} b=${layer.b} onClose=${close} onSaved=${(b: SourceBinding) => { read('duties', b, layer.book); }}/>`}
+    ${layer?.kind === 'rostermap' && html`<${RosterMapDialog} book=${layer.book} b=${layer.b} onClose=${close} onSaved=${(b: SourceBinding) => { read('people', b); }}/>`}
     ${layer?.kind === 'import' && html`<${ImportDialog} list=${layer.list} book=${layer.book} b=${layer.b} onClose=${close}/>`}
     ${layer?.kind === 'sheet' && html`<${SheetImportDialog} list=${layer.list} book=${layer.book} b=${layer.b} onClose=${close}/>`}
     ${layer?.kind === 'people' && html`<${Dialog} size="lg" title="Ανάγνωση προσωπικού από το Excel" onClose=${close}><${RosterPreview} pv=${layer.pv} onDone=${close} onCancel=${close}/><//>`}
@@ -121,7 +127,7 @@ function NewNameDialog({ kind, st, onClose, onGo }: P) {
     <p className="note">Θα λέγεται: <b className="num">${safeName(name) || stem}.xlsx</b></p>
   <//>`;
 }
-function SourceRow({ kind, b, st, busy, saving, host, onPick, onEdit, onDutyMap, onRead, onWrite, onNew, onRemove, onToggle, onAuto }: P) {
+function SourceRow({ kind, b, st, busy, saving, host, onPick, onEdit, onDutyMap, onRosterMap, onRead, onWrite, onNew, onRemove, onToggle, onAuto }: P) {
   const { today } = useStore();
   const k = KIND[kind as ListKind]; const canWrite = true; const withPeople = WITH_PEOPLE.includes(kind); const printFile = usePrintFile();
   const s: SourceStatus | undefined = st;
@@ -143,6 +149,7 @@ function SourceRow({ kind, b, st, busy, saving, host, onPick, onEdit, onDutyMap,
         ${canWrite && html`<${Button} size="sm" variant=${s?.error ? 'default' : 'outline'} onClick=${onWrite} data-tip="Γράψε στο Excel ό,τι έχει η εφαρμογή (με προεπισκόπηση)">Ενημέρωση Excel<//>`}
         ${kind === 'duties' && s?.month && s.month < today.slice(0, 7) && html`<${Button} size="sm" data-tip="Νέο φύλλο για τον τρέχοντα μήνα στο ίδιο αρχείο, με όλους τους ενεργούς, τους μετρητές και τις ΣΚ/αργίες· οι προηγούμενοι μήνες μένουν όπως είναι" onClick=${onNew}>Νέος μήνας<//>`}
         ${kind === 'duties' ? html`<${Button} size="sm" variant=${s?.dutyNeeds ? 'default' : 'outline'} data-tip="Το αρχείο σου έχει δικούς του κωδικούς ή άλλες στήλες; Δείξε τι σημαίνει ο κάθε κωδικός και ποιες είναι οι στήλες" onClick=${onDutyMap}>Αντιστοίχιση…${s?.dutyNeeds ? ' (' + s.dutyNeeds + ')' : ''}<//>` : null}
+        ${kind === 'people' && html`<${Button} size="sm" variant=${s?.rosterNeeds || b.own ? 'default' : 'outline'} data-tip="Το Δυναμολόγιό σου έχει στελέχη μέσα στη λίστα, δικούς του βαθμούς, ΙΛΗ ή ΚΑΤΑΣΤΑΣΗ; Δείξε τι είναι το κάθε φύλλο, στήλη και λέξη" onClick=${onRosterMap}>Αντιστοίχιση…<//>`}
         <${Button} size="sm" variant="ghost" onClick=${onEdit}>Στήλες…<//>
         <${Button} size="sm" variant="ghost" onClick=${onPick}>Άλλο αρχείο…<//>
         ${s?.exists && html`<${Button} size="sm" variant="ghost" onClick=${() => window.api.openPath(b.file)}>Άνοιξε<//><${Button} size="sm" variant="ghost" data-tip=${'Προεπισκόπηση και εκτύπωση του φύλλου «' + b.sheet + '» χωρίς Excel (τσεκάρεις κι άλλα φύλλα αν θέλεις)'} onClick=${() => printFile(b.file, b.sheet)}>Εκτύπωση<//>`}

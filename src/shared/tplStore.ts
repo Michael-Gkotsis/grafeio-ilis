@@ -38,6 +38,19 @@ export interface DutyProfile {
 //   cols    ρόλος στήλης → στήλη (0-based)· για outs με πρόθεμα «o.» (εξοδούχοι) ή «l.» (αδειούχοι)
 //   who     (rooms) φύλλο → ποιοι μπαίνουν: '' όλοι με θάλαμο, αλλιώς το όνομα Ίλης/Λόχου
 export interface ListProfile { sheet: string; posts?: Record<string, string>; cols?: Record<string, number>; who?: Record<string, string>; sheets?: string[] }
+// Δυναμολόγιο ΑΛΛΗΣ μονάδας (phase 4), kind 'roster'. Μόνο ό,τι διάλεξε ο χρήστης· ό,τι βρίσκεται μόνο του ξαναβρίσκεται κάθε φορά.
+//   sheet   ο κύριος κατάλογος (ξαναβρίσκεται και με άλλο όνομα από τις επικεφαλίδες του)
+//   cols    ρόλος στήλης (aa, rank, name, last, first, asm, sub, status, remarks…) → επικεφαλίδα που διάλεξε ο χρήστης· ignore: επικεφαλίδες που δεν διαβάζονται
+//   order   «ονοματεπώνυμο» σε ένα κελί: ποιο είναι πρώτο
+//   roles   φύλλο → abs (λίστα απόντων) | pres (λίστα παρόντων) | summary (σύνοψη) | skip· refill: ποιες λίστες ξαναγεμίζει η εφαρμογή (μόνο όσες τσέκαρε ο χρήστης)
+//   status  λέξη της στήλης ΚΑΤΑΣΤΑΣΗ (phraseKey) → present | ignore | <id κατάστασης> | own:<όνομα>· subs: τιμή της ΙΛΗ (phraseKey) → όνομα Λόχου/Ίλης ('' = καμία)
+//   ranks   βαθμός (phraseKey) που ρωτήθηκε → cadre | soldier
+export type RosterRole = 'abs' | 'pres' | 'summary' | 'skip';
+export interface RosterProfile {
+  sheet: string; cols: Record<string, string>; ignore: string[]; order?: 'last-first' | 'first-last';
+  roles: Record<string, RosterRole>; refill: string[];
+  status: Record<string, string>; subs: Record<string, string>; ranks: Record<string, 'cadre' | 'soldier'>;
+}
 export interface TplProfile {
   v: number;
   id: string;
@@ -50,6 +63,7 @@ export interface TplProfile {
   rules?: HkRulesStore;               // the unit's own columns/rows mapped to counting rules (hkRules.ts); until mapped they are warnings and never written
   back?: { num?: 'arabic' | 'greek'; date?: 'hk' | 'slash' | 'slash4'; line?: 'app' | 'person'; accepted?: string[] };   // the back side: format of a line, and the section words the user accepted as a proposal
   ignoreWords?: string[];             // words of the data sheet the user chose to ignore (phraseKey), kept between sessions
+  ros?: RosterProfile;                // kind 'roster': the unit's own roster file (rosterUnit.ts)
   duty?: DutyProfile;                 // kind 'duties': the unit's code vocabulary and the columns the user chose
   lst?: ListProfile;                  // kinds services / outs / rooms: the unit's own list layouts (see ListProfile)
   ours?: Record<string, string>;      // cells the safe writer filled: 'sheet|r:c' -> the text written (a cell that still holds it may be overwritten)
@@ -78,6 +92,14 @@ function cleanDuty(d: { codes: Record<string, unknown>; cols?: unknown }): DutyP
   return { codes, ...(Object.keys(cols).length ? { cols } : {}) };
 }
 
+function cleanRos(x: Record<string, unknown>): RosterProfile {
+  const strs = (o: unknown): Record<string, string> => (isObj(o) ? Object.fromEntries(Object.entries(o).filter(([, v]) => typeof v === 'string')) as Record<string, string> : {});
+  const roles = Object.fromEntries(Object.entries(strs(x.roles)).filter(([, v]) => ['abs', 'pres', 'summary', 'skip'].includes(v))) as Record<string, RosterRole>;
+  const ranks = Object.fromEntries(Object.entries(strs(x.ranks)).filter(([, v]) => v === 'cadre' || v === 'soldier')) as Record<string, 'cadre' | 'soldier'>;
+  return { sheet: x.sheet as string, cols: strs(x.cols), ignore: Array.isArray(x.ignore) ? x.ignore.filter(str) : [], ...(x.order === 'last-first' || x.order === 'first-last' ? { order: x.order } : {}),
+    roles, refill: Array.isArray(x.refill) ? x.refill.filter(str) : [], status: strs(x.status), subs: strs(x.subs), ranks };
+}
+
 function cleanLst(x: Record<string, unknown>): ListProfile {
   const strs = (o: unknown): Record<string, string> => (isObj(o) ? Object.fromEntries(Object.entries(o).filter(([, v]) => typeof v === 'string')) as Record<string, string> : {});
   const posts = strs(x.posts), who = strs(x.who);
@@ -102,6 +124,7 @@ export function sanitizeProfiles(x: unknown): TplProfile[] {
       ...(isObj(p.back) ? { back: { ...(p.back.num === 'greek' || p.back.num === 'arabic' ? { num: p.back.num } : {}), ...(p.back.date === 'hk' || p.back.date === 'slash' || p.back.date === 'slash4' ? { date: p.back.date } : {}), ...(p.back.line === 'app' || p.back.line === 'person' ? { line: p.back.line } : {}), ...(Array.isArray(p.back.accepted) ? { accepted: p.back.accepted.filter((x): x is string => typeof x === 'string') } : {}) } } : {}),
       ...(Array.isArray(p.ignoreWords) ? { ignoreWords: p.ignoreWords.filter((x): x is string => typeof x === 'string') } : {}),
       ...(isDuty(p.duty) ? { duty: cleanDuty(p.duty) } : {}),
+      ...(isObj(p.ros) && typeof p.ros.sheet === 'string' ? { ros: cleanRos(p.ros) } : {}),
       ...(isObj(p.lst) && typeof p.lst.sheet === 'string' ? { lst: cleanLst(p.lst) } : {}),
       ...(isObj(p.ours) ? { ours: Object.fromEntries(Object.entries(p.ours).filter(([, v]) => typeof v === 'string')) as Record<string, string> } : {})
     });

@@ -35,6 +35,7 @@ export interface SourceBinding {
   scope?: 'all' | 'active';          // τι γράφει: όλες τις εγγραφές ή μόνο όσες ισχύουν σήμερα και μετά (προεπιλογή από 30/10: active, τα ληγμένα σβήνονται)
   values?: Record<string, TypeKey>;  // τιμές του Excel που δεν αναγνωρίζονται μόνες τους (π.χ. «ΕΛ ΑΡΒ») → είδος
   unit?: boolean;                    // έλεγχος υπηρεσιών: πλέγμα άλλης μονάδας με δικούς της κωδικούς (προφίλ kind 'duties', dutyUnit.ts)
+  own?: boolean;                     // προσωπικό: Δυναμολόγιο ΑΛΛΗΣ μονάδας με δική του διάταξη (προφίλ kind 'roster', rosterUnit.ts)
   month?: string;                    // έλεγχος υπηρεσιών: ο μήνας του φύλλου (ΕΕΕΕ-ΜΜ), όταν ο τίτλος δεν τον γράφει
   autoRead?: boolean;                // καταστάσεις: απλές αλλαγές του Excel (νέες εγγραφές, άλλη ημερομηνία) περνούν μόνες τους (προεπιλογή ναι)
   heads?: Record<string, string>;    // επικεφαλίδα (headText) της στήλης κάθε πεδίου όπως ήταν όταν την είδε ο main (stampHeads): ξεχωρίζει «άλλαξε η στήλη του πεδίου» από «πάντα είχε δική σου επικεφαλίδα»
@@ -1873,6 +1874,7 @@ export function personSets(sheet: RawSheet, b: SourceBinding, s: AppState, psnap
 export interface SyncMeta { keys?: string[]; snap?: Record<number, PersonSnap>; psnap?: Record<number, PersonSnap>; base?: Record<string, string> }
 export interface FullPlan extends SourcePlan { snap?: Record<number, PersonSnap>; psnap: Record<number, PersonSnap>; grow?: PeoplePlan['grow'];
   inserts?: RowInsert[]; deletes?: number[]; fresh?: number[]; gone?: PersonSnap[];   // μόνο το προσωπικό (planPeopleWrite)
+  other?: { sheet: string; r: number; c: number; v: WVal }[];   // προσωπικό άλλης μονάδας: κελιά σε άλλα φύλλα (λίστες απόντων / παρόντων)
   extra?: Extra[]; merges?: Span[];   // νέο Δυναμολόγιο: τα σύνολα θαλάμων κάτω από τον πίνακα
   base?: Record<string, string> }   // στελέχη: οι τιμές της εφαρμογής όπως θα είναι μετά την εγγραφή (για το ποιος άλλαξε τι)
 export function planSource(kind: ListKind, sheet: RawSheet | null, b: SourceBinding, s: AppState, meta: SyncMeta | undefined, today: ISODate): FullPlan {
