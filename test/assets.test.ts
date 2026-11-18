@@ -43,13 +43,14 @@ describe('Μητρώο: προεπιλογές και ρυθμίσεις', () =>
   it('οι δικές σου κατηγορίες και λέξεις αντικαθιστούν τις προεπιλογές (δεδομένα, όχι κώδικας)', () => {
     const s = run(fakeState(1), { t: 'setSettings', settings: { assets: { cats: [{ id: 'k1', name: 'Φορητά', kind: 'weapon', types: ['ΧΧ'], fields: [], every: 3 }], places: [{ word: 'ΡΑΦΙ', means: 'store' }], warnDays: 10 } }, text: 'δοκιμή' });
     const c = assetCfgOf(s.settings);
-    expect(c.cats).toHaveLength(1); expect(c.cats[0].every).toBe(3); expect(c.places[0].word).toBe('ΡΑΦΙ'); expect(c.warnDays).toBe(10);
-    expect(catOfType(c, 'άγνωστος').id).toBe('k1');
+    // οι δικές σου πρώτες και ίδιες· οι τύποι των Λιστών που δεν έχουν κατηγορία παίρνουν δική τους στο τέλος (Σ7, 18/11)
+    expect(c.cats[0]).toMatchObject({ id: 'k1', name: 'Φορητά', types: ['ΧΧ'] }); expect(c.cats.slice(1).every(x => x.id.startsWith('wt:') && x.kind === 'weapon')).toBe(true); expect(c.cats[0].every).toBe(3); expect(c.places[0].word).toBe('ΡΑΦΙ'); expect(c.warnDays).toBe(10);
+    expect(catOfType(c, 'άγνωστος').name).toBe('άγνωστος');   // άγνωστος τύπος: δική του κατηγορία, όχι η πρώτη
   });
-  it('τύπος όπλου → κατηγορία: η κατηγορία που τον έχει, αλλιώς Τυφέκια', () => {
+  it('τύπος όπλου → κατηγορία: η κατηγορία που τον έχει, αλλιώς δική του (χωρίς τύπο: Τυφέκια)', () => {
     const c = assetCfgOf(fakeState(1).settings);
     expect(catOfType(c, 'MG3A1').name).toBe('Πολυβόλα'); expect(catOfType(c, 'μ1911 α1').name).toBe('Πιστόλια');
-    expect(catOfType(c, 'G3A3').name).toBe('Τυφέκια'); expect(catOfType(c, '').name).toBe('Τυφέκια'); expect(catOfType(c, 'ΑΓΝΩΣΤΟ').name).toBe('Τυφέκια');
+    expect(catOfType(c, 'G3A3').name).toBe('Τυφέκια'); expect(catOfType(c, '').name).toBe('Τυφέκια'); expect(catOfType(c, 'ΑΓΝΩΣΤΟ').name).toBe('ΑΓΝΩΣΤΟ');
   });
 });
 

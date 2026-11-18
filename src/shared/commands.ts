@@ -15,7 +15,7 @@ import { leaveCmdOf, sameLeave, nextCadrePid, seatMap, skipTxt, capBlock, capCel
 import { noNotes, svcColOk, svcDefault, cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, isAway, itemName, leavePhrase, listRows, rankTxt, statusLbl, weaponBack, withOrigin, type HkRowDef, type ListId, type UserLists } from './ranks';
 import { insertCadre, isManualOrder } from './cadre';
 import { clearRange, setNoDuty } from './cadrePlan';
-import { assetCfgOf, catOf, cleanAsset, doMaint, holderText, registry, sameHolder, STATE_TXT } from './assets';
+import { assetCfgOf, catOf, cleanAsset, doMaint, heldWarn, holderText, registry, sameHolder, STATE_TXT } from './assets';
 import { doVehMaint, driverText, kmTxt, numTxt, vehName, withKm } from './vehicles';
 import { cleanPerson, dutyCfgOf, serviceOf } from './cadreDuty';
 import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours';
@@ -402,6 +402,9 @@ const withLv = (s: AppState, d: ISODate, lv: boolean): HkaiManual => ({ cells: s
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const moveWhy = (why?: string, where?: string) => upper([(why || '').replace(/\s+/g, ' ').trim(), (where || '').replace(/\s+/g, ' ').trim()].filter(Boolean).join(': '));
 // Η κίνηση εφαρμόζεται στο άτομο: εκτός δύναμης (ημερομηνία διαγραφής, σημείωση «Εκτός δύναμης: <λόγος>» όπως από την καρτέλα) ή ξανά σε δύναμη
+// Σ9: όποιος βγαίνει εκτός δύναμης και έχει ακόμα χρεωμένα στο Μητρώο (όπλο, υλικό, όχημα): προειδοποίηση στο κείμενο, τίποτα δεν ξεχρεώνεται μόνο του
+const heldNote = (s: AppState, pid: number) => { const w = heldWarn(s, [pid]); return w ? ' · ' + w.replace(/^ΠΡΟΣΟΧΗ: μένουν χρεωμένα σε άτομο εκτός δύναμης: /, 'ΠΡΟΣΟΧΗ: χρεωμένα ') : ''; };
+const APS_WHY = 'ΑΠΟΣΠΑΣΗ';   // ο λόγος της «Κίνησης δύναμης» που δηλώνει κατάσταση APS αντί για έξοδο από τη δύναμη
 function applyMove(p: Person, m: Move): Person {
   const q: Person = { ...p, moves: (p.moves || []).map(x => (x.id === m.id ? { ...x, done: true } : x)) };
   if (m.dir === 'out') {
@@ -429,7 +432,7 @@ function applyDueMoves(s: AppState, today: ISODate, pids?: number[]): { state: A
         const from = m.on > today ? m.on : today;
         for (const d of Object.keys(next.guards).filter(d => d >= from)) for (const [k, pid] of Object.entries(next.guards[d] || {})) if (pid === p.id) { next = setGuard(next, d, k, null); gone++; }
       }
-      texts.push(shortName(p) + ': ' + (m.dir === 'out' ? 'εκτός δύναμης (' + (moveWhy(m.why, m.where) || 'χωρίς λόγο') + ') από ' + dm(m.on) : 'ξανά σε δύναμη από ' + dm(m.on)));
+      texts.push(shortName(p) + ': ' + (m.dir === 'out' ? 'εκτός δύναμης (' + (moveWhy(m.why, m.where) || 'χωρίς λόγο') + ') από ' + dm(m.on) + heldNote(next, p.id) : 'ξανά σε δύναμη από ' + dm(m.on)));
     }
     next = { ...next, people: next.people.map(x => (x.id === p.id ? p : x)) };
   }
@@ -1559,12 +1562,17 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       if (c.dir === 'out' && !p.active && !pend.some(x => x.dir === 'in')) throw new Error(shortName(p) + ' είναι ήδη εκτός δύναμης');
       if (c.dir === 'in' && p.active && !pend.some(x => x.dir === 'out')) throw new Error(shortName(p) + ' είναι ήδη σε δύναμη');
       const id = ctx.newId(); const why = upper((c.why || '').replace(/\s+/g, ' ').trim()); const where = upper((c.where || '').replace(/\s+/g, ' ').trim());
+      // Απόσπαση (Michael, 18/11): μένει σε δύναμη ως απών (κατάσταση APS, στήλη «Αποσπασμένοι σε άλλη μονάδα» της ΗΚΑΙ), από την ημέρα της κίνησης ως την προηγούμενη της επιστροφής (χωρίς επιστροφή: χωρίς λήξη). Οι παλιές κινήσεις Απόσπασης μένουν όπως ήταν
+      if (c.dir === 'out' && why === APS_WHY) {
+        const r = run(s, { t: 'declare', cmd: { type: 'APS', pids: [p.id], from: c.on, to: c.back ? addDays(c.back, -1) : c.on, open: !c.back, ...(where ? { note: where } : {}) } }, ctx);
+        return { ...r, text: 'Απόσπαση: ' + shortName(p) + (c.on > ctx.today ? ' φεύγει σε απόσπαση στις ' + dm(c.on) : ' σε απόσπαση από ' + dm(c.on)) + (where ? ' (' + where + ')' : '') + (c.back ? ', επιστρέφει ' + dm(c.back) : ', χωρίς λήξη') + ' · μένει σε δύναμη, απών' };
+      }
       const mv: Move = c.dir === 'out' ? { id, dir: 'out', why, ...(where ? { where } : {}), on: c.on, ...(c.back ? { back: c.back } : {}) } : { id, dir: 'in', why: why || 'ΕΠΙΣΤΡΟΦΗ', ...(where ? { where } : {}), on: c.on };
       const moves = [...(p.moves || []), mv];
       if (c.dir === 'out' && c.back) moves.push({ id: ctx.newId(), dir: 'in', why: 'ΕΠΙΣΤΡΟΦΗ', on: c.back, of: id });
       const state = { ...s, people: s.people.map(x => (x === p ? { ...p, moves } : x)) };
       const r = applyDueMoves(state, ctx.today, [p.id]);
-      const sched = (c.dir === 'out' ? shortName(p) + ' φεύγει' : shortName(p) + ' ξαναμπαίνει σε δύναμη') + ' στις ' + dm(c.on) + (c.dir === 'out' ? ' (' + moveWhy(why, where) + ')' : '') + (c.back ? ', επιστρέφει ' + dm(c.back) : '');
+      const sched = (c.dir === 'out' ? shortName(p) + ' φεύγει' : shortName(p) + ' ξαναμπαίνει σε δύναμη') + ' στις ' + dm(c.on) + (c.dir === 'out' ? ' (' + moveWhy(why, where) + ')' : '') + (c.back ? ', επιστρέφει ' + dm(c.back) : '') + heldNote(state, p.id);
       const text = r.texts.length ? 'Κίνηση δύναμης: ' + r.texts.join('; ') + (r.gone ? ' (βγήκε από ' + r.gone + (r.gone === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ')' : '') + (c.back ? ', επιστρέφει ' + dm(c.back) : '') : 'Κίνηση δύναμης: ' + sched;
       return { state: r.state, text, files: r.gone ? ['Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [] };
     }
@@ -1587,7 +1595,8 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       });
       if (ids.some(id => !pm.has(id))) throw new Error('Δεν βρέθηκε το άτομο');
       const r = applyDueMoves({ ...s, people }, ctx.today, ids);
-      return { state: r.state, text: 'Απόλυση ΕΣΣΟ ' + (e ? essoPersonTxt(e) : c.esso) + ': ' + ids.length + (ids.length === 1 ? ' στρατιώτης' : ' στρατιώτες') + ' ' + (c.on <= ctx.today ? 'εκτός δύναμης από ' : 'εκτός δύναμης στις ') + dm(c.on), files: r.gone ? ['Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [] };
+      const held = heldWarn(s, ids);   // Σ9: χρεωμένα του Μητρώου όσων φεύγουν (και αν η απόλυση είναι μελλοντική)
+      return { state: r.state, text: 'Απόλυση ΕΣΣΟ ' + (e ? essoPersonTxt(e) : c.esso) + ': ' + ids.length + (ids.length === 1 ? ' στρατιώτης' : ' στρατιώτες') + ' ' + (c.on <= ctx.today ? 'εκτός δύναμης από ' : 'εκτός δύναμης στις ') + dm(c.on) + (held ? ' · ' + held : ''), files: r.gone ? ['Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [] };
     }
     case 'applyMoves': {
       const r = isUnit(s.settings) ? applyDueMoves(s, ctx.today) : { state: s, texts: [] as string[], gone: 0 };

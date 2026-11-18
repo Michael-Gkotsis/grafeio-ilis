@@ -9,7 +9,7 @@ import { STAT_ROWS, statDefault, statIsUnarmed, statNoOut, statOn, type StatCell
 import { backBy, hasTimes, mins } from './hours';
 import { dayTimes, leaveOut, outHeld } from './returns';   // κυκλική εξάρτηση: καλείται μέσα σε συναρτήσεις (returns.ts)
 import {
-  ADIK_TYPES, TYPES, TYPE_KEYS, RECORD_CATS, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, STEP_COL, stepColOf, kolColName, kolColOf, kolColsOf, kolHk, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
+  ADIK_APS_TYPES, TYPES, TYPE_KEYS, RECORD_CATS, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, STEP_COL, stepColOf, kolColName, kolColOf, kolColsOf, kolHk, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
   KIND_NAME, type AppState, type CapKey, type Caps, type Phase, type Baseline, type Cadre, type CadreAbs, type CadreDuty, type DutyLog, type Person, type PersonRequest, type Post, type Skip, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
 } from './domain';
 
@@ -1407,7 +1407,7 @@ export function planStatusChange(s: AppState, cmd0: StatusCmd, today?: ISODate):
   else if (cmd.type === 'KOL') files.push({ fn: HK(), desc: cmd.minus ? (kolHk(cmd) ? 'Κωλυόμενοι: ' + kolColName(kolColOf(cmd)) + ' +' + n : 'Κωλυόμενος στη Δύναμη, όχι στην ΗΚΑΙ') : 'Μένει στους παρόντες: δεν μπαίνει στους κωλυόμενους' });
   // άγνοια/λιποταξία/αδικαιολόγητη απουσία: στήλη των απόντων, όχι των κωλυομένων
   const tHk = typeHkOf(cmd.type, lists);   // η στήλη της κατάστασης (Ρυθμίσεις › Στήλη ΗΚΑΙ ανά κατάσταση)
-  if (tHk && cmd.type !== 'PUN' && t.cat !== 'abs' && !isNote) files.push({ fn: HK(), desc: (isAbsCol(tHk, lists) && ADIK_TYPES.includes(cmd.type) ? 'Απόντες: ' : 'Κωλυόμενοι: ') + t.long + ' ' + rows(n) });
+  if (tHk && cmd.type !== 'PUN' && t.cat !== 'abs' && !isNote) files.push({ fn: HK(), desc: (isAbsCol(tHk, lists) && ADIK_APS_TYPES.includes(cmd.type) ? 'Απόντες: ' : 'Κωλυόμενοι: ') + t.long + ' ' + rows(n) });
   const keep = (x: Status) => splitOut(x, cmd.from, outCutTo(s, cmd), () => '').map(y => rangeTxt(y.from, y.to)).join(', ');
   if (cancels.length) files.push({ fn: 'Εξοδούχοι', warn: true, desc: 'Ακυρώνεται η έξοδος: ' + cancels.map(x => shortName(pm.get(x.pid)!) + ' (' + rangeTxt(x.from, x.to) + (keep(x) ? ', μένει ' + keep(x) : '') + ')').join(', ') + '. ' + (cmd.type === 'PUN' ? 'Ο τιμωρημένος' : t.label) + ' δεν βγαίνει έξοδο.' });
   files.push(...conflictFiles(s, conflicts));

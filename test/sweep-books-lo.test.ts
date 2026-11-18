@@ -11,6 +11,7 @@ import { apply, type Command } from '../src/shared/commands';
 import { addDays } from '../src/shared/dates';
 import { blocksOf, type AppState } from '../src/shared/domain';
 import { registry } from '../src/shared/assets';
+import { secondWeapons } from '../src/shared/weapons';
 import { autoFill } from '../src/shared/cadreDuty';
 import { assetBook, cadreDutyBook, cadreLeaveBook, cadrePlanBook, vehicleBook, weaponsBook } from '../src/main/excel';
 import { upper } from '../src/shared/text';
@@ -62,8 +63,9 @@ describe('Τα νέα Excel της 17/11: ανοίγουν στο LibreOffice ί
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'grafeio-books-'));
     try {
       const files: { f: string; buf: Buffer; what: string }[] = [];
+      const second = new Map<number, number>();   // δεύτερα όπλα (Μητρώο) των δύο της υπηρεσίας εκτός: μετρούν κι αυτά ΑΠΩΝ στο φύλλο ΑΠΟΝΤΑ (Σ8, 18/11)
       for (let seed = 1; seed <= 4; seed++) {
-        const s = state(seed);
+        const s = state(seed); second.set(seed, [3, 4].reduce((t, pid) => t + (secondWeapons(s).get(pid) || []).filter(a => a.state === 'ok').length, 0));
         const made = [await cadreLeaveBook(s, 2026, D, s.cadreList[0].id), await cadrePlanBook(s, '2026-12', D), await cadreDutyBook(s, '2026-12', D), await assetBook(s, registry(s, { day: D, hm: '18:00' }), D), await vehicleBook(s, D), await weaponsBook(s, D)];
         made.forEach((m, i) => { const f = path.join(dir, seed + '-' + i + '.xlsx'); fs.writeFileSync(f, m.data); files.push({ f, buf: m.data, what: seed + ' ' + m.name }); });
       }
@@ -84,7 +86,7 @@ describe('Τα νέα Excel της 17/11: ανοίγουν στο LibreOffice ί
       for (const x of files) {
         const b = await cells(fs.readFileSync(path.join(dir, 'out', path.basename(x.f))));
         const ab = [...b].filter(([k]) => k.startsWith('ΑΠΟΝΤΑ!')).map(([, v]) => v);
-        if (ab.length) { wk++; expect(ab.filter(v => v === 'ΑΠΩΝ: ΥΠΗΡΕΣΙΑ ΦΥΛΑΚΙΟ ΠΟΤΑΜΟΥ 14:45–22:15'), x.what).toHaveLength(2); }
+        if (ab.length) { wk++; expect(ab.filter(v => v === 'ΑΠΩΝ: ΥΠΗΡΕΣΙΑ ΦΥΛΑΚΙΟ ΠΟΤΑΜΟΥ 14:45–22:15'), x.what).toHaveLength(2 + second.get(+x.what.split(' ')[0])!); }
         const th = [...b.values()].filter(v => v === 'ΑΠΩΝ (ΦΥΛΑΚΙΟ ΠΟΤΑΜΟΥ)');
         if (th.length) { reg++; expect(th, x.what).toHaveLength(2); expect([...b].some(([k, v]) => k.startsWith('ΣΥΝΟΛΑ!') && v === 'ΑΠΟΝΤΑ'), x.what).toBe(true); }
       }

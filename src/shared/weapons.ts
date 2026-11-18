@@ -4,13 +4,13 @@
 // έχει ένοπλη υπηρεσία (σκοπός, οπλοφύλακας, ΤΑΕ, δική σου ένοπλη), με τη θέση ως λόγο.
 // Τίποτα δεν μπλοκάρεται: ίδιος αριθμός σε δύο, όπλο σε άοπλο ή σε εκτός δύναμης φαίνονται ως φίλτρα και προειδοποιήσεις.
 import { dm, dmy, type ISODate } from './dates';
-import { blocksOf, type AppState, type Cadre, type Person, type WeaponMove } from './domain';
+import { blocksOf, type AppState, type Asset, type Cadre, type Person, type WeaponMove } from './domain';
 import { ARM_BACK, armedLive, armedRows, armWhen, calDay, hmOf, rowById, type ArmRow, type ArmState } from './armed';
 import { weaponBack } from './ranks';
 import { postBy, postsOf, seatMap } from './rules';
 import { siIsUnarmed, siOf } from './si';
 import { byRoomName } from './rosterLists';
-import { normGreek, upper } from './text';
+import { collator, normGreek, upper } from './text';
 import { rankTxt } from './ranks';
 
 // Όπως γράφεται στα Excel: κεφαλαία, ένα κενό το πολύ
@@ -127,13 +127,46 @@ export function weaponInfo(s: Pick<AppState, 'people' | 'settings'> & Partial<Pi
 }
 // Όπλα του Μητρώου «Προς επισκευή» ή σε «Ακινησία» (όχι διαγραμμένα): δεν είναι στον οπλοβαστό. Μόνο κατηγορίες όπλων (όχι υλικό/οχήματα)
 const WEAPON_CATS = ['tyfekia', 'pistolia', 'polyvola', 'antiarm', 'pyrovola'];
+// Οι κατηγορίες που βγαίνουν μόνες τους για έναν τύπο όπλου (Λίστες › Τύποι όπλων ή άγνωστος τύπος, assets.ts assetCfgOf) έχουν αυτό το πρόθεμα
+export const WT_CAT = 'wt:';
+const weaponCats = (s: Pick<AppState, 'settings'>) => (s.settings.assets?.cats?.length ? new Set(s.settings.assets.cats.filter(c => c.kind === 'weapon').map(c => c.id)) : new Set(WEAPON_CATS));
+const isWeaponCat = (cats: Set<string>, id: string) => cats.has(id) || id.startsWith(WT_CAT);
 function repairOf(s: Pick<AppState, 'people' | 'settings'> & Partial<Pick<AppState, 'assets'>>): Map<number, string> {
   const m = new Map<number, string>(); if (!s.assets?.length) return m;
-  const cats = s.settings.assets?.cats?.length ? new Set(s.settings.assets.cats.filter(c => c.kind === 'weapon').map(c => c.id)) : new Set(WEAPON_CATS);
+  const cats = weaponCats(s);
   const bad = new Map<string, string>();
-  for (const a of s.assets) if (!a.gone && (a.state === 'repair' || a.state === 'immobile') && cats.has(a.cat)) { const k = weaponKey(a.no); if (k) bad.set(k, upper(REPAIR_KEY + (a.why ? ': ' + a.why : ''))); }
+  for (const a of s.assets) if (!a.gone && (a.state === 'repair' || a.state === 'immobile') && isWeaponCat(cats, a.cat)) { const k = weaponKey(a.no); if (k) bad.set(k, upper(REPAIR_KEY + (a.why ? ': ' + a.why : ''))); }
   if (bad.size) for (const p of s.people) { const t = bad.get(weaponKey(p.weapon)); if (t) m.set(p.id, t); }
   return m;
+}
+// Δεύτερα όπλα (Michael, 18/11): εγγραφές του Μητρώου σε κατηγορία όπλων, χρεωμένες σε άτομο του Δυναμολογίου, με αριθμό που δεν είναι το κύριο όπλο
+// κανενός (αυτά τα δείχνει ήδη η γραμμή του ατόμου). Όχι διαγραμμένα ούτε «προς διαγραφή». pid → εγγραφές, με τύπο και αριθμό.
+export function secondWeapons(s: Pick<AppState, 'people' | 'settings'> & Partial<Pick<AppState, 'assets' | 'cadreList'>>): Map<number, Asset[]> {
+  const m = new Map<number, Asset[]>(); if (!s.assets?.length) return m;
+  const cats = weaponCats(s); const prim = new Set<string>(); const ids = new Set<number>();
+  for (const p of s.people) { ids.add(p.id); const k = weaponKey(p.weapon); if (k) prim.add(k); }
+  for (const c of s.cadreList || []) { const k = weaponKey(c.weapon); if (k) prim.add(k); }
+  const seen = new Set<string>();
+  for (const a of s.assets) {
+    if (a.gone || a.state === 'writeoff' || !isWeaponCat(cats, a.cat) || a.holder?.k !== 'person' || !ids.has(a.holder.pid)) continue;
+    const k = weaponKey(a.no); if (!k || prim.has(k) || seen.has(a.holder.pid + '|' + k)) continue;
+    seen.add(a.holder.pid + '|' + k);
+    const l = m.get(a.holder.pid); if (l) l.push(a); else m.set(a.holder.pid, [a]);
+  }
+  m.forEach(l => l.sort((x, y) => collator.compare(x.type, y.type) || collator.compare(x.no, y.no)));
+  return m;
+}
+// ΕΝΤΟΣ / ΕΚΤΟΣ του δεύτερου όπλου, με τη σειρά του κύριου: προς επισκευή, υπηρεσία εκτός στρατοπέδου (ΑΠΩΝ), ένοπλη υπηρεσία (ΕΚΤΟΣ), αλλιώς ΕΝΤΟΣ
+export const secondText = (p: Pick<Person, 'id' | 'active'>, a: Pick<Asset, 'state' | 'why'>, info: WeaponInfo): string =>
+  a.state === 'repair' || a.state === 'immobile' ? 'ΕΚΤΟΣ: ' + upper(REPAIR_KEY + (a.why ? ': ' + a.why : '')) : info.away.has(p.id) ? 'ΑΠΩΝ: ' + info.away.get(p.id) : info.out.has(p.id) ? 'ΕΚΤΟΣ: ' + info.out.get(p.id) : p.active ? 'ΕΝΤΟΣ' : '';
+// Σε ποια φίλτρα φαίνονται τα δεύτερα όπλα ενός ατόμου: όλοι, με όπλο (σε δύναμη), να παραδώσουν (εκτός δύναμης)· εκτός οπλοβαστού / απόντα μόνο όσα είναι εκεί. Στα υπόλοιπα (χωρίς όπλο, άοπλοι, ίδιος αριθμός) όχι
+export function secondShown(f: WeaponFilter, p: Pick<Person, 'id' | 'active'>, a: Pick<Asset, 'state' | 'why'>, info: WeaponInfo): boolean {
+  if (f === 'return') return !p.active;
+  if (!p.active) return false;
+  if (f === 'all' || f === 'with') return true;
+  if (f === 'out') return secondText(p, a, info).startsWith('ΕΚΤΟΣ');
+  if (f === 'away') return secondText(p, a, info).startsWith('ΑΠΩΝ');
+  return false;
 }
 // Οι άλλοι (σε δύναμη) με την ίδια θέση (οπλοβαστός + θέση)
 export const sameRack = (info: WeaponInfo, p: Pick<Person, 'id' | 'rack' | 'wpos'>, rack = p.rack, wpos = p.wpos) =>
@@ -144,6 +177,9 @@ export const inOutText = (p: Person, info: WeaponInfo) => (info.moves.has(p.id) 
 // Οι άλλοι που έχουν τον ίδιο αριθμό
 export const sameWeapon = (info: WeaponInfo, p: Pick<Person, 'id' | 'weapon'>, weapon = p.weapon) =>
   (info.holders.get(weaponKey(weapon)) || []).filter(x => x.id !== p.id);
+
+// Οθόνη Οπλισμού: η γραμμή του ατόμου φαίνεται και όταν μόνο κάποιο δεύτερο όπλο του ταιριάζει στο φίλτρο (π.χ. το δεύτερο είναι προς επισκευή → «Εκτός οπλοβαστού»). Στο Excel τότε μπαίνει μόνο η γραμμή του δεύτερου όπλου
+export const weaponMatchX = (f: WeaponFilter, p: Person, info: WeaponInfo, sec: Map<number, Asset[]>) => weaponMatch(f, p, info) || (sec.get(p.id) || []).some(a => secondShown(f, p, a, info));
 
 export function weaponMatch(f: WeaponFilter, p: Person, info: WeaponInfo): boolean {
   const has = !!weaponKey(p.weapon);
@@ -161,13 +197,25 @@ export function weaponMatch(f: WeaponFilter, p: Person, info: WeaponInfo): boole
 // Excel «Οπλισμός»: ένα φύλλο ανά φίλτρο. Το πρώτο (όλοι) έχει και στήλη υπογραφής, για τη χρέωση των όπλων.
 export const WEAPON_COLS = ['Α/Α', 'ΒΑΘΜΟΣ', 'Ο/Σ', 'ΕΠΙΘΕΤΟ', 'ΟΝΟΜΑ', 'ΠΑΤΡΩΝΥΜΟ', 'ΑΣΜ', 'ΘΑΛΑΜΟΣ', 'Σ.Ι.', 'ΤΥΠΟΣ ΟΠΛΟΥ', 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ', 'ΟΠΛΟΒΑΣΤΟΣ', 'ΘΕΣΗ', 'ΕΝΤΟΣ / ΕΚΤΟΣ'];
 export const W_NUM = WEAPON_COLS.indexOf('ΑΡΙΘΜΟΣ ΟΠΛΟΥ');
-export interface WeaponSheet { name: string; title: string; head: string[]; rows: (string | number)[][]; note: string }
+export interface WeaponSheet { name: string; title: string; head: string[]; rows: (string | number)[][]; note: string; people?: number }   // people: πόσα άτομα (όταν υπάρχουν γραμμές δεύτερων όπλων, οι γραμμές είναι περισσότερες από τα άτομα)
 export function weaponSheets(s: AppState, d: ISODate): WeaponSheet[] {
   const info = weaponInfo(s, d); const lists = s.settings.lists; const people = [...s.people].sort(byRoomName);
-  return WEAPON_FILTERS.filter(([f]) => f !== 'away' || people.some(p => weaponMatch(f, p, info))).map(([f, , name, note], i) => {
-    const rows = people.filter(p => weaponMatch(f, p, info)).map((p, j) => [j + 1, rankTxt(p), p.spec, p.last, p.first, p.father, p.asm, p.room ?? '', p.si ? siOf(p, lists).text : '', p.wtype || '', normWeapon(p.weapon), normRack(p.rack), normPos(p.wpos), inOutText(p, info)]);
+  const sec = secondWeapons(s);
+  return WEAPON_FILTERS.filter(([f]) => f !== 'away' || people.some(p => weaponMatchX(f, p, info, sec))).map(([f, , name, note], i) => {
+    let rows: (string | number)[][]; let persons: number | undefined;
+    if (!sec.size) rows = people.filter(p => weaponMatch(f, p, info)).map((p, j) => [j + 1, rankTxt(p), p.spec, p.last, p.first, p.father, p.asm, p.room ?? '', p.si ? siOf(p, lists).text : '', p.wtype || '', normWeapon(p.weapon), normRack(p.rack), normPos(p.wpos), inOutText(p, info)]);
+    else {
+      // δεύτερα όπλα: μία γραμμή το καθένα, κάτω από τη γραμμή του ατόμου, με τα στοιχεία του επαναλαμβανόμενα· ίδιες στήλες
+      rows = []; let n = 0, extra = 0;
+      for (const p of people) {
+        const who = [rankTxt(p), p.spec, p.last, p.first, p.father, p.asm, p.room ?? '', p.si ? siOf(p, lists).text : ''];
+        if (weaponMatch(f, p, info)) { rows.push([rows.length + 1, ...who, p.wtype || '', normWeapon(p.weapon), normRack(p.rack), normPos(p.wpos), inOutText(p, info)]); n++; }
+        for (const a of sec.get(p.id) || []) if (secondShown(f, p, a, info)) { rows.push([rows.length + 1, ...who, a.type || '', normWeapon(a.no), normRack(a.rack), normPos(a.wpos), secondText(p, a, info)]); extra++; }
+      }
+      persons = extra ? n : undefined;
+    }
     if (f === 'dup') rows.sort((a, b) => weaponKey(a[W_NUM]).localeCompare(weaponKey(b[W_NUM])) || 0).forEach((r, j) => { r[0] = j + 1; });
-    return { name, title: name + ' ' + dmy(d), head: i === 0 ? [...WEAPON_COLS, 'ΥΠΟΓΡΑΦΗ'] : WEAPON_COLS, rows: i === 0 ? rows.map(r => [...r, '']) : rows, note };
+    return { name, title: name + ' ' + dmy(d), head: i === 0 ? [...WEAPON_COLS, 'ΥΠΟΓΡΑΦΗ'] : WEAPON_COLS, rows: i === 0 ? rows.map(r => [...r, '']) : rows, note, ...(persons != null ? { people: persons } : {}) };
   }).concat([moveSheet(s, d)]);
 }
 // Κινήσεις όπλων της μέρας: όσα βγήκαν ή μπήκαν τη μέρα, και όσα βγήκαν πριν και είναι ακόμα εκτός

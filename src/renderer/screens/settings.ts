@@ -6,7 +6,7 @@ import { useNav, useStore } from '../store';
 import { requestLeave, usePending } from '../pending';
 import { DateField, useUsbCopy } from '../common';
 import { USB_DAYS, usbDue } from '../../shared/reminders';
-import { ADIK_GROUPS, ADIK_TYPES, PHASE_NAME, TYPES, adikGroupOf, blockShape, blocksOf, isOutsAll, phaseList, phaseName, type AdikGroup, type Phase, type Settings } from '../../shared/domain';
+import { ADIK_GROUPS, ADIK_APS_TYPES, PHASE_NAME, TYPES, adikGroupDefault, adikGroupOf, blockShape, blocksOf, isOutsAll, phaseList, phaseName, type AdikGroup, type Phase, type Settings } from '../../shared/domain';
 import { DAY_GROUPS } from '../../shared/outsDay';
 import { AddBlockDialog, PhaseDialog, PhaseSelect } from './guard';
 import { useBlockForm, BlockForm } from '../blockForm';
@@ -212,14 +212,14 @@ function OutsSig2() {
 function OutsAdik() {
   const { state, run } = useStore();
   const pick = (type: string, g: AdikGroup) => {
-    const cur = { ...(state.settings.outsAdik || {}) }; if (g === 'B5') delete cur[type]; else cur[type] = g;
+    const cur = { ...(state.settings.outsAdik || {}) }; if (g === adikGroupDefault(type)) delete cur[type]; else cur[type] = g;
     return run({ t: 'setSettings', settings: { outsAdik: Object.keys(cur).length ? cur : undefined }, text: 'ΔΥΝΑΜΗ εξοδούχων, ' + TYPES[type as 'AGN'].label + ': ομάδα ' + DAY_GROUPS.find(x => x[0] === g)![2] }, false);
   };
   return html`<div className="adikgrp" style=${{ marginTop: '14px', paddingTop: '10px', borderTop: '1px solid var(--line, #d0d4c4)' }}>
     <div style=${{ marginBottom: '6px' }}><b>Στη ΔΥΝΑΜΗ των Εξοδούχων μπαίνει στην ομάδα</b></div>
-    ${ADIK_TYPES.map(ty => html`<div key=${ty} className="toolbar" style=${{ alignItems: 'center', marginBottom: '4px' }}><span style=${{ minWidth: '170px' }}>${TYPES[ty].label}</span>
+    ${ADIK_APS_TYPES.map(ty => html`<div key=${ty} className="toolbar" style=${{ alignItems: 'center', marginBottom: '4px' }}><span style=${{ minWidth: '170px' }}>${TYPES[ty].label}</span>
       <${Select} className="ui-select" aria-label=${'Ομάδα ΔΥΝΑΜΗΣ για: ' + TYPES[ty].long} value=${adikGroupOf(state.settings, ty)} onChange=${(e: any) => pick(ty, e.target.value as AdikGroup)}>${ADIK_GROUPS.map(g => html`<option key=${g} value=${g}>${'Β' + g[1] + '. ' + DAY_GROUPS.find(x => x[0] === g)![2]}</option>`)}<//></div>`)}
-    <p className="note" style=${{ marginTop: 0 }}>Ισχύει στη μορφή «Όλη η δύναμη», στη σελίδα 2 (ΔΥΝΑΜΗ). Η ομάδα Β5 γράφεται μόνο όταν υπάρχει κάποιος σε αυτήν.</p>
+    <p className="note" style=${{ marginTop: 0 }}>Ισχύει στη μορφή «Όλη η δύναμη», στη σελίδα 2 (ΔΥΝΑΜΗ). Οι ομάδες Β5 και Β6 γράφονται μόνο όταν υπάρχει κάποιος σε αυτήν.</p>
   </div>`;
 }
 function SigsCard() {

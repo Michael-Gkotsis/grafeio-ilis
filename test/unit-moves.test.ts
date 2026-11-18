@@ -31,20 +31,20 @@ describe('κινήσεις δύναμης', () => {
   });
   it('μελλοντική κίνηση: μένει σε δύναμη ως τότε και εφαρμόζεται στην αλλαγή μέρας, βγάζοντας τον από τις υπηρεσίες από εκείνη τη μέρα', () => {
     let s = mk(); s.guards = { '2026-11-14': { a: 1 }, '2026-11-20': { a: 1 }, '2026-11-21': { a: 1, b: 2 } };
-    const r = apply(s, { t: 'addMove', pid: 1, dir: 'out', why: 'Απόσπαση', on: '2026-11-20' }, at(TODAY));
+    const r = apply(s, { t: 'addMove', pid: 1, dir: 'out', why: 'Μετάθεση', on: '2026-11-20' }, at(TODAY));
     s = r.state; expect(s.people[0].active).toBe(true); expect(s.people[0].moves![0].done).toBeUndefined();
     expect(r.text).toMatch(/φεύγει στις 20\/11/);
     expect(run(s, { t: 'applyMoves' }, '2026-11-19').people[0].active).toBe(true);
     const d = apply(s, { t: 'applyMoves' }, at('2026-11-20'));
-    expect(d.state.people[0]).toMatchObject({ active: false, outOn: '2026-11-20', notes: 'Εκτός δύναμης: ΑΠΟΣΠΑΣΗ' });
+    expect(d.state.people[0]).toMatchObject({ active: false, outOn: '2026-11-20', notes: 'Εκτός δύναμης: ΜΕΤΑΘΕΣΗ' });
     expect(guards(d.state, 1)).toEqual(['2026-11-14']); expect(guards(d.state, 2)).toEqual(['2026-11-21']);
     expect(d.undoable).toBe(false); expect(d.text).toMatch(/εκτός δύναμης/);
-    expect(linesText(hkaiDiaLines(d.state, '2026-11-20'))).toMatch(/ΑΠΟΣΠΑΣΗ\.$/);
+    expect(linesText(hkaiDiaLines(d.state, '2026-11-20'))).toMatch(/ΜΕΤΑΘΕΣΗ\.$/);
     // δεύτερη φορά: τίποτα
     expect(run(d.state, { t: 'applyMoves' }, '2026-11-21')).toBe(d.state);
   });
   it('με «Επιστρέφει» ξαναμπαίνει μόνος του και γράφεται στις ΕΓΓΡΑΦΕΣ· ακύρωση σβήνει και την επιστροφή', () => {
-    let s = run(mk(), { t: 'addMove', pid: 1, dir: 'out', why: 'Απόσπαση', on: TODAY, back: '2026-12-01' });
+    let s = run(mk(), { t: 'addMove', pid: 1, dir: 'out', why: 'Μετάθεση', on: TODAY, back: '2026-12-01' });
     expect(s.people[0].moves).toHaveLength(2);
     s = run(s, { t: 'applyMoves' }, '2026-12-01');
     expect(s.people[0]).toMatchObject({ active: true, inOn: '2026-12-01' }); expect(s.people[0].outOn).toBeUndefined();

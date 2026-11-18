@@ -1,7 +1,7 @@
 // ΗΚΑΙ, πίσω σελίδα: οι «Αποφάσεις Διοικητή» (3. ΑΔΕΙΕΣ, 4. ΠΟΙΝΕΣ, 5. ΑΙΤΗΣΕΙΣ) ως αριθμημένες προτάσεις, μία ανά γραμμή,
 // «1. …» (Michael, 17/10). Ίδιες γραμμές για την προεπισκόπηση στην οθόνη και για το Excel (main/exports.ts).
 import { addDays, hkDate, hkDay, type ISODate } from './dates';
-import { ADIK_TYPES, ADIK_WORD, OUT_NOTE, hkLvOn, type AppState, type Person, type PersonRequest, type Status } from './domain';
+import { ADIK_APS_TYPES, ADIK_WORD, OUT_NOTE, hkLvOn, type AppState, type Person, type PersonRequest, type Status } from './domain';
 import { dutyBlock, personMap, postBy } from './rules';
 import { hkWho, punGroupKey, punText } from './punish';
 import { collator, upper } from './text';
@@ -32,14 +32,14 @@ export function hkaiPunLines(s: AppState, d: ISODate): Line[] {
   return numbered(list.map(({ st, ps }) => { const t = punText(ps, st, s.settings.lists); return [{ t: t.before }, { t: t.dur, u: true }, { t: t.after }]; }));
 }
 
-// 6. ΛΟΙΠΑ: Άγνοια, Λιποταξία, Αδικαιολόγητη απουσία (Michael, 17/11). Την ημέρα έναρξης «ΣΤΡ (ΠΖ) ΕΠΩΝΥΜΟ ΟΝΟΜΑ: ΣΕ ΑΓΝΟΙΑ ΤΗΝ 15 ΟΚΤ 26.»
+// 6. ΛΟΙΠΑ: Άγνοια, Λιποταξία, Αδικαιολόγητη απουσία (Michael, 17/11) και Απόσπαση (18/11). Την ημέρα έναρξης «ΣΤΡ (ΠΖ) ΕΠΩΝΥΜΟ ΟΝΟΜΑ: ΣΕ ΑΓΝΟΙΑ ΤΗΝ 15 ΟΚΤ 26.»
 // (η ελεύθερη σημείωση της κατάστασης στο τέλος), και την ημέρα επιστροφής (η επόμενη της τελευταίας ημέρας «έως») «…: ΕΠΕΣΤΡΕΨΕ ΤΗΝ 18 ΟΚΤ 26 ΑΠΟ ΑΓΝΟΙΑ.».
 // Πρώτα οι εκκινήσεις, μετά οι επιστροφές, κάθε ομάδα αλφαβητικά· αριθμημένες. Χωρίς λήξη: δεν υπάρχει επιστροφή. Κενό όταν δεν υπάρχει τέτοια κατάσταση.
 export function hkaiAdikLines(s: AppState, d: ISODate): Line[] {
   const pm = personMap(s.people); const prev = addDays(d, -1);
   const rows: { st: Status; p: Person; back: boolean }[] = [];
   for (const x of s.statuses) {
-    if (!ADIK_TYPES.includes(x.type) || x.pending) continue; const p = pm.get(x.pid); if (!p?.active) continue;
+    if (!ADIK_APS_TYPES.includes(x.type) || x.pending) continue; const p = pm.get(x.pid); if (!p?.active) continue;
     if (x.from === d) rows.push({ st: x, p, back: false });
     else if (!x.open && x.to === prev && x.to >= x.from) rows.push({ st: x, p, back: true });
   }

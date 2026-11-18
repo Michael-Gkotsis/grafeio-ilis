@@ -10,6 +10,7 @@ import { parseEsso } from '../../shared/esso';
 import { fullName, type Move, type Person } from '../../shared/domain';
 import { HK } from '../../shared/unit';
 import { itemKey, itemName, listRows } from '../../shared/ranks';
+import { heldOf, holderText, itemsTxt } from '../../shared/assets';
 type P = any;
 
 // Οι λόγοι: η λίστα «Λόγοι κίνησης» (οι βασικές τιμές πρώτες, πάντα εκεί) και το «Άλλο…» (ΑΛΛΟ) για κάτι που γράφεις τώρα
@@ -37,15 +38,17 @@ export function MoveDialog({ p, onClose }: P) {
   const reason = why === 'ΑΛΛΟ' ? itemName(other, 'moveWhys') : why;
   const known = listRows(state.settings.lists, 'moveWhys').some(r => itemKey(r.name) === itemKey(reason) && (r.builtin || !r.hidden));
   const miss = dir === 'out' && !reason ? 'Λείπει: Λόγος' : back && back <= on ? 'Η επιστροφή πρέπει να είναι μετά την ημέρα που φεύγει' : '';
+  const aps = dir === 'out' && reason.toUpperCase() === 'ΑΠΟΣΠΑΣΗ';   // Απόσπαση: μένει σε δύναμη ως απών (κατάσταση «Σε απόσπαση»)
   const save = async () => {
     const ok = await run({ t: 'addMove', pid: p.id, dir, why: dir === 'out' ? reason : undefined, where: where.trim() || undefined, on, back: dir === 'out' && back ? back : undefined }, false);
     if (ok && dir === 'out' && why === 'ΑΛΛΟ' && remember && reason && !known) {   // «Άλλο» που το θυμάται η λίστα «Λόγοι κίνησης»
       const l = state.settings.lists || {}, u = l.moveWhys || {};
       await run({ t: 'setSettings', settings: { lists: { ...l, moveWhys: { ...u, add: [...(u.add || []), { name: reason }], hide: (u.hide || []).filter(x => itemKey(x) !== itemKey(reason)) } } }, text: 'λίστα Λόγοι κίνησης: + ' + reason }, false);
     }
-    if (ok) { toast({ text: rkShort(p) + (dir === 'out' ? (on <= today ? ': εκτός δύναμης' : ': φεύγει στις ' + dm(on)) : (on <= today ? ': ξανά σε δύναμη' : ': ξαναμπαίνει στις ' + dm(on))) }); onClose(); }
+    if (ok) { toast({ text: rkShort(p) + (dir === 'out' ? (aps ? (on <= today ? ': σε απόσπαση' : ': φεύγει σε απόσπαση στις ' + dm(on)) : on <= today ? ': εκτός δύναμης' : ': φεύγει στις ' + dm(on)) : (on <= today ? ': ξανά σε δύναμη' : ': ξαναμπαίνει στις ' + dm(on))) }); onClose(); }
   };
-  const info = on <= today ? (dir === 'out' ? 'Βγαίνει εκτός δύναμης από τώρα, φεύγει από τις υπηρεσίες από ' + 'σήμερα' + ' και γράφεται στις 2. ΔΙΑΓΡΑΦΕΣ της ' + HK() + ' της ' + dm(on) + '.' : 'Ξαναμπαίνει σε δύναμη και γράφεται στις 1. ΕΓΓΡΑΦΕΣ της ' + HK() + ' της ' + dm(on) + '.')
+  const held = useMemo(() => (dir === 'out' && !aps ? heldOf(state, [p.id]) : []), [state.people, state.assets, state.cadreList, state.settings, p.id, dir, aps]);   // Σ9: χρεωμένα που μένουν σε άτομο εκτός δύναμης
+  const info = aps ? 'Μένει σε δύναμη ως απών, στη στήλη «Αποσπασμένοι σε άλλη μονάδα» της ' + HK() + ', από ' + dm(on) + (back ? ' ως ' + dm(addDays(back, -1)) : ' χωρίς λήξη (τη σταματάς από την καρτέλα)') + '. Δεν γράφεται στις 2. ΔΙΑΓΡΑΦΕΣ.' : on <= today ? (dir === 'out' ? 'Βγαίνει εκτός δύναμης από τώρα, φεύγει από τις υπηρεσίες από ' + 'σήμερα' + ' και γράφεται στις 2. ΔΙΑΓΡΑΦΕΣ της ' + HK() + ' της ' + dm(on) + '.' : 'Ξαναμπαίνει σε δύναμη και γράφεται στις 1. ΕΓΓΡΑΦΕΣ της ' + HK() + ' της ' + dm(on) + '.')
     : (dir === 'out' ? 'Ως τις ' + dm(addDays(on, -1)) + ' μένει σε δύναμη όπως τώρα. Στις ' + dm(on) + ' βγαίνει εκτός δύναμης μόνος του, φεύγει από τις υπηρεσίες από εκείνη τη μέρα και γράφεται στις 2. ΔΙΑΓΡΑΦΕΣ της ' + HK() + '.' : 'Στις ' + dm(on) + ' ξαναμπαίνει σε δύναμη μόνος του και γράφεται στις 1. ΕΓΓΡΑΦΕΣ.') + (back && dir === 'out' ? ' Στις ' + dm(back) + ' ξαναμπαίνει.' : '');
   return html`<${Dialog} title="Κίνηση δύναμης" description=${html`<${RkName} p=${p}/>`} onClose=${onClose}
     footer=${html`<${Why} text=${miss}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!!miss} why=${miss} onClick=${save}>Αποθήκευση κίνησης<//>`}>
@@ -59,6 +62,7 @@ export function MoveDialog({ p, onClose }: P) {
       ${dir === 'out' && html`<div className="field"><label className="field__label" htmlFor="mv-bk">Επιστρέφει (αν ξέρεις)</label><${DateField} id="mv-bk" className="ui-input" min=${addDays(on, 1)} max=${addDays(today, 730)} value=${back} onChange=${(e: any) => setBack(e.target.value)}/></div>`}
     </div>
     <div className="note">${info}</div>
+    ${held.length > 0 && html`<${Alert} tone="warn"><span>Έχει χρεωμένα στο Μητρώο: <b>${itemsTxt(held[0].rows, 8)}</b>. Αν βγει εκτός δύναμης θα μείνουν χρεωμένα σε άτομο εκτός δύναμης (δεν ξεχρεώνονται μόνα τους).</span><//>`}
     ${pend.length > 0 && html`<${Alert} tone="warn"><span>Έχει ήδη προγραμματισμένη κίνηση: ${pend.map(moveTxt).join(' · ')}</span><//>`}
     <${MovesHistory} p=${p}/>
   <//>`;
@@ -74,12 +78,15 @@ export function DischargeDialog({ esso, onClose }: P) {
   const [keep, setKeep] = useState<Set<number>>(new Set());   // εξαιρέσεις: όσοι μένουν
   const pids = people.filter(p => !keep.has(p.id)).map(p => p.id);
   const miss = !pids.length ? 'Διάλεξε τουλάχιστον έναν' : '';
+  const held = useMemo(() => heldOf(state, pids), [state.people, state.assets, state.cadreList, state.settings, pids.join(',')]);   // Σ9: χρεωμένα όσων απολύονται
   const toggle = (id: number) => setKeep(k => { const n = new Set(k); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const go = async () => { if (await run({ t: 'dischargeEsso', esso, on, pids }, false)) { toast({ text: 'ΕΣΣΟ ' + esso + ': ' + (on <= today ? 'απολύθηκαν ' : 'απολύονται στις ' + dm(on) + ': ') + pids.length }); onClose(); } };
   return html`<${Dialog} title=${'Απόλυση ΕΣΣΟ ' + esso} description=${people.length + ' σε δύναμη. Ξετσέκαρε όσους μένουν.'} onClose=${onClose}
     footer=${html`<${Why} text=${miss}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} variant="destructive" disabled=${!!miss} why=${miss} onClick=${go}>Απόλυση ${pids.length}<//>`}>
     <div className="field" style=${{ maxWidth: '220px' }}><label className="field__label" htmlFor="ds-on">Ημερομηνία απόλυσης</label><${DateField} id="ds-on" className="ui-input" max=${addDays(today, 366)} value=${on} onChange=${(ev: any) => ev.target.value && setOn(ev.target.value)}/></div>
     <ul className="hist" style=${{ maxHeight: '320px', overflow: 'auto' }}>${people.map(p => html`<li key=${p.id}><label className="kv__check"><input type="checkbox" className="ui-check" checked=${!keep.has(p.id)} onChange=${() => toggle(p.id)}/><span>${fullName(p)}</span></label></li>`)}</ul>
+    ${held.length > 0 && html`<${Alert} tone="warn"><div>Έχουν χρεωμένα στο Μητρώο ${held.length} ${held.length === 1 ? 'άτομο' : 'άτομα'}: θα μείνουν χρεωμένα σε άτομα εκτός δύναμης (δεν ξεχρεώνονται μόνα τους).
+      <ul style=${{ margin: '4px 0 0', paddingLeft: '18px', maxHeight: '110px', overflow: 'auto' }}>${held.map(x => html`<li key=${x.pid}>${holderText(state, { k: 'person', pid: x.pid })}: ${itemsTxt(x.rows, 4)}</li>`)}</ul></div><//>`}
     <div className="note">${on <= today ? 'Βγαίνουν εκτός δύναμης τώρα' : 'Μένουν σε δύναμη ως τις ' + dm(addDays(on, -1)) + ' και βγαίνουν μόνοι τους στις ' + dm(on)}, με λόγο ΑΠΟΛΥΣΗ, και γράφονται στις 2. ΔΙΑΓΡΑΦΕΣ της ${HK()}. Αναιρείται με μία αναίρεση.</div>
   <//>`;
 }

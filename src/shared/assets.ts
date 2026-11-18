@@ -7,7 +7,7 @@ import { addDays, dmy, type ISODate } from './dates';
 import type { AppState, Asset, AssetCat, AssetCfg, AssetEvent, AssetHolder, PlaceWord, Settings } from './domain';
 import { listOf, rankTxt } from './ranks';
 import { normGreek, upper } from './text';
-import { normPos, normRack, normWeapon, seatTxt, weaponInfo, weaponKey, armMap } from './weapons';
+import { WT_CAT, normPos, normRack, normWeapon, seatTxt, weaponInfo, weaponKey, armMap } from './weapons';
 import { hasSvcAway } from './rules';
 
 export const ASSET_WARN_DAYS = 30;
@@ -32,22 +32,31 @@ export const DEFAULT_PLACES: PlaceWord[] = [
   { word: 'Φ.Γ', means: 'guard' }, { word: 'Φ.Μ', means: 'guard' }, { word: 'ΑΠΟΘΗΚΗ', means: 'store' }
 ];
 export const PLACE_MEANS: [PlaceWord['means'], string][] = [['rack', 'Οπλοβαστός'], ['box', 'Κιβώτιο'], ['duty', 'Σε υπηρεσία'], ['leave', 'Σε άδεια'], ['guard', 'Φρουρά'], ['store', 'Αποθήκη'], ['other', 'Άλλο']];
-// Ρυθμίσεις με τις προεπιλογές στα κενά (ό,τι λείπει από το settings.assets)
-export function assetCfgOf(st: Pick<Settings, 'assets' | 'lists'> | undefined): AssetCfg {
+// Κατηγορία που βγαίνει μόνη της για έναν τύπο όπλου που δεν είναι σε καμία κατηγορία (id σταθερό, από τον τύπο): δεν γράφεται στις ρυθμίσεις
+export const typeCatId = (t: string) => WT_CAT + normGreek(t);
+const typeCat = (t: string): AssetCat => ({ id: typeCatId(t), name: t, kind: 'weapon', types: [t], fields: [] });
+// Ρυθμίσεις με τις προεπιλογές στα κενά (ό,τι λείπει από το settings.assets). Κάθε τύπος όπλου των Λιστών (και, με data, κάθε τύπος κύριου όπλου)
+// που δεν είναι σε καμία κατηγορία όπλων παίρνει δική του στο τέλος, ώστε να μη γράφεται στα Τυφέκια (Σ7, Michael 18/11): οι αποθηκευμένες κατηγορίες, η σειρά και τα ονόματά τους μένουν όπως είναι
+export function assetCfgOf(st: Pick<Settings, 'assets' | 'lists'> | undefined, data?: Pick<AppState, 'people'> & Partial<Pick<AppState, 'cadreList'>>): AssetCfg {
   const a = st?.assets || {};
   const warn = Math.floor(Number(a.warnDays));
+  const cats = a.cats?.length ? a.cats.map(c => ({ ...c, types: c.types || [], fields: c.fields || [] })) : defaultCats(st?.lists);
+  const known = new Set<string>(); for (const c of cats) if (c.kind === 'weapon') for (const t of c.types) known.add(normGreek(t));
+  const add = (t: string | undefined) => { const n = normGreek(t); if (n && !known.has(n)) { known.add(n); cats.push(typeCat(String(t).replace(/\s+/g, ' ').trim())); } };
+  if (a.cats?.length) for (const t of listOf(st?.lists, 'weaponTypes')) add(t);
+  if (data) for (const x of primaryWeapons({ people: data.people, cadreList: data.cadreList || [] })) add(x.type);
   return {
-    cats: a.cats?.length ? a.cats.map(c => ({ ...c, types: c.types || [], fields: c.fields || [] })) : defaultCats(st?.lists),
+    cats,
     places: a.places ? a.places : DEFAULT_PLACES.map(p => ({ ...p })),
     warnDays: warn >= 0 && isFinite(warn) && a.warnDays != null ? warn : ASSET_WARN_DAYS
   };
 }
 export const catOf = (cfg: AssetCfg, id: string): AssetCat | undefined => cfg.cats.find(c => c.id === id);
-// Τύπος όπλου → κατηγορία: αυτή που τον έχει στη λίστα της, αλλιώς Τυφέκια (η πρώτη κατηγορία όπλων αν σβήστηκαν)
+// Τύπος όπλου → κατηγορία: αυτή που τον έχει στη λίστα της, αλλιώς δική του κατηγορία· χωρίς τύπο, Τυφέκια (η πρώτη κατηγορία όπλων αν σβήστηκαν)
 export function catOfType(cfg: AssetCfg, type: string | undefined): AssetCat {
   const t = normGreek(type);
   const hit = t ? cfg.cats.find(c => c.kind === 'weapon' && c.types.some(x => normGreek(x) === t)) : undefined;
-  return hit || catOf(cfg, CAT_RIFLE) || cfg.cats.find(c => c.kind === 'weapon') || cfg.cats[0];
+  return hit || (t ? typeCat(String(type).replace(/\s+/g, ' ').trim()) : catOf(cfg, CAT_RIFLE) || cfg.cats.find(c => c.kind === 'weapon') || cfg.cats[0]);
 }
 export const newAssetCatId = (cats: AssetCat[]): string => { let n = cats.length + 1; while (cats.some(c => c.id === 'c' + n)) n++; return 'c' + n; };
 
@@ -142,7 +151,7 @@ export const rowPlace = (cfg: Pick<AssetCfg, 'places'>, r: Pick<AssetRow, 'a' | 
 // live: η μέρα και η ώρα που κρίνονται οι ένοπλες υπηρεσίες (σήμερα, τώρα)· χωρίς αυτό δεν μπαίνει ΑΠΩΝ πουθενά
 export type RegistryState = Pick<AppState, 'people' | 'cadreList' | 'assets' | 'settings'> & Partial<Pick<AppState, 'guards' | 'dutyLog' | 'weaponLog' | 'rules' | 'dutyFix'>>;
 export function registry(s: RegistryState, live?: { day: ISODate; hm: string }): AssetRow[] {
-  const cfg = assetCfgOf(s.settings); const prim = primaryWeapons(s);
+  const cfg = assetCfgOf(s.settings, s); const prim = primaryWeapons(s);
   const byKey = new Map<string, Primary>();
   for (const x of prim) { const k = weaponKey(x.no); const o = byKey.get(k); if (!o || (!o.active && x.active)) byKey.set(k, x); }
   const rows: AssetRow[] = []; const seen = new Set<string>();
@@ -200,7 +209,7 @@ const collator = new Intl.Collator('el', { sensitivity: 'base', numeric: true })
 export interface AssetQuery { cat?: string; filter?: AssetFilter; q?: string; kinds?: AssetCat['kind'][] }
 // Οι γραμμές του πίνακα: κατηγορίες όπλων και υλικού (τα οχήματα έχουν δική τους οθόνη), με τη σειρά κατηγορία, τύπος, αριθμός
 export function assetView(s: Pick<AppState, 'people' | 'cadreList' | 'assets' | 'settings'>, o: AssetQuery, today: ISODate, all?: AssetRow[]): AssetRow[] {
-  const cfg = assetCfgOf(s.settings); const kinds = o.kinds || ['weapon', 'material'];
+  const cfg = assetCfgOf(s.settings, s); const kinds = o.kinds || ['weapon', 'material'];
   const order = new Map(cfg.cats.map((c, i) => [c.id, i])); const q = normGreek(o.q || '').replace(/\s+/g, ' ');
   const rows = (all || registry(s)).filter(r => (!r.cat || kinds.includes(r.cat.kind)) && (!o.cat || r.a.cat === o.cat) && assetMatch(o.filter || 'all', r, s, today, cfg.warnDays)
     && (!q || normGreek([r.a.no, r.a.type, holderText(s, r.a.holder), placeText(cfg, r.a), r.a.place, r.a.fileWord, r.a.note, r.cat?.name].join(' ')).includes(q)));
@@ -214,6 +223,19 @@ export function catCounts(s: Pick<AppState, 'people' | 'cadreList' | 'assets' | 
 }
 // Ό,τι έχει χρεωμένο ένα άτομο ή στέλεχος (κύριο και δεύτερο όπλο, υλικό), από όλο το μητρώο
 export function heldBy(rows: AssetRow[], h: AssetHolder): AssetRow[] { return rows.filter(r => !r.a.gone && sameHolder(r.a.holder, h)); }
+// Όσα έχει χρεωμένα ο καθένας από τους pids (κύριο και δεύτερο όπλο, υλικό, οχήματα), για την προειδοποίηση πριν βγουν εκτός δύναμης (Σ9, Michael 18/11): δεν ξεχρεώνονται μόνα τους
+export function heldOf(s: RegistryState, pids: number[]): { pid: number; rows: AssetRow[] }[] {
+  const all = registry(s);
+  return pids.map(pid => ({ pid, rows: heldBy(all, { k: 'person', pid }) })).filter(x => x.rows.length);
+}
+const itemTxt = (r: AssetRow) => [r.a.type, r.a.no].filter(Boolean).join(' ') + ((r.a.qty || 0) > 1 ? ' ×' + r.a.qty : '');
+export const itemsTxt = (rows: AssetRow[], max = 5): string => { const l = rows.map(itemTxt); return l.slice(0, max).join(', ') + (l.length > max ? ' και ' + (l.length - max) + ' ακόμα' : ''); };
+// «ΠΡΟΣΟΧΗ: μένουν χρεωμένα σε άτομο εκτός δύναμης: ΣΤΡ Χ Ψ (G3A3 123456, …)». Κενό όταν κανείς δεν έχει χρεωμένο κάτι
+export function heldWarn(s: RegistryState, pids: number[], max = 6): string {
+  const h = heldOf(s, pids); if (!h.length) return '';
+  const who = h.slice(0, max).map(x => holderText(s, { k: 'person', pid: x.pid }) + ' (' + itemsTxt(x.rows) + ')');
+  return 'ΠΡΟΣΟΧΗ: μένουν χρεωμένα σε άτομο εκτός δύναμης: ' + who.join('; ') + (h.length > max ? ' και ' + (h.length - max) + ' ακόμα' : '') + '. Δεν παραδίδονται μόνα τους: ξεχρέωσέ τα από τον Οπλισμό ή το Μητρώο';
+}
 export const heldGroups = (rows: AssetRow[], h: AssetHolder): [string, AssetRow[]][] => {
   const m = new Map<string, AssetRow[]>(); for (const r of heldBy(rows, h)) { const n = r.cat?.name || 'Άλλο'; const l = m.get(n); if (l) l.push(r); else m.set(n, [r]); }
   return [...m];
@@ -235,7 +257,7 @@ const holderXl = (s: Pick<AppState, 'people' | 'cadreList'>, h?: AssetHolder): [
 };
 const dateXl = (d?: ISODate) => (d ? dmy(d) : '');
 export function assetSheets(s: Pick<AppState, 'people' | 'cadreList' | 'assets' | 'settings'>, rows: AssetRow[], d: ISODate): AssetSheet[] {
-  const cfg = assetCfgOf(s.settings); const out: AssetSheet[] = []; const used = new Set<string>();
+  const cfg = assetCfgOf(s.settings, s); const out: AssetSheet[] = []; const used = new Set<string>();
   const uniq = (n: string) => { let x = upper(n).replace(/[\\/?*[\]:]/g, '-').slice(0, 31) || 'ΦΥΛΛΟ'; let i = 2; const base = x; while (used.has(x)) x = base.slice(0, 28) + ' (' + i++ + ')'; used.add(x); return x; };
   const wk = rows.filter(r => r.cat?.kind === 'weapon'); const mat = rows.filter(r => r.cat?.kind === 'material');
   const order = new Map(cfg.cats.map((c, i) => [c.id, i]));
