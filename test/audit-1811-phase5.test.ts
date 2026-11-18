@@ -80,7 +80,9 @@ describe('Λ3: λόγοι κίνησης', () => {
     const s = setLists(fakeState(3), { moveWhys: { add: [{ name: itemName('νοσοκομειο', 'moveWhys') }] } });
     expect(listOf(s.settings.lists, 'moveWhys')).toEqual(['ΜΕΤΑΘΕΣΗ', 'ΑΠΟΣΠΑΣΗ', 'ΑΠΟΛΥΣΗ', 'ΝΟΣΟΚΟΜΕΙΟ']);
     const r = run(run(s, { t: 'setSettings', settings: { mode: 'unit' }, text: 'x' }), { t: 'addMove', pid: 1, dir: 'out', why: 'ΑΠΟΣΠΑΣΗ', on: D });
-    expect(r.people.find(p => p.id === 1)!.moves![0].why).toBe('ΑΠΟΣΠΑΣΗ');
+    // η Απόσπαση αναγνωρίζεται από τη σταθερή τιμή της: μένει σε δύναμη ως απών (κατάσταση APS, φάση 4), όχι κίνηση εκτός δύναμης
+    expect(r.statuses.some(x => x.pid === 1 && x.type === 'APS' && x.from === D)).toBe(true);
+    expect(r.people.find(p => p.id === 1)!.moves ?? []).toEqual([]);
   });
 });
 

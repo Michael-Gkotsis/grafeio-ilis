@@ -33,7 +33,7 @@ function StateBadges({ a, today, warn }: { a: Asset; today: string; warn: number
 // ---------- Η οθόνη ----------
 export function MitrooView() {
   const { state, today } = useStore(); const nav = useNav(); const toast = useToast();
-  const cfg = useMemo(() => assetCfgOf(state.settings), [state.settings]);
+  const cfg = useMemo(() => assetCfgOf(state.settings, state), [state.settings, state.people, state.cadreList]);
   const [cat, setCat] = useState<string>(nav.params.acat || ''); const [filter, setFilter] = useState<AssetFilter>('all');
   const [q, setQ] = useState<string>(nav.params.aq || ''); const dq = useDeferredValue(q);
   const [sel, setSel] = useState<string | null>(null);
@@ -65,7 +65,7 @@ export function MitrooView() {
     return html`<div key=${r.key} className=${cx('ptable__row mit__row', i % 2 === 1 && 'is-odd', sel === r.key && 'is-sel')} style=${{ ...style, gridTemplateColumns: GRID }} role="row" tabIndex="0" aria-selected=${sel === r.key}
         onClick=${() => setSel(r.key)} onKeyDown=${(e: any) => { if (e.key === 'Enter') setSel(r.key); }}>
       <span>${a.type || '—'}</span><span className="num"><b>${a.no}</b>${(a.qty || 0) > 1 ? html` <small className="muted">×${a.qty}</small>` : ''}</span>
-      <span className=${cx(!a.holder && 'muted')} data-tip=${holderText(state, a.holder) + (out ? ' · εκτός δύναμης' : '')}>${a.holder ? html`${holderText(state, a.holder).replace(/ \((στέλεχος|άλλη μονάδα|φυσικό πρόσωπο)\)$/, '')}${a.holder.k !== 'person' ? html` <small className="muted">(${a.holder.k === 'cadre' ? 'στέλεχος' : a.holder.k === 'unit' ? 'άλλη μονάδα' : 'φυσ. πρόσωπο'})</small>` : ''}${out ? html` <${Badge} tone="warn">εκτός δύναμης<//>` : ''}` : 'αχρέωτο'}</span>
+      <span className=${cx(!a.holder && 'muted')} data-tip=${holderText(state, a.holder) + (out ? ' · χρεωμένο σε άτομο εκτός δύναμης' : '')}>${a.holder ? html`${holderText(state, a.holder).replace(/ \((στέλεχος|άλλη μονάδα|φυσικό πρόσωπο)\)$/, '')}${a.holder.k !== 'person' ? html` <small className="muted">(${a.holder.k === 'cadre' ? 'στέλεχος' : a.holder.k === 'unit' ? 'άλλη μονάδα' : 'φυσ. πρόσωπο'})</small>` : ''}${out ? html` <${Badge} tone="warn">εκτός δύναμης<//>` : ''}` : 'αχρέωτο'}</span>
       <span>${rowPlace(cfg, r) || '—'}</span><span className="mit__st"><${StateBadges} a=${a} today=${today} warn=${cfg.warnDays}/></span>
       <span className=${cx('num', maintState(a, today, cfg.warnDays) === 'overdue' && 'mit__late')}>${a.maint?.next ? dmy(a.maint.next) : '—'}</span>
       ${fields.map(f => html`<span key=${f.id}>${a.extra?.[f.id] || '—'}</span>`)}</div>`;
@@ -115,7 +115,7 @@ function AssetCard({ row, all, cfg, today, onDlg, onClose }: P) {
     ${row.link && html`<p className="note mit__link">Από το Δυναμολόγιο: ο κάτοχος, ο τύπος και η θέση του οπλοβαστού αλλάζουν από την καρτέλα «Όπλα»${row.stored ? '' : '· δεν έχει ακόμα εγγραφή στο μητρώο'}.</p>`}
     ${dup.length > 0 && html`<${Alert} tone="warn">Ο ίδιος αριθμός υπάρχει και σε: ${dup.map((x: AssetRow) => holderText(state, x.a.holder)).join(', ')}<//>`}
     <dl className="kv mit__kv">
-      <dt>Χρεωμένο σε</dt><dd><b>${holderText(state, a.holder)}</b>${holderOut(state, a.holder) ? html` <${Badge} tone="warn">εκτός δύναμης<//>` : ''}</dd>
+      <dt>Χρεωμένο σε</dt><dd><b>${holderText(state, a.holder)}</b>${holderOut(state, a.holder) ? html` <${Badge} tone="warn" data-tip="Χρεωμένο σε άτομο εκτός δύναμης: ξεχρέωσέ το ή άλλαξε κάτοχο">εκτός δύναμης<//>` : ''}</dd>
       ${kv('Θέση', rowPlace(cfg, row))}
       <dt>Κατάσταση</dt><dd><b>${STATE_TXT[a.state]}</b>${a.why ? ' · ' + a.why : ''}</dd>
       ${a.warOnly && html`<dt>Χρήση</dt><dd><b>Μόνο εμπόλεμη</b></dd>`}

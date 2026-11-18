@@ -352,7 +352,7 @@ export async function weaponsBook(s: AppState, d: ISODate): Promise<Made> {
       ws.mergeCells(1, W - 3, 1, W); const dc = ws.getCell(1, W - 3); dc.value = upper((s.settings.place ? s.settings.place + ', ' : '') + hkDate(d)); dc.font = FT.date; dc.alignment = { horizontal: 'right' };
       ws.mergeCells(T, 1, T, W); const t = ws.getCell(T, 1); t.value = upper('ΚΑΤΑΣΤΑΣΗ ΟΠΛΙΣΜΟΥ ' + (s.settings.unitName || '') + ' ΤΗΣ ' + hkDate(d)).replace(/\s+/g, ' '); t.font = FT.title; t.alignment = { horizontal: 'center' };
       const armed = sh.rows.filter(r => r[W_NUM]).length;
-      ws.mergeCells(T + 1, 1, T + 1, W); const n = ws.getCell(T + 1, 1); n.value = 'ΔΥΝΑΜΗ: ' + sh.rows.length + ' · ΜΕ ΟΠΛΟ: ' + armed; n.font = { name: F, size: Z }; n.alignment = { horizontal: 'center' };
+      ws.mergeCells(T + 1, 1, T + 1, W); const n = ws.getCell(T + 1, 1); n.value = 'ΔΥΝΑΜΗ: ' + (sh.people ?? sh.rows.length) + ' · ΜΕ ΟΠΛΟ: ' + armed; n.font = { name: F, size: Z }; n.alignment = { horizontal: 'center' };
     } else {
       ws.mergeCells(1, 1, 1, W); const t = ws.getCell(1, 1); t.value = upper(sh.title + ' · ' + s.settings.unitName); t.font = FT.title; t.alignment = { horizontal: 'center' };
       ws.mergeCells(2, 1, 2, W); const n = ws.getCell(2, 1); n.value = upper(sh.note); n.font = { name: F, italic: true, size: Math.max(7, Z - 1) }; n.alignment = { horizontal: 'center' };

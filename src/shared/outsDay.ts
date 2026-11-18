@@ -1,12 +1,12 @@
 // «Όλη η δύναμη» (Michael, 30/10): κάθε άτομο της δύναμης μία φορά, σε μία ομάδα, και το άθροισμα κλείνει (Α + Β + Γ = ενεργοί).
 //  Α. βγαίνουν σήμερα (ήταν μέσα): A1 ΔΝ, A2 εξοδούχοι, A3 φεύγουν για άδεια
-//  Β. είναι ήδη έξω (έφυγαν πριν): B1 άδεια, B2 νοσοκομείο, B3 ΔΝ/έξοδος από χθες που δεν γύρισε, B4 υπηρεσία εκτός στρατοπέδου (BlockDef.hkCol σε στήλη απόντων, Michael 17/11), B5 Άγνοια/Λιποταξία/Αδικαιολόγητη απουσία (ή άλλη ομάδα Β της επιλογής του, settings.outsAdik)
+//  Β. είναι ήδη έξω (έφυγαν πριν): B1 άδεια, B2 νοσοκομείο, B3 ΔΝ/έξοδος από χθες που δεν γύρισε, B4 υπηρεσία εκτός στρατοπέδου (BlockDef.hkCol σε στήλη απόντων, Michael 17/11), B5 Άγνοια/Λιποταξία/Αδικαιολόγητη απουσία (ή άλλη ομάδα Β της επιλογής του, settings.outsAdik), B6 Αποσπασμένοι (Απόσπαση, Michael 18/11)
 //  Γ. μένουν μέσα απόψε: G1 υπηρεσία, G2 ποινή, G3 ΣΤΕΠ/κωλυόμενοι/ιατρικά, G4 γυρίζουν σήμερα και μένουν, G5 δεν βγήκαν
 // Οι κανόνες ταξινόμησης έχουν σειρά προτεραιότητας και βγαίνουν μόνο από τις συναρτήσεις που ήδη χρησιμοποιούν η οθόνη και τα άλλα Excel
 // (returnOf, leaveEnd, retFor, stillOut, outHeldBy, postOf, statusesFrom, dayTimes): μία πηγή. Ελέγχονται στα test/outs-day.test.ts και outs-combos.test.ts.
 import type { ISODate } from './dates';
 import { addDays, dm } from './dates';
-import { ADIK_TYPES, TYPES, adikGroupOf, type AppState, type Person, type Status } from './domain';
+import { ADIK_APS_TYPES, TYPES, adikGroupOf, type AppState, type Person, type Status } from './domain';
 import { mins } from './hours';
 import { activePeople, dutyColsOn, hasSvcAway, postOf, statusesAt, statusesFrom, svcAwayOf } from './rules';
 import { awayOn, dayTimes, leaveEnd, leaveOut, outHeldBy, retDay, retFor, retOrd, returnOf, stillOut, type Ret } from './returns';
@@ -16,13 +16,13 @@ import { live, isAway } from './ranks';
 import { dutyAt } from './weekend';
 import { upper } from './text';
 
-export type DayGroup = 'A1' | 'A2' | 'A3' | 'B1' | 'B2' | 'B3' | 'B4' | 'B5' | 'G1' | 'G2' | 'G3' | 'G4' | 'G5';
+export type DayGroup = 'A1' | 'A2' | 'A3' | 'B1' | 'B2' | 'B3' | 'B4' | 'B5' | 'B6' | 'G1' | 'G2' | 'G3' | 'G4' | 'G5';
 // st: η έξοδος/ΔΝ της μέρας (αλλιώς η άδεια, ή η έξοδος/ΔΝ που κρατά ακόμα έξω)· lv: η άδεια/νοσοκομείο της μέρας· warn: ΠΡΟΣΟΧΗ για το γραφείο
 export interface DayRow { p: Person; g: DayGroup; r: Ret | null; why: string; st?: Status; lv?: Status; warn?: string }
 // Οι ομάδες με τη σειρά του εντύπου: [ομάδα, ενότητα Α/Β/Γ, τίτλος]
 export const DAY_GROUPS: [DayGroup, 'A' | 'B' | 'G', string][] = [
   ['A1', 'A', 'ΜΕ ΔΝ'], ['A2', 'A', 'ΕΞΟΔΟΥΧΟΙ'], ['A3', 'A', 'ΦΕΥΓΟΥΝ ΓΙΑ ΑΔΕΙΑ'],
-  ['B1', 'B', 'ΣΕ ΑΔΕΙΑ'], ['B2', 'B', 'ΝΟΣΟΚΟΜΕΙΟ'], ['B3', 'B', 'ΔΝ ΑΠΟ ΧΘΕΣ / ΔΕΝ ΓΥΡΙΣΑΝ'], ['B4', 'B', 'ΥΠΗΡΕΣΙΑ ΕΚΤΟΣ ΣΤΡΑΤΟΠΕΔΟΥ'], ['B5', 'B', 'ΑΓΝΟΙΑ / ΛΙΠΟΤΑΞΙΑ / ΑΔΙΚ. ΑΠΟΥΣΙΑ'],
+  ['B1', 'B', 'ΣΕ ΑΔΕΙΑ'], ['B2', 'B', 'ΝΟΣΟΚΟΜΕΙΟ'], ['B3', 'B', 'ΔΝ ΑΠΟ ΧΘΕΣ / ΔΕΝ ΓΥΡΙΣΑΝ'], ['B4', 'B', 'ΥΠΗΡΕΣΙΑ ΕΚΤΟΣ ΣΤΡΑΤΟΠΕΔΟΥ'], ['B5', 'B', 'ΑΓΝΟΙΑ / ΛΙΠΟΤΑΞΙΑ / ΑΔΙΚ. ΑΠΟΥΣΙΑ'], ['B6', 'B', 'ΑΠΟΣΠΑΣΜΕΝΟΙ'],
   ['G1', 'G', 'ΥΠΗΡΕΣΙΑ'], ['G2', 'G', 'ΠΟΙΝΗ'], ['G3', 'G', 'ΣΤΕΠ / ΚΩΛΥΟΜΕΝΟΙ / ΙΑΤΡΙΚΑ'], ['G4', 'G', 'ΓΥΡΙΖΟΥΝ ΣΗΜΕΡΑ ΚΑΙ ΜΕΝΟΥΝ'], ['G5', 'G', 'ΔΕΝ ΒΓΗΚΑΝ']
 ];
 const isOut = (x: Status) => TYPES[x.type].cat === 'out';
@@ -46,7 +46,7 @@ export function dayBook(s: AppState, d: ISODate): DayRow[] {
         // η άδεια τελειώνει σήμερα και σήμερα έξοδος/ΔΝ (leaveOut, κανόνας 26/10), ή έχει τελειώσει πριν την έξοδο: εξοδούχος/ΔΝ της μέρας,
         // όπως στη Δύναμη (Michael, 30/10: άδεια ως 22:00 και εξοδούχος ήταν «σε άδεια»)
         if (leaveOut(s, p.id, d, T) || !atT.length) { R(o.type === 'DN' ? 'A1' : 'A2', r, 'τέλος άδειας + έξοδος', { st: o, lv: lv[0], ...duty() }); continue; }
-        const ad = lv.some(x => x.type === 'NOS') ? undefined : atT.find(x => ADIK_TYPES.includes(x.type));
+        const ad = lv.some(x => x.type === 'NOS') ? undefined : atT.find(x => ADIK_APS_TYPES.includes(x.type));
         R(lv.some(x => x.type === 'NOS') ? 'B2' : ad ? adikGroupOf(s.settings, ad.type) : 'B1', r, 'άδεια + έξοδος', { st: o, lv: ad || lv[0] }); continue;
       }
       if (!atT.length) {
@@ -62,7 +62,7 @@ export function dayBook(s: AppState, d: ISODate): DayRow[] {
       const contFromOut = !!yb && !yb.leaveAt && (!!yb.open || !!yb.pending || yb.day > d);
       const contFromLeave = yAway.some(x => !isOut(x) && x.to > y);
       // Άγνοια/Λιποταξία/Αδικαιολόγητη απουσία: ποτέ «φεύγουν για άδεια»· πάνε στην ομάδα που διάλεξε το γραφείο (προεπιλογή B5)
-      const ad = l.type === 'NOS' ? undefined : atT.find(x => ADIK_TYPES.includes(x.type));
+      const ad = l.type === 'NOS' ? undefined : atT.find(x => ADIK_APS_TYPES.includes(x.type));
       if (l.from === d && !contFromOut && !contFromLeave && !ad) { R('A3', r, '', { lv: l }); continue; }
       if (r && !r.open && !r.pending && r.day === d) { R('G4', r, 'γυρνά απόψε', { lv: l }); continue; }
       R(l.type === 'NOS' ? 'B2' : ad ? adikGroupOf(s.settings, ad.type) : 'B1', r, '', { lv: ad || l }); continue;

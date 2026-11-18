@@ -115,7 +115,7 @@ export const roomTxt = (p: Person) => (p.room == null ? '—' : 'Θ' + p.room);
 // away: απών · noDuty: καμία υπηρεσία · noArmed: όχι ένοπλη θέση · noOut: δεν βγαίνει έξοδο
 // light: ΕΟ/ΕΑ (λοχίας, 10/10): όχι μαγειρεία, σκοπιά μόνο αν δεν υπάρχει άλλος
 // ---------------------------------------------------------------------------
-export type TypeKey = 'EY' | 'EA' | 'EARV' | 'EO' | 'NOS' | 'STEP' | 'PUN' | 'LEAVE' | 'HON' | 'SICK' | 'OUT' | 'DN' | 'KOL' | 'AGN' | 'LIP' | 'ADK';
+export type TypeKey = 'EY' | 'EA' | 'EARV' | 'EO' | 'NOS' | 'STEP' | 'PUN' | 'LEAVE' | 'HON' | 'SICK' | 'OUT' | 'DN' | 'KOL' | 'AGN' | 'LIP' | 'ADK' | 'APS';
 export type Cat = 'med' | 'abs' | 'out' | 'other' | 'pun' | 'kol';
 export interface TypeDef {
   label: string; long: string; tone: string; cat: Cat;
@@ -139,6 +139,8 @@ export const TYPES: Record<TypeKey, TypeDef> = {
   AGN:   { label: 'Άγνοια', long: 'Σε άγνοια', tone: 'bad', cat: 'other', away: true, noDuty: true, noOut: true, hkai: 'adik', code: 'ΑΓ' },
   LIP:   { label: 'Λιποταξία', long: 'Σε λιποταξία', tone: 'bad', cat: 'other', away: true, noDuty: true, noOut: true, hkai: 'adik', code: 'ΛΙΠ' },
   ADK:   { label: 'Αδικαιολ. απουσία', long: 'Αδικαιολόγητη απουσία', tone: 'bad', cat: 'other', away: true, noDuty: true, noOut: true, hkai: 'adik', code: 'Α/Α' },
+  // Απόσπαση (Michael, 18/11): μένει σε δύναμη ως απών, στη στήλη της ΗΚΑΙ «Αποσπασμένοι σε άλλη μονάδα» (allh)· ο λόγος Απόσπαση της «Κίνησης δύναμης» δηλώνει πια αυτή την κατάσταση αντί να βγάζει εκτός δύναμης
+  APS:   { label: 'Απόσπαση', long: 'Σε απόσπαση', tone: 'info', cat: 'other', away: true, noDuty: true, noOut: true, hkai: 'allh', code: 'ΑΠΟΣ' },
   OUT:   { label: 'Εξοδούχος', long: 'Εξοδούχος', tone: 'warn', cat: 'out', away: true, noDuty: true },
   DN:    { label: 'ΔΝ', long: 'Εξοδούχος με ΔΝ', tone: 'dn', cat: 'out', away: true, noDuty: true },
   // Κωλυόμενος (Michael, 24/10): υπηρεσία που δεν είναι δική μας (π.χ. ΣΤΕΠ). Παρών, σε καμία δική μας υπηρεσία· η έξοδος, η αφαίρεση
@@ -147,15 +149,18 @@ export const TYPES: Record<TypeKey, TypeDef> = {
 };
 // Οι τρεις καταστάσεις της στήλης adik: πρόθεμα της πίσω όψης («ΣΕ ΑΓΝΟΙΑ», «ΕΠΕΣΤΡΕΨΕ … ΑΠΟ ΑΓΝΟΙΑ»)
 export const ADIK_TYPES: TypeKey[] = ['AGN', 'LIP', 'ADK'];
-export const ADIK_IN: Record<string, string> = { AGN: 'Σε άγνοια', LIP: 'Σε λιποταξία', ADK: 'Σε αδικαιολόγητη απουσία' };   // πώς λέγονται στις οθόνες (Σήμερα, Δύναμη, Εξοδούχοι)
+// Μαζί με την Απόσπαση (στήλη allh): ό,τι έχει γραμμή στο 6. ΛΟΙΠΑ, κωδικό απόντος στο ημερολόγιο, δική του ομάδα Β της ΔΥΝΑΜΗΣ και ποτέ «φεύγουν για άδεια»
+export const ADIK_APS_TYPES: TypeKey[] = [...ADIK_TYPES, 'APS'];
+export const ADIK_IN: Record<string, string> = { AGN: 'Σε άγνοια', LIP: 'Σε λιποταξία', ADK: 'Σε αδικαιολόγητη απουσία', APS: 'Σε απόσπαση' };   // πώς λέγονται στις οθόνες (Σήμερα, Δύναμη, Εξοδούχοι)
 // Εξοδούχοι «Όλη η δύναμη», σελίδα ΔΥΝΑΜΗ: σε ποια ομάδα Β μπαίνει όποιος είναι σε Άγνοια / Λιποταξία / Αδικαιολόγητη απουσία (κλειδί = τύπος κατάστασης, προεπιλογή B5)
-export type AdikGroup = 'B1' | 'B2' | 'B3' | 'B4' | 'B5';
-export const ADIK_GROUPS: AdikGroup[] = ['B1', 'B2', 'B3', 'B4', 'B5'];
+export type AdikGroup = 'B1' | 'B2' | 'B3' | 'B4' | 'B5' | 'B6';
+export const ADIK_GROUPS: AdikGroup[] = ['B1', 'B2', 'B3', 'B4', 'B5', 'B6'];
 export const ADIK_GROUP_DEFAULT: AdikGroup = 'B5';
+export const adikGroupDefault = (type: string): AdikGroup => (type === 'APS' ? 'B6' : ADIK_GROUP_DEFAULT);   // η Απόσπαση έχει δική της ομάδα Β6 «ΑΠΟΣΠΑΣΜΕΝΟΙ»
 export const adikGroupOf = (st: { outsAdik?: Partial<Record<string, AdikGroup>> }, type: string): AdikGroup => {
-  const g = st.outsAdik?.[type]; return g && ADIK_GROUPS.includes(g) ? g : ADIK_GROUP_DEFAULT;
+  const g = st.outsAdik?.[type]; return g && ADIK_GROUPS.includes(g) ? g : adikGroupDefault(type);
 };
-export const ADIK_WORD: Record<string, string> = { AGN: 'ΑΓΝΟΙΑ', LIP: 'ΛΙΠΟΤΑΞΙΑ', ADK: 'ΑΔΙΚΑΙΟΛΟΓΗΤΗ ΑΠΟΥΣΙΑ' };
+export const ADIK_WORD: Record<string, string> = { AGN: 'ΑΓΝΟΙΑ', LIP: 'ΛΙΠΟΤΑΞΙΑ', ADK: 'ΑΔΙΚΑΙΟΛΟΓΗΤΗ ΑΠΟΥΣΙΑ', APS: 'ΑΠΟΣΠΑΣΗ' };
 export const TYPE_KEYS = Object.keys(TYPES) as TypeKey[];
 export const effects = (t: TypeDef, lists?: Pick<UserLists, 'hkCols' | 'stepCol'> | null) =>
   [t.away && 'Απών', t.noDuty ? 'Καμία υπηρεσία' : t.noArmed && 'Όχι σε ένοπλη θέση', !t.noDuty && t.light && 'Όχι μαγειρεία, σκοπιά μόνο αν δεν υπάρχει άλλος', t.noOut && 'Δεν βγαίνει έξοδο', t.kolAuto && 'Κωλυόμενος' + (stepColOf(lists) ? ' (ΗΚΑΙ: ' + kolColName(stepColOf(lists)!, lists) + ')' : ' (δεν μετρά σε στήλη της ΗΚΑΙ)'), t.cat === 'kol' && 'Έξοδος και ΗΚΑΙ όπως τα ορίζεις στη δήλωση'].filter(Boolean).join(' · ');
@@ -542,7 +547,7 @@ export interface Settings {
   dutyStart?: string;                    // πότε ξεκινά ο κύκλος των υπηρεσιών (ΩΩ:ΛΛ, κενό = 14:00): η μέρα της υπηρεσίας είναι από τότε ως την ίδια ώρα την επόμενη
   outsFmt?: OutsFmt | 'tab4';                     // Excel Εξοδούχων: 'cur' = Τωρινή (προεπιλογή), 'all' = Όλη η δύναμη (το παλιό 'tab4' διαβάζεται ως 'all', isOutsAll)· η τελευταία επιλογή μένει, και το αυτόματο ξαναγράψιμο την ακολουθεί
   outsSig2?: 'same' | 'none' | 'own';             // Εξοδούχοι «Όλη η δύναμη», σελίδα 2 (ΔΥΝΑΜΗ): 'same' = οι ίδιες υπογραφές με τη σελίδα 1 (προεπιλογή), 'none' = καμία, 'own' = δική της λίστα (outsSigs2)
-  outsAdik?: Partial<Record<string, AdikGroup>>;  // Εξοδούχοι «Όλη η δύναμη»: σε ποια ομάδα Β της ΔΥΝΑΜΗΣ μπαίνει κάθε κατάσταση Άγνοιας/Λιποταξίας/Αδικαιολόγητης απουσίας (AGN, LIP, ADK)· λείπει = B5
+  outsAdik?: Partial<Record<string, AdikGroup>>;  // Εξοδούχοι «Όλη η δύναμη»: σε ποια ομάδα Β της ΔΥΝΑΜΗΣ μπαίνει κάθε κατάσταση Άγνοιας/Λιποταξίας/Αδικαιολόγητης απουσίας (AGN, LIP, ADK, APS)· λείπει = B5 (APS: B6)
   outsSigs2?: Sig[];                              // οι υπογραφές της σελίδας 2 όταν outsSig2 = 'own' (κενό = όπως οι υπογραφές των Εξοδούχων)
   hdLeft?: boolean;                     // true: κεφαλίδα πάνω αριστερά και ημερομηνία πάνω δεξιά (παλιά διάταξη)· κενό = ημερομηνία αριστερά, κεφαλίδα δεξιά (layout.ts swapHeadDate)· η ΗΚΑΙ δεν αλλάζει ποτέ (κεφαλίδα αριστερά)
   heads?: DocHead[];                     // επικεφαλίδες εγγράφων που σχεδίασες (χωρίς την «Όπως σήμερα»), docHead.ts
