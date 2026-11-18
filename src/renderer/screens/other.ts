@@ -12,7 +12,7 @@ import { hasTimes, normTime, timeNames } from '../../shared/hours';
 import { DayFormsDialog } from './dayForms';
 import { HdTab } from './hd';
 import { ActiveFilter, ChangePlanList, DateBar, DateField, DateRangeField, ExcelSheet, ExportButton, PersonPicker, StatusBadge, TemplateNote, TimeField, useUsbCopy } from '../common';
-import { USB_DAYS, newsSince, usbAge, usbDue } from '../../shared/reminders';
+import { USB_DAYS, cadreDutyGaps, maintDueRows, newsSince, usbAge, usbDue } from '../../shared/reminders';
 import { noteDue, noteGroups, noteHead, noteSearch, noteWho } from '../../shared/notes';
 import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
 import { HK_SECTIONS, kolColName, dutyStartOf, hkLvOn, hkOn, hkToggle, type HkaiManual, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, coversDay, effects, fullName, shortName, unitOf, isWaiting, type LeaveAsk, type Person, type PersonRequest, type Status, platoonsOf, platoonShort, roomTxt } from '../../shared/domain';
@@ -60,6 +60,9 @@ export function TodayScreen() {
   // έξοδος/ΔΝ: ως πότε λείπει («ως 22:00», «ως Δευ 06:00»), αλλιώς «σήμερα» όταν δεν ξέρουμε πότε γυρνά
   const outUntil = (s: Status) => { const r = returnOf(state, s.pid, s.from); return !r || r.pending || r.open ? 'σήμερα' : 'ως ' + (r.day === today ? '' : dow(r.day) + ' ') + r.time; };
   const empty = frouraEmpty(state, tomorrow);
+  // συντήρηση οχημάτων, οπλισμού και υλικού που έληξε ή λήγει (όπως το φίλτρο του Μητρώου) και υπηρεσίες στελεχών χωρίς κανέναν αύριο
+  const maint = useMemo(() => maintDueRows(state, today), [state.people, state.cadreList, state.assets, state.settings, today]);
+  const cgaps = useMemo(() => cadreDutyGaps(state, tomorrow), [state.settings, state.cadreDuties, tomorrow]);
   // κωλυόμενοι που δήλωσες σήμερα (υπηρεσία εκτός δικών μας), στην ίδια στιγμή με τους παρόντες
   const kol = useMemo(() => kolView(state, today, strengthAt(state.rules, today, today, now)), [state, today, now]);
   // Όπλα εκτός τώρα: όσους μετράει και η κεφαλίδα του Οπλισμού (κινήσεις και ένοπλες υπηρεσίες)
@@ -105,6 +108,16 @@ export function TodayScreen() {
     sub: remNotes.slice(0, 2).map(n => { const w = noteWho(state, n); return (w.kind === 'gen' ? '' : w.label + ': ') + '«' + noteHead(n.text, 46) + '»' + (n.rem! < today ? ' (εκπρόθεσμη)' : ''); }).join(' · ') + (remNotes.length > 2 ? ' · και ' + (remNotes.length - 2) + ' ακόμα' : ''),
     urgent: remNotes.some(n => n.rem! < today), btn: 'Δες τις', fn: () => nav.go('notes', { nfilter: 'rem' }) });
   if (due) tasks.push({ key: 'usb', title: 'Αντίγραφο σε USB', sub: (boot.lastUsb ? 'Πέρασαν ' + usbAge(boot.lastUsb, today) + ' μέρες από το τελευταίο' : 'Δεν έχει παρθεί ποτέ') + '. Αν χαλάσει ο δίσκος του PC, χάνονται όλα (κάθε ' + USB_DAYS + ' μέρες).', btn: 'Αντίγραφο σε USB', fn: usb });
+  // συντήρηση: οχήματα (οθόνη Οχήματα) και οπλισμός/υλικό (Οπλισμός › Μητρώο)· οι καθυστερημένες πρώτες
+  const maintTask = (key: string, vehicle: boolean) => {
+    const l = maint.filter(m => (m.row.cat?.kind === 'vehicle') === vehicle).sort((a, b) => Number(b.overdue) - Number(a.overdue)); if (!l.length) return;
+    const od = l.filter(m => m.overdue).length; const nm = (m: { row: { a: { type: string; no: string } } }) => (m.row.a.type + ' ' + m.row.a.no).trim() || '(χωρίς αριθμό)';
+    tasks.push({ key, title: (vehicle ? 'Συντήρηση οχημάτων' : 'Συντήρηση οπλισμού και υλικού'), urgent: od > 0,
+      sub: (od ? od + (od === 1 ? ' καθυστερημένη' : ' καθυστερημένες') + ' · ' : '') + l.length + (l.length === 1 ? ' είδος' : ' είδη') + ' με συντήρηση: ' + l.slice(0, 3).map(nm).join(', ') + (l.length > 3 ? ' κ.ά.' : ''),
+      btn: 'Άνοιξε', fn: () => (vehicle ? nav.go('vehicles') : nav.go('weapons', { wtab: 'mitroo' })) });
+  };
+  maintTask('maintV', true); maintTask('maintA', false);
+  if (cgaps.length) tasks.push({ key: 'cduty', title: 'Υπηρεσίες στελεχών αύριο, ' + dow(tomorrow) + ' ' + dm(tomorrow), sub: 'Χωρίς κανέναν: ' + cgaps.slice(0, 4).map(v => v.name).join(', ') + (cgaps.length > 4 ? ' κ.ά.' : ''), btn: 'Συμπλήρωσε', fn: () => nav.go('cadre', { cview: 'duty', cmonth: tomorrow.slice(0, 7), cdm: 'svc' }) });
   const ends = [
     ...expired.map(s => ({ s, when: 'έληξε χθες, αφαιρέθηκε αυτόματα', tip: 'Από σήμερα δεν ισχύει· γράφτηκε στο Ιστορικό' })),
     ...ending.map(s => ({ s, when: 'λήγει σήμερα', tip: endTxt(s) })),
@@ -646,6 +659,17 @@ export function CommandPalette({ onClose }: P) {
     { t: HK() + ' (η αναφορά)', k: HK() + ' ΗΜΕΡΗΣΙΑ ΑΝΑΦΟΡΑ ΕΚΤΥΠΩΣΗ ΜΠΡΟΣΤΙΝΟ ΠΙΣΩ', fn: () => nav.go('hkai', { hkTab: 'hkai' }) },
     { t: 'Οχήματα', k: 'ΟΧΗΜΑΤΑ ΟΧΗΜΑ ΠΙΝΑΚΙΔΑ ΚΑΥΣΙΜΑ ΓΕΜΙΣΜΑ ΧΙΛΙΟΜΕΤΡΑ ΣΥΝΤΗΡΗΣΗ ΑΚΙΝΗΣΙΑ ΟΔΗΓΟΣ', fn: () => nav.go('vehicles') },
     { t: 'Οπλισμός', k: 'ΟΠΛΙΣΜΟΣ ΟΠΛΑ ΟΠΛΟ ΟΠΛΟΣΤΑΣΙΟ ΤΥΦΕΚΙΟ', fn: () => nav.go('weapons') },
+    { t: 'Οπλισμός › Μητρώο οπλισμού και υλικού', k: 'ΜΗΤΡΩΟ ΜΗΤΡΩΟΥ ΟΠΛΙΣΜΟΥ ΥΛΙΚΟΥ ΥΛΙΚΟ ΣΥΝΤΗΡΗΣΗ ΧΡΕΩΣΗ ΟΠΛΑ', fn: () => nav.go('weapons', { wtab: 'mitroo' }) },
+    { t: 'Στελέχη › Υπηρεσίες στελεχών (πρόγραμμα μήνα)', k: 'ΥΠΗΡΕΣΙΕΣ ΣΤΕΛΕΧΩΝ ΠΡΟΓΡΑΜΜΑ ΜΗΝΑ ΑΥΔΜ ΠΥΛΗ ΦΥΛΑΚΙΟ ΟΜΑΔΕΣ ΟΡΙΑ', fn: () => nav.go('cadre', { cview: 'duty' }) },
+    { t: 'Στελέχη › Πρόγραμμα αδειών', k: 'ΠΡΟΓΡΑΜΜΑ ΑΔΕΙΩΝ ΣΤΕΛΕΧΩΝ ΑΔΕΙΕΣ ΑΠΑΛΛΑΓΕΣ ΜΗΝΑΣ', fn: () => nav.go('cadre', { cview: 'plan' }) },
+    { t: 'Ρυθμίσεις › Άδειες και απαλλαγές στελεχών', k: 'ΑΔΕΙΕΣ ΑΠΑΛΛΑΓΕΣ ΣΤΕΛΕΧΩΝ ΥΠΟΛΟΙΠΟ ΚΑΝΟΝΙΚΗ ΑΜΔ ΚΑΡΤΕΛΑ', fn: () => nav.go('templates', { tab: 'unit' }) },
+    { t: 'Ρυθμίσεις › Υπηρεσίες στελεχών', k: 'ΥΠΗΡΕΣΙΕΣ ΣΤΕΛΕΧΩΝ ΟΜΑΔΕΣ ΑΥΔΜ ΟΡΙΑ ΑΝΑΠΑΥΣΗ ΠΡΟΓΡΑΜΜΑ', fn: () => nav.go('templates', { tab: 'cadreDuty' }) },
+    { t: 'Ρυθμίσεις › Μητρώο οπλισμού και υλικού', k: 'ΜΗΤΡΩΟ ΚΑΤΗΓΟΡΙΕΣ ΤΥΠΟΙ ΟΠΛΙΣΜΟΥ ΥΛΙΚΟΥ ΟΧΗΜΑΤΩΝ ΘΕΣΕΙΣ ΛΕΞΕΙΣ', fn: () => nav.go('templates', { tab: 'assets' }) },
+    { t: 'Ρυθμίσεις › Επικεφαλίδες εγγράφων', k: 'ΕΠΙΚΕΦΑΛΙΔΕΣ ΕΓΓΡΑΦΩΝ ΕΠΙΚΕΦΑΛΙΔΑ ΛΟΓΟΤΥΠΟ ΗΜΕΡΗΣΙΑ ΔΙΑΤΑΓΗ ΕΝΤΥΠΑ', fn: () => nav.go('templates', { tab: 'heads' }) },
+    { t: 'Ρυθμίσεις › Ονόματα αρχείων', k: 'ΟΝΟΜΑΤΑ ΑΡΧΕΙΩΝ ΟΝΟΜΑ ΑΡΧΕΙΟΥ ΗΜΕΡΟΜΗΝΙΑ ΜΟΡΦΗ ΣΥΜΒΑΣΗ', fn: () => nav.go('templates', { tab: 'names' }) },
+    { t: 'Ρυθμίσεις › Δικές μου στήλες ' + HK(), k: 'ΔΙΚΕΣ ΜΟΥ ΣΤΗΛΕΣ ΣΤΗΛΗ ' + HK() + ' ΚΩΛΥΟΜΕΝΟΙ ΑΠΟΝΤΕΣ ΝΕΑ ΣΤΗΛΗ', fn: () => nav.go('templates', { tab: 'unit' }) },
+    { t: 'Αρχεία Excel › Αντιστοίχιση προτύπου', k: 'ΑΝΤΙΣΤΟΙΧΙΣΗ ΠΡΟΤΥΠΟΥ ΑΛΛΗΣ ΜΟΝΑΔΑΣ ΣΤΗΛΕΣ ΕΝΤΥΠΟ ' + HK() + ' ΠΡΟΣΑΡΜΟΓΗ', fn: () => nav.go('templates', { tab: 'files' }) },
+    { t: 'Ρυθμίσεις › Κινήσεις δύναμης (ΕΣΣΟ και κινήσεις)', k: 'ΚΙΝΗΣΕΙΣ ΔΥΝΑΜΗΣ ΑΠΟΛΥΣΗ ΕΣΣΟ ΜΕΤΑΘΕΣΗ ΠΡΟΓΡΑΜΜΑΤΙΣΜΕΝΕΣ ΑΚΥΡΩΣΗ', fn: () => nav.go('templates', { tab: 'esso' }) },
     { t: 'Οπλισμός › Κινήσεις', k: 'ΚΙΝΗΣΕΙΣ ΟΠΛΩΝ ΕΝΤΟΣ ΕΚΤΟΣ ΧΡΕΩΣΗ', fn: () => nav.go('weapons', { wtab: 'moves' }) },
     { t: 'Έξοδος όπλων…', k: 'ΕΞΟΔΟΣ ΟΠΛΩΝ ΟΠΛΙΣΜΟΣ ΕΚΤΟΣ ΒΓΑΛΕ ΟΠΛΑ ΣΑΡΩΣΗ ΘΕΣΗ ΑΡΙΘΜΟΣ ΟΠΛΟΥ', fn: () => nav.go('weapons', { wtab: 'weapons', wfocus: 'scan' }) },
     { t: 'Είσοδος όλων…', k: 'ΕΙΣΟΔΟΣ ΟΠΛΩΝ ΟΛΩΝ ΟΠΛΙΣΜΟΣ ΕΝΤΟΣ ΕΠΙΣΤΡΟΦΗ ΟΠΛΑ ΚΙΝΗΣΕΙΣ ΕΚΤΟΣ ΤΩΡΑ', fn: () => nav.go('weapons', { wtab: 'moves', wmoves: 'open', wmreason: undefined, wfocus: 'in' }) },

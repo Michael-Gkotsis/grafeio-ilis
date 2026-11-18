@@ -13,6 +13,9 @@ import { WEAPON_FILTERS, byOut, inOutText, moveById, moveInCell, moveOutCell, mo
 import { itemKey, live, leavePhrase, listOf, rankTxt, statusLbl } from './ranks';
 import { cadreStateOn, dutyOfficers, orderedCadre } from './cadre';
 import { currentEsso, essoName } from './esso';
+import { dischargeLabel, personDischarge } from './mode';
+import { dutyCfgOf, serviceOf } from './cadreDuty';
+import { apalLeft, quotaBalances } from './cadreBalance';
 import { filterStatus, rosterMatch, type RosterFilter } from './rosterLists';
 import type { Sig } from './sigs';
 import type { Moves } from './layout';
@@ -63,18 +66,22 @@ const F = (k: string, label: string, head: string, w: number, al: Align = 'cente
 // Βαθμός: με την προέλευση μπροστά (ΕΠΟΠ ΛΧΙΑΣ), όπως το ονοματεπώνυμο ενώνει επώνυμο και όνομα· και χωριστά (Michael, 22/10)
 // Απουσία τη μέρα (Δυναμολόγιο-Παρουσιολόγιο στελεχών): ΑΠΩΝ ΝΑΙ, αιτία, ημερομηνία επιστροφής (πραγματική ημερομηνία στο Excel)
 const ABS = [F('absent', 'Απών (ΝΑΙ αν λείπει ή είναι κωλυόμενος)', 'ΑΠΩΝ', 7), F('areason', 'Αιτία απουσίας (π.χ. ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ)', 'ΑΙΤΙΑ ΑΠΟΥΣΙΑΣ', 22, 'left'), F('aret', 'Ημερομηνία επιστροφής', 'ΗΜ/ΝΙΑ ΕΠΙΣΤΡΟΦΗΣ', 13)];
-export const DATE_FIELDS = new Set(['aret']);
+export const DATE_FIELDS = new Set(['aret', 'inOn']);
 const COMMON = [F('aa', 'Α/Α (αύξων αριθμός)', 'Α/Α', 5), F('rank', 'Βαθμός (με την προέλευση, π.χ. ΕΠΟΠ ΛΧΙΑΣ)', 'ΒΑΘΜΟΣ', 11), F('rank1', 'Μόνο βαθμός (χωρίς προέλευση)', 'ΒΑΘΜΟΣ', 10),
   F('origin', 'Προέλευση (ΕΠΟΠ, ΟΒΑ, ΣΜΥ…)', 'ΠΡΟΕΛΕΥΣΗ', 10), F('spec', 'Ο/Σ', 'Ο/Σ', 6)];
 // Προσωπικά στοιχεία (Michael 4/11): e-mail, e-mail συγγενή, ομάδα αίματος και IBAN, ΑΜΚΑ, ΑΦΜ ως στήλες· συμπαγείς τιμές, πάντα κείμενο
 const MAILS = [F('email', 'E-mail', 'E-MAIL', 28, 'left'), F('relEmail', 'E-mail συγγενή', 'E-MAIL ΣΥΓΓΕΝΗ', 28, 'left'), F('blood', 'Ομάδα αίματος', 'ΟΜΑΔΑ ΑΙΜΑΤΟΣ', 10)];
 // Θρήσκευμα (Michael, 18/11): μαζί με τα άλλα προσωπικά στοιχεία, σε κάθε είδος που τα έχει (στρατιώτες και στελέχη), πάντα με κεφαλαία
+// Λειτουργία μονάδας (Michael, 13–17/11): Λόχος/Ίλη του στρατιώτη, ημερομηνία εισαγωγής στη δύναμη και απόλυση περίπου (μήνας). Κενά αν δεν έχουν οριστεί
+const UNITF = [F('sub', 'Λόχος / Ίλη του στρατιώτη', 'ΛΟΧΟΣ / ΙΛΗ', 14, 'left'), F('inOn', 'Ημερομηνία εισαγωγής στη δύναμη', 'ΗΜ. ΕΙΣΑΓΩΓΗΣ', 13), F('disch', 'Απόλυση περίπου (μήνας)', 'ΑΠΟΛΥΣΗ', 16)];
+// Στελέχη (Michael, 17/11): υπηρεσία της μέρας από το πρόγραμμα στελεχών, υπόλοιπο άδειας (μέρες, όλα τα είδη) και απαλλαγές της χρονιάς
+const CADREF = [F('cduty', 'Υπηρεσία της μέρας (πρόγραμμα στελεχών)', 'ΥΠΗΡΕΣΙΑ', 16, 'left'), F('cleave', 'Υπόλοιπο άδειας (μέρες)', 'ΥΠΟΛΟΙΠΟ ΑΔΕΙΑΣ', 12), F('capal', 'Υπόλοιπο απαλλαγών', 'ΑΠΑΛΛΑΓΕΣ', 11)];
 const PERS = [F('iban', 'IBAN', 'IBAN', 29), F('amka', 'ΑΜΚΑ', 'ΑΜΚΑ', 13), F('afm', 'ΑΦΜ', 'ΑΦΜ', 11), F('religion', 'Θρήσκευμα', 'ΘΡΗΣΚΕΥΜΑ', 24, 'left')];
 // τα στοιχεία του στρατιώτη στα είδη με μία γραμμή ανά κατάσταση, θέση ή όπλο
 const SOLDIER = [
   F('name', 'Επώνυμο Όνομα (του πατρώνυμο, μόνο σε συνονόματους)', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 28, 'left'), F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 34, 'left'),
   F('last', 'Επώνυμο', 'ΕΠΩΝΥΜΟ', 18, 'left'), F('first', 'Όνομα', 'ΟΝΟΜΑ', 14, 'left'), F('father', 'Πατρώνυμο', 'ΠΑΤΡΩΝΥΜΟ', 14, 'left'),
-  F('asm', 'ΑΣΜ', 'ΑΣΜ', 13), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13), F('room', 'Θάλαμος', 'ΘΑΛ.', 6), F('unit', 'Ουλαμός', 'ΟΥΛΑΜΟΣ', 10), F('si', 'Σ.Ι.', 'Σ.Ι.', 8), ...MAILS, ...PERS];
+  F('asm', 'ΑΣΜ', 'ΑΣΜ', 13), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13), F('room', 'Θάλαμος', 'ΘΑΛ.', 6), F('unit', 'Ουλαμός', 'ΟΥΛΑΜΟΣ', 10), F('si', 'Σ.Ι.', 'Σ.Ι.', 8), ...MAILS, ...PERS, ...UNITF];
 // Καταστάσεις της μέρας σε στήλη, κάθε είδος χωριστά (Michael, 22/10: «να διαλέξω ιατρικές καταστάσεις, άδεια κτλπ»),
 // με τη μορφή που διαλέγεις (ColOpts.sf: ΕΑ, ΕΥ, ΑΔΕΙΑ…)
 const STATUS = [F('smed', 'Ιατρικό τη μέρα (ΕΑ, ΕΥ…)', 'ΙΑΤΡΙΚΟ', 12), F('sabs', 'Άδεια τη μέρα (ΚΑ, τιμητική…)', 'ΑΔΕΙΑ', 12), F('spun', 'Ποινή τη μέρα', 'ΠΟΙΝΗ', 14),
@@ -87,14 +94,14 @@ export const FIELDS: Record<RepKind, FieldDef[]> = {
     F('last', 'Επώνυμο', 'ΕΠΩΝΥΜΟ', 18, 'left'), F('first', 'Όνομα', 'ΟΝΟΜΑ', 14, 'left'), F('father', 'Πατρώνυμο', 'ΠΑΤΡΩΝΥΜΟ', 14, 'left'),
     F('asm', 'ΑΣΜ', 'ΑΣΜ', 13), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13), F('room', 'Θάλαμος', 'ΘΑΛ.', 6), F('unit', 'Ουλαμός', 'ΟΥΛΑΜΟΣ', 10),
     F('si', 'Σ.Ι.', 'Σ.Ι.', 8), F('dcode', 'Κωδικός μέρας (Κ.Α, ΑΝ.ΑΔ, Ε.Υ, ΣΤΕΠ, ΑΟΠΛΟΣ…)', 'ΚΩΔΙΚΟΣ ΜΕΡΑΣ', 12), ...ABS, ...MAILS, ...PERS,
-    F('post', 'Πόστο', 'ΠΟΣΤΟ', 14), F('role', 'Ρόλος', 'ΡΟΛΟΣ', 14), F('essos', 'ΕΣΣΟ', 'ΕΣΣΟ', 10), F('dn', 'Δικαίωμα ΔΝ', 'ΔΝ', 6),
+    F('post', 'Πόστο', 'ΠΟΣΤΟ', 14), F('role', 'Ρόλος', 'ΡΟΛΟΣ', 14), F('essos', 'ΕΣΣΟ', 'ΕΣΣΟ', 10), ...UNITF, F('dn', 'Δικαίωμα ΔΝ', 'ΔΝ', 6),
     F('weapon', 'Αριθμός όπλου', 'ΑΡ. ΟΠΛΟΥ', 12), F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', 12), F('rack', 'Οπλοβαστός', 'ΟΠΛΟΒΑΣΤΟΣ', 11), F('wpos', 'Θέση όπλου', 'ΘΕΣΗ ΟΠΛΟΥ', 11),
     F('status', 'Κατάσταση την ημέρα (όλες: ΚΑ, ΕΑ, ποινή…)', 'ΚΑΤΑΣΤΑΣΗ', 16), ...STATUS, F('duty', 'Υπηρεσία την ημέρα', 'ΥΠΗΡΕΣΙΑ', 16), F('notes', 'Σημειώσεις', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', 20, 'left'),
     ...TAIL],
   cadre: [...COMMON,
     F('name', 'Επώνυμο Όνομα', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 26, 'left'), F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 32, 'left'),
     F('last', 'Επώνυμο', 'ΕΠΩΝΥΜΟ', 18, 'left'), F('first', 'Όνομα', 'ΟΝΟΜΑ', 14, 'left'), F('am', 'ΑΜ', 'ΑΜ', 12), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13), ...PERS,
-    F('cspec', 'Ειδικότητα', 'ΕΙΔΙΚΟΤΗΤΑ', 18, 'left'), F('role', 'Θέση', 'ΘΕΣΗ', 18, 'left'), F('status', 'Κατάσταση την ημέρα', 'ΚΑΤΑΣΤΑΣΗ', 18), ...ABS,
+    F('cspec', 'Ειδικότητα', 'ΕΙΔΙΚΟΤΗΤΑ', 18, 'left'), F('role', 'Θέση', 'ΘΕΣΗ', 18, 'left'), F('status', 'Κατάσταση την ημέρα', 'ΚΑΤΑΣΤΑΣΗ', 18), ...ABS, ...CADREF,
     ...TAIL],
   // Καταστάσεις (Φάση 2): τα στοιχεία του στρατιώτη και της κατάστασης
   status: [...COMMON, ...SOLDIER,
@@ -319,8 +326,8 @@ export const DEF_CATS: StCat[] = ['med', 'pun', 'abs'];
 // Πού βγαίνει ως φύλλο: στο Δυναμολόγιο (το αρχείο του, όποιο είναι τη στιγμή που βγαίνει) ή σε άλλο Excel.
 // auto: ξαναγράφεται μόνο του μετά από κάθε αλλαγή (όχι για τυχαίους, που θα άλλαζαν κάθε φορά)
 export interface RepTarget { to: 'people' | 'file'; file?: string; sheet: string; auto?: boolean }
-export type RepSplit = 'none' | 'room' | 'unit' | 'si';
-export const SPLITS: { value: RepSplit; label: string }[] = [{ value: 'none', label: 'Ένα για όλους' }, { value: 'room', label: 'Ανά θάλαμο' }, { value: 'unit', label: 'Ανά ουλαμό' }, { value: 'si', label: 'Ανά Σ.Ι.' }];
+export type RepSplit = 'none' | 'room' | 'unit' | 'si' | 'sub';
+export const SPLITS: { value: RepSplit; label: string }[] = [{ value: 'none', label: 'Ένα για όλους' }, { value: 'room', label: 'Ανά θάλαμο' }, { value: 'unit', label: 'Ανά ουλαμό' }, { value: 'si', label: 'Ανά Σ.Ι.' }, { value: 'sub', label: 'Ανά λόχο' }];
 export interface Report {
   id: string; name: string; tpl: string; kind: RepKind;
   sheet: string; head: number;                // φύλλο και γραμμή επικεφαλίδων (από 1)
@@ -618,6 +625,9 @@ export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: num
       case 'iban': return c.iban || ''; case 'amka': return c.amka || ''; case 'afm': return c.afm || ''; case 'religion': return upper(c.religion);
       case 'status': return cadreStateOn(s, c.id, d)?.label || '';
       case 'cspec': return c.eid || '';
+      case 'cduty': return (s.cadreDuties || []).filter(x => x.cid === c.id && x.date === d).map(x => upper(serviceOf(dutyCfgOf(s.settings), x.svc)?.svc.name || '')).filter(Boolean).join(', ');
+      case 'cleave': return quotaBalances(s, c.id, +d.slice(0, 4)).reduce((a, b) => a + b.left, 0);
+      case 'capal': return apalLeft(s, c, +d.slice(0, 4), d);
       case 'absent': case 'areason': case 'aret': return absField(absenceOfCadre(s, c, d), f);
     }
     return null;
@@ -631,6 +641,7 @@ export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: num
     case 'room': return p.room; case 'unit': { const u = unitOf(p, s.settings); return u === '—' ? '' : u; }
     case 'dcode': return dayCode(s, p, d); case 'absent': case 'areason': case 'aret': return absField(absenceOfPerson(s, p, d), f); case 'email': return p.email || ''; case 'relEmail': return p.relEmail || ''; case 'blood': return p.blood || ''; case 'iban': return p.iban || ''; case 'amka': return p.amka || ''; case 'afm': return p.afm || ''; case 'religion': return upper(p.religion);
     case 'si': return p.si; case 'post': return p.post || ''; case 'role': return p.role || ''; case 'essos': return p.essos; case 'dn': return p.dn ? 'ΝΑΙ' : '';
+    case 'sub': return upper(p.sub || ''); case 'inOn': return p.inOn ? dmy(p.inOn) : ''; case 'disch': { const x = personDischarge(p); return x ? upper(dischargeLabel(x)) : ''; }
     case 'weapon': return p.weapon || ''; case 'wtype': return p.wtype || ''; case 'rack': return p.rack || ''; case 'wpos': return p.wpos || '';
     case 'duty': return Object.entries(s.guards[d] || {}).filter(([, pid]) => pid === p.id).map(([key]) => postBy(s, key)?.label || '').filter(Boolean).join(', ');
     case 'notes': return p.notes;
@@ -779,6 +790,7 @@ export function groupOf(s: Pick<AppState, 'settings'>, x: Row, split: RepSplit):
   const p = x as Person; let key: string, label: string, short: string;
   if (split === 'room') { key = p.room == null ? '~' : String(p.room).padStart(3, '0'); label = p.room == null ? 'ΧΩΡΙΣ ΘΑΛΑΜΟ' : 'ΘΑΛΑΜΟΣ ' + p.room; short = p.room == null ? 'ΧΩΡΙΣ ΘΑΛ' : 'Θ' + p.room; }
   else if (split === 'unit') { const u = unitOf(p, s.settings); key = u === '—' ? '~' : u; label = u === '—' ? 'ΧΩΡΙΣ ΟΥΛΑΜΟ' : 'ΟΥΛΑΜΟΣ ' + u; short = u === '—' ? 'ΧΩΡΙΣ ΟΥΛ' : u; }
+  else if (split === 'sub') { const u = (p.sub || '').trim(); key = u ? itemKey(u) : '~'; label = upper(u) || 'ΧΩΡΙΣ ΛΟΧΟ'; short = label; }
   else { const si = (p.si || '').trim(); key = si || '~'; label = si || 'ΧΩΡΙΣ Σ.Ι.'; short = si || 'ΧΩΡΙΣ ΣΙ'; }
   return { key, label: label.toUpperCase(), short: short.toUpperCase() };
 }
@@ -796,7 +808,7 @@ export function groupsOf(s: Pick<AppState, 'settings'>, kind: RepKind, rows: Row
 // Το όνομα του εντύπου όπως είναι· η ημερομηνία στη μορφή των Ρυθμίσεων › Ονόματα αρχείων (προεπιλογή 19-10-2026)
 export const repFileName = (r: Pick<Report, 'name'>, d: ISODate, st?: Pick<Settings, 'fileNames'>) => fileName(st || {}, 'report', upper(r.name || 'ΕΝΤΥΠΟ').replace(/[\\/:*?"<>|]/g, '-').trim(), d, 'xlsx');
 const baseName = (f?: string) => (f || '').split(/[\\/]/).pop() || '';
-export const SPLIT_NOUN: Record<RepSplit, [string, string]> = { none: ['', ''], room: ['θάλαμο', 'θαλάμους'], unit: ['ουλαμό', 'ουλαμούς'], si: ['Σ.Ι.', 'Σ.Ι.'] };
+export const SPLIT_NOUN: Record<RepSplit, [string, string]> = { none: ['', ''], room: ['θάλαμο', 'θαλάμους'], unit: ['ουλαμό', 'ουλαμούς'], si: ['Σ.Ι.', 'Σ.Ι.'], sub: ['λόχο', 'λόχους'] };
 export function outPlan(s: Pick<AppState, 'settings'>, r: Report, rows: Row[], d: ISODate): { groups: RepGroup[]; text: string } {
   const split = splitOk(r.kind) && !!r.split && r.split !== 'none';
   const groups = split ? groupsOf(s, r.kind, rows, r.split) : [];

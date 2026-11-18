@@ -4,7 +4,7 @@
 // Όλα εδώ είναι καθαρές συναρτήσεις: τις τρέχουν και το UI (προεπισκόπηση) και ο main (εισαγωγή, εγγραφή).
 import { addDays, type ISODate } from './dates';
 import { norm, normGreek, collator, upper } from './text';
-import { CAP_ACC, KIND_NAME, OUT_NOTE, PUN_KINDS, TYPES, codeKey, everyBlock, fatherTxt, fullName, roomCfg, type AppState, type CapKey, type Settings, type DutyKind, type Person, type SeatlessDuty, type Status, type TypeKey } from './domain';
+import { ADIK_TYPES, ADIK_WORD, CAP_ACC, KIND_NAME, OUT_NOTE, PUN_KINDS, TYPES, codeKey, everyBlock, fatherTxt, fullName, roomCfg, type AppState, type CapKey, type Settings, type DutyKind, type Person, type SeatlessDuty, type Status, type TypeKey } from './domain';
 import { bareOf, codeOf, isBareCode, readDuties, type CellDuty } from './codes';
 import { dm, MONTHS as MONTH_NAMES } from './dates';
 import { DN_HEAD, DN_WORD, HEADERS, isDnYes, isPersonRow, stripDn, type CellValue, type RawSheet } from './roster';
@@ -96,7 +96,8 @@ export const KINDS: KindDef[] = [
   { id: 'medical', label: 'ΕΑ / ΕΥ / ΕΟ', help: 'Είδος (ΕΑ, ΕΥ, ΕΟ, ΕΑΡΒ…), από, έως', title: 'ΕΑ-ΕΥ', write: true, types: ['EA', 'EARV', 'EY', 'EO'],
     sheetRe: /IATR|ΙΑΤΡ|ΕΑ.?ΕΥ/, titleRe: /ΕΑ\s*[-–/]?\s*ΕΥ|ΕΛΕΥΘΕΡ/,
     fields: [F('kind', 'Είδος (ΕΑ, ΕΥ, ΕΟ…)', 'ΕΑ-ΕΥ', /^ΕΑ\s*[-–/]\s*ΕΥ|^ΕΙΔΟΣ|ΕΞΑΙΡΕΣΗ/, { req: true }), FROM(), TO(), NOTE] },
-  { id: 'hospital', label: 'Νοσοκομείο / αναρρωτικές', help: 'Πού (νοσοκομείο ή ΑΝ.ΑΔ), είσοδος, έξοδος', title: 'ΕΙΣΑΓΩΓΕΣ ΝΟΣΟΚΟΜΕΙΟ-ΑΝ.ΑΔ.', write: true, types: ['NOS', 'SICK'],
+  { id: 'hospital', label: 'Νοσοκομείο / αναρρωτικές', help: 'Πού (νοσοκομείο ή ΑΝ.ΑΔ), είσοδος, έξοδος', title: 'ΕΙΣΑΓΩΓΕΣ ΝΟΣΟΚΟΜΕΙΟ-ΑΝ.ΑΔ.', write: true, types: ['NOS', 'SICK', 'AGN', 'LIP', 'ADK'],   // Άγνοια, Λιποταξία, Αδικαιολόγητη απουσία (17/11): στο ίδιο φύλλο, με τη λέξη τους στη στήλη «Εισαγωγή»
+    
     sheetRe: /IATR|ΙΑΤΡ|ΝΟΣΟΚ/, titleRe: /ΝΟΣΟΚΟΜ|ΑΝ\s*\.?\s*ΑΔ|ΑΝΑΡΡΩΤ/,
     fields: [F('where', 'Εισαγωγή (νοσοκομείο / ΑΝ.ΑΔ)', 'Εισαγωγή', /^ΕΙΣΑΓΩΓΗ$|^ΝΟΣΟΚΟΜΕΙΟ$/), FROM('ΕΙΣ'), HOUT, TO('ΕΞ'), HIN, NOTE] },
   { id: 'step', label: 'Εισαγωγές ΣΤΕΠ', help: 'Είσοδος, έξοδος', title: 'ΕΙΣΑΓΩΓΕΣ ΣΤΕΠ', write: true, types: ['STEP'],
@@ -492,7 +493,7 @@ export function typeOfValue(kind: StatusKind, raw: string, values?: Record<strin
     case 'step': return 'STEP';
     case 'dn': return 'DN';
     case 'leave': return /ΤΙΜΗΤ/.test(v) ? 'HON' : 'LEAVE';
-    case 'hospital': return /^ΑΝ|ΑΝΑΡ/.test(v) ? 'SICK' : 'NOS';
+    case 'hospital': return /ΑΓΝΟΙΑ|ΑΓΝΟΟΥΜ/.test(v) ? 'AGN' : /ΛΙΠΟΤΑΞ/.test(v) ? 'LIP' : /ΑΔΙΚΑΙΟΛΟΓΗΤ/.test(v) ? 'ADK' : /^ΑΝ|ΑΝΑΡ/.test(v) ? 'SICK' : 'NOS';
     case 'medical':
       if (/^ΕΥ/.test(v) || /ΕΛΕΥΘΕΡΟΣΥΠΗΡ/.test(v)) return 'EY';
       if (/^ΕΟ/.test(v) || /ΟΡΘΟΣΤ/.test(v)) return 'EO';
@@ -595,7 +596,7 @@ export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b:
     if (!cur) {
       const st: Omit<Status, 'id'> = { pid, type, from: c.from, to: c.to };
       if (c.noEnd && has('to')) st.open = true;   // χωρίς στήλη «έως» δεν είναι «χωρίς λήξη»: μένει μίας μέρας, όπως πριν
-      if (c.kind) st.kind = c.kind; if (c.note) st.note = c.note;
+      if (c.kind && !(ADIK_TYPES.includes(type) && sameText(c.kind, ADIK_WORD[type]))) st.kind = c.kind; if (c.note) st.note = c.note;   // η λέξη της Άγνοιας κ.λπ. είναι το προεπιλεγμένο κείμενο, δεν αποθηκεύεται
       if (c.fromTime) st.fromTime = c.fromTime; if (c.toTime) st.toTime = c.toTime;
       if (c.dest) st.dest = c.dest;
       if (kind === 'punish') { st.kind = c.kind || PUN_KINDS[0]; if (c.by) st.by = c.by; if (c.reason) st.reason = c.reason; }
@@ -608,7 +609,7 @@ export function diffStatuses(kind: StatusKind, s: AppState, parsed: ParseOut, b:
     if (has('to') && !c.noEnd && (cur.to !== c.to || cur.open)) { patch.to = c.to; if (cur.open) patch.open = false; what.push('έως ' + c.to.slice(8) + '/' + c.to.slice(5, 7)); }
     if ((has('kind') || has('where')) && c.raw && cur.type !== type) { patch.type = type; what.push(TYPES[type].label); }
     // η εφαρμογή γράφει στο Excel με κεφαλαία: ίδιο κείμενο όσο ταιριάζουν τα γράμματα (χωρίς πεζά/κεφαλαία και τόνους)
-    if ((has('kind') || has('where')) && c.kind && !sameText(c.kind, cur.kind)) { patch.kind = c.kind; what.push(c.kind); }
+    if ((has('kind') || has('where')) && c.kind && !sameText(c.kind, cur.kind || (ADIK_TYPES.includes(cur.type) ? ADIK_WORD[cur.type] : ''))) { patch.kind = c.kind; what.push(c.kind); }
     if (has('note') && !sameText(c.note, cur.note)) { patch.note = c.note || ''; what.push('παρατηρήσεις'); }
     const tn = timeNames(type), timed = TIME_KINDS.includes(kind);
     if (timed && has('tout') && (c.fromTime || '') !== (cur.fromTime || '')) { patch.fromTime = c.fromTime || ''; what.push(c.fromTime ? tn.from + ' ' + c.fromTime : 'χωρίς ώρα ' + tn.fromG); }
@@ -716,7 +717,7 @@ export function fieldValue(k: string, kind: StatusKind, st: Status, p: Person | 
     case 'to': return st.open ? null : { date: st.to };
     case 'days': return st.open ? null : st.days || Math.round((Date.parse(st.to) - Date.parse(st.from)) / 86400000) + 1;   // στέρηση εξόδου: οι ημέρες της ποινής
     case 'kind': return kind === 'medical' ? (st.kind || TYPES[st.type].label) : kind === 'leave' ? (st.kind || (st.type === 'HON' ? 'ΤΙΜΗΤΙΚΗ' : 'ΚΑΝΟΝΙΚΗ')) : kind === 'punish' ? (st.kind ? upper(st.kind) : null) : (st.kind || null);
-    case 'where': return st.kind || (st.type === 'SICK' ? 'ΑΝ.ΑΔ' : 'ΝΟΣΟΚΟΜΕΙΟ');
+    case 'where': return st.kind || (ADIK_TYPES.includes(st.type) ? ADIK_WORD[st.type] : st.type === 'SICK' ? 'ΑΝ.ΑΔ' : 'ΝΟΣΟΚΟΜΕΙΟ');
     case 'note': return st.note || null;
     case 'tout': return st.fromTime || null;
     case 'tin': return st.open ? null : st.toTime || null;

@@ -29,7 +29,7 @@ export function HdTab() {
   const date: ISODate = nav.params.hdDate || hdDefaultDay(today);
   const [edit, setEdit] = useState<{ date: ISODate; doc: HdDoc } | null>(null); const [busy, setBusy] = useState(false); const [prev, setPrev] = useState(false); const [sigs, setSigs] = useState(false); const hp = useHeadPick('hd');
   const saved = state.hd?.[date];
-  const auto = useMemo(() => hdAuto(state, date), [state.people, state.statuses, state.cadreList, state.cadreAbs, state.hkaiManual, state.settings, state.hd, date]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const auto = useMemo(() => hdAuto(state, date), [state.people, state.statuses, state.cadreList, state.cadreAbs, state.cadreDuties, state.hkaiManual, state.settings, state.hd, date]);   // eslint-disable-line react-hooks/exhaustive-deps
   const doc: HdDoc = edit && edit.date === date ? edit.doc : saved || auto;
   const set = (p: Partial<HdDoc>) => setEdit({ date, doc: { ...doc, ...p } });
   const setSec = (k: 'ax' | 'op', i: number, l: string[]) => set({ [k]: doc[k].map((x, j) => (j === i ? l : x)) } as P);
