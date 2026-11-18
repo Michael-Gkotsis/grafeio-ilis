@@ -1,5 +1,6 @@
 // Όλες οι ενέργειες του χρήστη ως καθαρές συναρτήσεις: (κατάσταση, εντολή) → νέα κατάσταση + εγγραφή ιστορικού.
 // Τρέχουν στο main process· η βάση αποθηκεύει τη διαφορά και την κρατά για αναίρεση (08 §3.7).
+import type { WeaponApply } from './weaponUnit';
 import { HK } from './unit';
 import { applyHkCols, type HkColInput } from './hkCols';
 import { cleanHd, type HdDoc } from './hd';
@@ -15,12 +16,12 @@ import { leaveCmdOf, sameLeave, nextCadrePid, seatMap, skipTxt, capBlock, capCel
 import { noNotes, svcColOk, svcDefault, cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, isAway, itemName, leavePhrase, listRows, rankTxt, statusLbl, weaponBack, withOrigin, type HkRowDef, type ListId, type UserLists } from './ranks';
 import { insertCadre, isManualOrder } from './cadre';
 import { clearRange, setNoDuty } from './cadrePlan';
-import { assetCfgOf, catOf, cleanAsset, doMaint, heldWarn, holderText, registry, sameHolder, STATE_TXT } from './assets';
+import { assetCfgOf, newAssetCatId, catOf, cleanAsset, doMaint, heldWarn, holderText, registry, sameHolder, STATE_TXT } from './assets';
 import { doVehMaint, driverText, kmTxt, numTxt, vehName, withKm } from './vehicles';
 import { cleanPerson, dutyCfgOf, serviceOf } from './cadreDuty';
 import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
-import { normPos, normRack, normWeapon, weaponKey } from './weapons';
+import { normPos, normRack, normWeapon, weaponKey, WT_CAT } from './weapons';
 import { normExtra, normPersonal, PKEYS, XKEYS, type PKey } from './personal';
 import { ARM_MAX, armedRows, calDay, hmOf, okStamp, stampMin } from './armed';
 import { isSat, isWk, outLbl, WK } from './weekend';
@@ -66,6 +67,8 @@ export type Command =
   | { t: 'assetHolder'; id: string; base?: Asset; holder: AssetHolder | null; date: ISODate }
   | { t: 'assetGone'; id: string; base?: Asset; why?: string; date: ISODate }
   | { t: 'deleteAsset'; id: string }
+  // Αρχείο οπλισμού άλλης μονάδας (shared/weaponUnit.ts): κύριο όπλο στο Δυναμολόγιο και νέες εγγραφές Μητρώου, μόνο ό,τι δεν υπάρχει ήδη
+  | { t: 'importWeapons'; apply: WeaponApply; source: string; date: ISODate }
   // Από το δικό τους Excel (3/11): νέα στελέχη και αλλαγές στοιχείων (με τους ίδιους κανόνες της καρτέλας), και καταστάσεις
   | { t: 'importCadres'; adds: CadreNew[]; updates: { id: string; patch: Partial<Cadre> }[]; source: string }
   | { t: 'importCadreAbs'; adds: AbsNew[]; updates: { id: string; note: string }[]; deletes: string[]; source: string }
@@ -553,6 +556,29 @@ function assetCmd(s: AppState, c: Extract<Command, { t: 'saveAsset' | 'assetMain
   }
   const to = h ? 'χρεώθηκε σε ' + holderText(st, h) : 'έγινε αχρέωτο';
   return { state: put(a, st, ev(a.id, c.date, 'assign', to)), text: 'Μητρώο: ' + nm + ' ' + to, files: [] };
+}
+// Εισαγωγή από αρχείο οπλισμού άλλης μονάδας: τίποτα δεν αλλάζει σε ό,τι υπάρχει ήδη (ίδιος αριθμός = παραλείπεται, άλλο κύριο όπλο = παραλείπεται)
+function importWeapons(s: AppState, ap: WeaponApply, source: string, date: ISODate, ctx: Ctx): Result {
+  let st = s; let prim = 0; const list = [...(s.assets || [])]; const log = [...(s.assetLog || [])]; let added = 0;
+  const have = new Set(registry(s).filter(r => !r.a.gone).map(r => weaponKey(r.a.no)));
+  for (const p of ap.primary) {
+    const key = weaponKey(p.weapon); if (!key || have.has(key)) continue;
+    if (p.owner.k === 'person') {
+      const pid = p.owner.pid; const x = st.people.find(q => q.id === pid); if (!x || weaponKey(x.weapon)) continue;
+      st = run(st, { t: 'setWeapons', changes: [{ pid, weapon: p.weapon, ...(p.wtype && !x.wtype ? { wtype: p.wtype } : {}), ...(p.rack && !x.rack ? { rack: p.rack } : {}), ...(p.wpos && !x.wpos ? { wpos: p.wpos } : {}) }], what: 'αρχείο οπλισμού' }, ctx).state;
+    } else {
+      const cid = p.owner.cid; const x = st.cadreList.find(q => q.id === cid); if (!x || weaponKey(x.weapon)) continue;
+      st = { ...st, cadreList: st.cadreList.map(q => (q === x ? { ...q, weapon: p.weapon, ...(p.wtype && !q.wtype ? { wtype: normWeapon(p.wtype) } : {}), ...(p.rack && !q.rack ? { rack: p.rack } : {}), ...(p.wpos && !q.wpos ? { wpos: p.wpos } : {}) } : q)) };
+    }
+    have.add(key); prim++;
+  }
+  for (const a of ap.assets) {
+    const key = weaponKey(a.no); if (!key || !a.cat || have.has(key)) continue;
+    const x = cleanAsset(a, 'a' + ctx.newId()); list.push(x); have.add(key); added++;
+    log.push({ id: 'e' + ctx.newId(), aid: x.id, date, what: 'note', text: 'καταχωρήθηκε από αρχείο οπλισμού' });
+  }
+  if (!prim && !added) return { state: s, text: '', files: [] };
+  return { state: { ...st, assets: list, assetLog: log }, text: 'Μητρώο: εισαγωγή από αρχείο οπλισμού ' + source + ' (' + prim + ' κύρια όπλα στο Δυναμολόγιο, ' + added + ' νέες εγγραφές)', files: [] };
 }
 function run(s: AppState, c: Command, ctx: Ctx): Result {
   const pm = seatMap(s);   // στρατιώτες και στελέχη με υπηρεσίες (ΕΠΟΠ/ΟΒΑ)
@@ -1121,6 +1147,18 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
           if (listRows(st.settings.lists, 'subUnits').some(x => itemKey(x.name) === itemKey(name))) continue;
           const u = st.settings.lists?.subUnits || {};
           st = { ...st, settings: { ...st.settings, lists: { ...(st.settings.lists || {}), subUnits: { ...u, add: [...(u.add || []), { name }] } } } }; made.push('Λόχος / Ίλα «' + name + '»');
+        } else if (m.k === 'placeWord') {
+          const cfg = assetCfgOf(st.settings); if (cfg.places.some(x => itemKey(x.word) === itemKey(name))) continue;
+          st = { ...st, settings: { ...st.settings, assets: { ...(st.settings.assets || {}), places: [...cfg.places, { word: name, means: m.means }] } } }; made.push('λέξη θέσης «' + name + '»');
+        } else if (m.k === 'assetType' || m.k === 'assetCat') {
+          const have = st.settings.assets?.cats?.length ? st.settings.assets.cats : assetCfgOf(st.settings).cats.filter(x => !x.id.startsWith(WT_CAT));
+          const cats = have.map(x => ({ ...x }));
+          if (m.k === 'assetCat') { if (cats.some(x => itemKey(x.name) === itemKey(name))) continue; cats.push({ id: newAssetCatId(cats), name, kind: m.kind, types: [], fields: [] }); made.push('κατηγορία «' + name + '»'); }
+          else {
+            const c = cats.find(x => x.id === m.cat || (m.cat.startsWith('new:') && itemKey(x.name) === itemKey(m.cat.slice(4)))); if (!c || cats.some(x => x.types.some(t => itemKey(t) === itemKey(name)))) continue;
+            c.types = [...c.types, name]; made.push('τύπος «' + name + '» στην κατηγορία «' + c.name + '»');
+          }
+          st = { ...st, settings: { ...st.settings, assets: { ...(st.settings.assets || {}), cats } } };
         } else if (m.k === 'service') {
           // νέα υπηρεσία του ελέγχου υπηρεσιών: όπως από τις Ρυθμίσεις (δική της στήλη στις δυνατότητες), ανενεργή ώστε να μη μπαίνει μόνη της στο πρόγραμμα
           const ph = st.settings.phase;
@@ -1154,6 +1192,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     }
     case 'printed':
       return { state: { ...s, printed: { ...s.printed, [c.date]: c.at } }, text: 'Βγήκε ' + c.files.join(', '), files: c.files, undoable: false };
+    case 'importWeapons': return importWeapons(s, c.apply, c.source, c.date, ctx);
     case 'importPeople':
       return importPeople(s, c.rows, c.source, c.deactivateMissing);
     case 'importRecords': {

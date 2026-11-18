@@ -51,6 +51,18 @@ export interface RosterProfile {
   roles: Record<string, RosterRole>; refill: string[];
   status: Record<string, string>; subs: Record<string, string>; ranks: Record<string, 'cadre' | 'soldier'>;
 }
+// Αρχείο οπλισμού ΑΛΛΗΣ μονάδας (phase 5), kind 'weapons'. Μόνο ό,τι διάλεξε ο χρήστης· ό,τι βρίσκεται μόνο του ξαναβρίσκεται κάθε φορά.
+//   roles   φύλλο → items (λίστα οπλισμού) | derived (βγαίνει από άλλο φύλλο με τύπους, δεν πειράζεται) | skip
+//   cats    φύλλο → κατηγορία του Μητρώου (AssetCat.id, ή «new:όνομα» μέχρι να δημιουργηθεί) για φύλλο χωρίς τύπους που να τη λένε
+//   cols    ρόλος στήλης (no, type, name, place, barrel, spare, note, rank, aa) → επικεφαλίδα που διάλεξε ο χρήστης· ignore: επικεφαλίδες που δεν διαβάζονται
+//   types   τύπος όπλου (phraseKey) → id κατηγορίας | ignore
+//   places  λέξη θέσης (phraseKey) → PlaceWord.means | ignore
+//   holders κείμενο στη στήλη ονόματος που δεν είναι άτομο (phraseKey) → free (αχρέωτο, το κείμενο μένει στη σημείωση) | place (είναι λέξη θέσης) | skip (δεν διαβάζεται η γραμμή)
+export type WeaponSheetRole = 'items' | 'derived' | 'skip';
+export interface WeaponProfile {
+  roles: Record<string, WeaponSheetRole>; cats: Record<string, string>; cols: Record<string, string>; ignore: string[];
+  types: Record<string, string>; places: Record<string, string>; holders: Record<string, string>;
+}
 export interface TplProfile {
   v: number;
   id: string;
@@ -64,6 +76,7 @@ export interface TplProfile {
   back?: { num?: 'arabic' | 'greek'; date?: 'hk' | 'slash' | 'slash4'; line?: 'app' | 'person'; accepted?: string[] };   // the back side: format of a line, and the section words the user accepted as a proposal
   ignoreWords?: string[];             // words of the data sheet the user chose to ignore (phraseKey), kept between sessions
   ros?: RosterProfile;                // kind 'roster': the unit's own roster file (rosterUnit.ts)
+  wpn?: WeaponProfile;                // kind 'weapons': the unit's own weapons file (weaponUnit.ts)
   duty?: DutyProfile;                 // kind 'duties': the unit's code vocabulary and the columns the user chose
   lst?: ListProfile;                  // kinds services / outs / rooms: the unit's own list layouts (see ListProfile)
   ours?: Record<string, string>;      // cells the safe writer filled: 'sheet|r:c' -> the text written (a cell that still holds it may be overwritten)
@@ -100,6 +113,13 @@ function cleanRos(x: Record<string, unknown>): RosterProfile {
     roles, refill: Array.isArray(x.refill) ? x.refill.filter(str) : [], status: strs(x.status), subs: strs(x.subs), ranks };
 }
 
+function cleanWpn(x: Record<string, unknown>): WeaponProfile {
+  const strs = (o: unknown): Record<string, string> => (isObj(o) ? Object.fromEntries(Object.entries(o).filter(([, v]) => typeof v === 'string')) as Record<string, string> : {});
+  const roles = Object.fromEntries(Object.entries(strs(x.roles)).filter(([, v]) => ['items', 'derived', 'skip'].includes(v))) as Record<string, WeaponSheetRole>;
+  const holders = Object.fromEntries(Object.entries(strs(x.holders)).filter(([, v]) => ['free', 'place', 'skip'].includes(v)));
+  return { roles, cats: strs(x.cats), cols: strs(x.cols), ignore: Array.isArray(x.ignore) ? x.ignore.filter(str) : [], types: strs(x.types), places: strs(x.places), holders };
+}
+
 function cleanLst(x: Record<string, unknown>): ListProfile {
   const strs = (o: unknown): Record<string, string> => (isObj(o) ? Object.fromEntries(Object.entries(o).filter(([, v]) => typeof v === 'string')) as Record<string, string> : {});
   const posts = strs(x.posts), who = strs(x.who);
@@ -125,6 +145,7 @@ export function sanitizeProfiles(x: unknown): TplProfile[] {
       ...(Array.isArray(p.ignoreWords) ? { ignoreWords: p.ignoreWords.filter((x): x is string => typeof x === 'string') } : {}),
       ...(isDuty(p.duty) ? { duty: cleanDuty(p.duty) } : {}),
       ...(isObj(p.ros) && typeof p.ros.sheet === 'string' ? { ros: cleanRos(p.ros) } : {}),
+      ...(isObj(p.wpn) ? { wpn: cleanWpn(p.wpn) } : {}),
       ...(isObj(p.lst) && typeof p.lst.sheet === 'string' ? { lst: cleanLst(p.lst) } : {}),
       ...(isObj(p.ours) ? { ours: Object.fromEntries(Object.entries(p.ours).filter(([, v]) => typeof v === 'string')) as Record<string, string> } : {})
     });

@@ -190,6 +190,7 @@ export function mockApi(): Api {
     // Αρχεία Excel: ένα φανταστικό Δυναμολόγιο από τα ψεύτικα άτομα, για να δοκιμάζεται η αντιστοίχιση στον browser
     srcPick: async () => fakeBook(state),
     srcRead: async () => fakeBook(state),
+    wpnPick: async () => ({ ok: false as const, error: 'Στη δοκιμή στον browser δεν διαβάζονται αρχεία.' }),
     srcSave: async (kind, b) => { const sources = { ...(state.settings.sources || {}) }; if (b) sources[kind] = b; else delete sources[kind]; state = { ...state, settings: { ...state.settings, sources } }; return res(''); },
     srcKeys: async () => ({ keys: [], base: {} }),
     srcApply: async (kind, b, cmd) => {

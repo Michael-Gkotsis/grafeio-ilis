@@ -133,6 +133,7 @@ export interface Api {
   importBackup(): Promise<{ ok: boolean; error?: string; name?: string } | null>;
   srcPick(kind: ListKind | null): Promise<SourceBook | Fail | null>;
   srcRead(kind: ListKind): Promise<SourceBook | Fail>;
+  wpnPick(): Promise<SourceBook | Fail | null>;   // αρχείο οπλισμού άλλης μονάδας (και .xls μέσω μετατροπέα), με τους τύπους κάθε φύλλου· μόνο ανάγνωση
   srcSave(kind: ListKind, b: SourceBinding | null): Promise<CmdResult>;
   // keepApp: εγγραφές που άλλαξαν και στις δύο πλευρές και κρατιέται η τιμή της εφαρμογής (γράφεται μετά στο Excel)
   srcImport(kind: StatusKind, b: SourceBinding, choices: Record<number, number | null>, keepRemoved?: boolean, keepApp?: string[]): Promise<CmdResult>;
