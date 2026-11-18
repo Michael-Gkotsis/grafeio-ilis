@@ -15,7 +15,7 @@ type P = any;
 
 const label = (f: SigForm) => sigLabel(f, HK());
 // Η σειρά του πίνακα «Πού μπαίνει»: πρώτα τα επίσημα (δεν αλλάζουν), μετά τα υπόλοιπα
-const ORDER: SigForm[] = ['hkai', 'froura', 'outs', 'hd', 'roster', 'cadre', 'weapons', 'check', 'imer', 'reports'];
+const ORDER: SigForm[] = ['hkai', 'froura', 'outs', 'hd', 'roster', 'cadre', 'weapons', 'cadreLeave', 'cadrePlan', 'cadreDuty', 'assets', 'vehicles', 'check', 'imer', 'reports'];
 const FORMS: SigForm[] = [...ORDER.filter(f => SIG_FORMS.includes(f)), ...SIG_FORMS.filter(f => !ORDER.includes(f))];
 const AL: { value: HeadAl; label: string }[] = [{ value: 'l', label: 'Αρ.' }, { value: 'c', label: 'Μέση' }, { value: 'r', label: 'Δεξ.' }];
 const cm = (n: number) => String(n).replace('.', ',') + ' εκ.';
