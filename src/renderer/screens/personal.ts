@@ -5,11 +5,12 @@ import { useEffect, useRef, useState } from 'react';
 import { html } from '../ui';
 import { useStore } from '../store';
 import { Select } from '../select';
+import { listOf, itemKey } from '../../shared/ranks';
 import { BLOOD_GROUPS, PFIELDS, XFIELDS, normExtra, normPersonal, showPersonal, warnPersonal, type Extras, type Personal, type PKey, type XKey } from '../../shared/personal';
 
 type P = any;
 type Key = PKey | XKey;
-type Rec = Personal & Extras;
+type Rec = Personal & Extras & { religion?: string };
 const draftOf = (rec: Rec): Record<Key, string> => ({ iban: showPersonal('iban', rec.iban), amka: showPersonal('amka', rec.amka), afm: showPersonal('afm', rec.afm), email: rec.email || '', relEmail: rec.relEmail || '', blood: rec.blood || '' });
 const isX = (k: Key): k is XKey => k === 'email' || k === 'relEmail' || k === 'blood';
 const norm1 = (k: Key, v: unknown) => (isX(k) ? normExtra(k, v) : normPersonal(k, v));
@@ -18,7 +19,10 @@ const norm1 = (k: Key, v: unknown) => (isX(k) ? normExtra(k, v) : normPersonal(k
 export function PersonalTab({ who, rec }: P) {
   const { run } = useStore();
   const [f, setF] = useState(() => draftOf(rec));
-  const [saved, setSaved] = useState<Key | null>(null);
+  const [saved, setSaved] = useState<Key | 'religion' | null>(null);
+  const lists = useStore().state.settings.lists;
+  const [rel, setRel] = useState(rec.religion || '');   // θρήσκευμα (Michael, 18/11): επιλογή από τη λίστα Ρυθμίσεις › Λίστες, αποθηκεύεται μόλις διαλέξεις
+  const religions = listOf(lists, 'religions');
   const soldier = who.pid != null;   // e-mail και ομάδα αίματος: μόνο οπλίτες
   const live = useRef({ f, rec, who, run }); live.current = { f, rec, who, run };
   const save = async (k: Key) => {
@@ -61,6 +65,16 @@ export function PersonalTab({ who, rec }: P) {
         ${saved === x.k ? html`<span className="field__help">Αποθηκεύτηκε</span>` : null}
       </div>`)}
     </div>`}
+    <div className="field" data-religion="">
+      <label className="field__label" htmlFor="pr-religion">Θρήσκευμα</label>
+      <${Select} id="pr-religion" className="ui-input" value=${rel}
+        onChange=${async (e: any) => { const v = e.target.value; setSaved(null); setRel(v); if (await run({ t: 'setPersonal', ...who, religion: v }, false)) setSaved('religion'); }}>
+        <option value="">— (δεν έχει δηλωθεί)</option>
+        ${religions.map(g => html`<option key=${g} value=${g}>${g}</option>`)}
+        ${rel && !religions.some(g => itemKey(g) === itemKey(rel)) ? html`<option value=${rel}>${rel}</option>` : null}
+      <//>
+      ${saved === 'religion' ? html`<span className="field__help">Αποθηκεύτηκε</span>` : html`<span className="field__help">Η λίστα συμπληρώνεται στις Ρυθμίσεις › Λίστες › Θρησκεύματα. Δεν επηρεάζει υπηρεσίες ή ΗΚΑΙ.</span>`}
+    </div>
     <p className="note" style=${{ margin: 0 }}>${who.cid != null ? 'Γράφονται στο δικό τους Excel των στελεχών (Ρυθμίσεις › Αρχεία Excel › Στελέχη), στις στήλες IBAN, ΑΜΚΑ, ΑΦΜ που μπαίνουν μόνες τους στο τέλος του πίνακα. Δεν μπαίνουν σε εκτυπώσεις και δεν εμφανίζονται σε άλλη οθόνη.' : 'IBAN, ΑΜΚΑ, ΑΦΜ: μόνο στο Excel του Δυναμολογίου (στήλες που μπαίνουν μόνες τους στο τέλος του πίνακα), όχι σε εκτυπώσεις. E-mail, e-mail συγγενή και ομάδα αίματος: και στο φύλλο ΘΑΛΑΜΟΙ, και στα Έντυπα ως στήλες.'}</p>
   </div>`;
 }
