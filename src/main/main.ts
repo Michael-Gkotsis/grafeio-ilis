@@ -19,8 +19,10 @@ import type { Boot, CmdResult, Diag, ExcelBusy, WriteTime, DirTarget, EssoArchiv
 import { PREV_EVERY, SourceMetaStore, OldFormatError, holdPatch, bookNow, setBookReader, locateCheck, locateNow, writeGroup, type WriteOutcome, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, type SourceMeta } from './sources';
 import { withRoomExtras } from '../shared/roomExtra';
 import { totalsTouched } from '../shared/totals';
+import { planSourceOwn, ownSnap } from '../shared/rosterUnitWrite';
+import { readOwnRoster, rosterProfileOf, previewNotes, lexOf, rosterNeeds } from '../shared/rosterUnit';
 import { parseRoster, type CellValue, type RawSheet, type RosterOverride } from '../shared/roster';
-import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, capExtraCols, capExtras, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, keepHeads, bindingMonth, defaultBinding, describeSets, detectHkai, kindsForPeople, detectTables, diffStatuses, inRoster, isCadreKind, sheetHost, isStatusKind, parseStatuses, planPeopleWrite, planSource, snapFromSheet, snapPeople, rowName, stepRows, withRows,
+import { FORM_KINDS, KIND, KINDS, colLetter, timeCols, capExtraCols, capExtras, NEW_KINDS, ambiguousLines, dutiesBinding, dutiesSheet, canCreate, STATUS_KINDS, baseOf, bestFor, refitCols, keepHeads, bindingMonth, defaultBinding, describeSets, detectHkai, kindsForPeople, detectTables, diffStatuses, inRoster, isCadreKind, sheetHost, isStatusKind, parseStatuses, planPeopleWrite, snapFromSheet, snapPeople, rowName, stepRows, withRows,
   tableHash, type FormBinding, type FormKind, type ListKind, type SourceBinding, type StatusKind } from '../shared/sources';
 import { normGreek, upper } from '../shared/text';
 import { PKEYS, type PKey } from '../shared/personal';
@@ -402,7 +404,9 @@ async function sourceStatus(): Promise<SourceStatus[]> {
     // έλεγχος υπηρεσιών άλλης μονάδας: πόσοι κωδικοί του αρχείου δεν έχουν ακόμα νόημα («Αντιστοίχιση…»)
     let dutyNeeds: number | undefined;
     if (kind === 'duties' && b.unit && t.exists) { try { const sh = (await bookNow(b.file))?.sheets.find(x => x.name === b.sheet); if (sh) dutyNeeds = unresolvedCodes(sh, b, store.state.settings); } catch { /* ξανά αργότερα */ } }
-    out.push({ kind, file: b.file, exists: t.exists, synced: !!m?.at, changed: t.changed, at: m?.at || '', error: m?.error, locked: m?.locked, pending: m?.pending, hold: m?.hold, month, ...(loc.need ? { remap: loc.need } : {}), ...(dutyNeeds ? { dutyNeeds } : {}) });
+    let rosterNeeds_: number | undefined;
+    if (kind === 'people' && t.exists) { try { const bk = await bookNow(b.file); if (bk) rosterNeeds_ = b.own ? 0 : rosterNeeds(bk.sheets, store.state.settings); } catch { /* ξανά αργότερα */ } }
+    out.push({ kind, file: b.file, exists: t.exists, synced: !!m?.at, changed: t.changed, at: m?.at || '', error: m?.error, locked: m?.locked, pending: m?.pending, hold: m?.hold, month, ...(loc.need ? { remap: loc.need } : {}), ...(dutyNeeds ? { dutyNeeds } : {}), ...(rosterNeeds_ ? { rosterNeeds: rosterNeeds_ } : {}) });
   }
   return out;
 }
@@ -600,12 +604,19 @@ async function regenReports(): Promise<boolean> {
 
 // Εισαγωγή προσωπικού: από το κουμπί (αναγνώριση μόνη της) ή από τα Αρχεία Excel (με την αντιστοίχιση του χρήστη)
 const pending = new Map<string, { rows: ImportRow[]; file: string; binding: SourceBinding | null; stamp: { mtime: number; size: number }; sheet: RawSheet | null }>();
+// Δυναμολόγιο άλλης μονάδας: ίδιο σχήμα αποτελέσματος με το parseRoster (rosterUnit.ts)
+function ownRosterResult(sheets: RawSheet[], b: SourceBinding): ReturnType<typeof parseRoster> {
+  const prof = rosterProfileOf(store.state.settings); const sh = sheetOf(sheets, b.sheet);
+  if (!prof?.ros || !sh) return { rows: [], warnings: ['Δεν υπάρχει αντιστοίχιση για το Δυναμολόγιο της μονάδας: πάτα «Αντιστοίχιση…».'], main: b.sheet, essos: '', skipped: [], declared: null, found: 0, suspicious: [] };
+  const rd = readOwnRoster(sh, { settings: store.state.settings, people: store.state.people, ros: prof.ros });
+  return { rows: rd.rows, warnings: [...previewNotes(rd, prof.ros, lexOf(store.state.settings), store.state.settings), ...rd.warnings], main: sh.name, essos: '', skipped: rd.skipped, declared: null, found: rd.rows.length, suspicious: [] };
+}
 async function rosterPreview(file: string, b: SourceBinding | null): Promise<ImportPreview | { ok: false; error: string }> {
   try {
     const book0 = await readBook(file); const book = { ...book0, sheets: notReports(file, book0.sheets) };
     if (b) b = refitCols('people', sheetOf(book.sheets, b.sheet), b);
     const src = store.state.settings.sources || {};
-    const r = parseRoster(book.sheets, { main: ovOf(b || undefined), posts: ovOf(src.posts, file), outside: ovOf(src.outside, file) }, store.state.settings.lists, isUnit(store.state.settings));
+    const r = b?.own ? ownRosterResult(book.sheets, b) : parseRoster(book.sheets, { main: ovOf(b || undefined), posts: ovOf(src.posts, file), outside: ovOf(src.outside, file) }, store.state.settings.lists, isUnit(store.state.settings));
     r.rows = withRoomExtras(r.rows, book.sheets, r.main, store.state.people, srcMeta.get('people')?.psnap);   // e-mail, e-mail συγγενή, ομάδα αίματος από το φύλλο ΘΑΛΑΜΟΙ
     if (!r.rows.length) return { ok: false, error: r.warnings[0] || 'Δεν βρέθηκαν άτομα στο αρχείο' };
     // ποιος πίνακας διαβάστηκε: για να γράφονται εκεί οι διορθώσεις (Michael, 11/10)
@@ -633,7 +644,7 @@ function afterRoster(p: { file: string; binding: SourceBinding | null; stamp: { 
   const cur = bindingOf('people');
   if (cur && path.resolve(cur.file) !== path.resolve(p.file)) return;
   if (!cur || cur.sheet !== p.binding.sheet || cur.header !== p.binding.header || JSON.stringify(cur.cols) !== JSON.stringify(p.binding.cols)) runCmd({ t: 'setSettings', settings: { sources: { ...(store.state.settings.sources || {}), people: { ...p.binding, write: cur ? cur.write : true } } }, text: 'πηγή προσωπικού ' + path.basename(p.file) + ' › ' + p.binding.sheet });
-  srcMeta.set('people', { snap: snapFromSheet(p.sheet, p.binding, store.state.people), keys: [], mtime: p.stamp.mtime, size: p.stamp.size, hash: tableHash(p.sheet, p.binding), at: stampNow(), pending: false, error: undefined, locked: false, hold: undefined });
+  srcMeta.set('people', { snap: (p.binding.own ? ownSnap : snapFromSheet)(p.sheet, p.binding, store.state.people), keys: [], mtime: p.stamp.mtime, size: p.stamp.size, hash: tableHash(p.sheet, p.binding), at: stampNow(), pending: false, error: undefined, locked: false, hold: undefined });
   // πόστα και εκτός δύναμης του ίδιου αρχείου διαβάστηκαν μαζί
   const linked = (['posts', 'outside'] as ListKind[]).filter(k => { const x = bindingOf(k); return x && path.resolve(x.file) === path.resolve(p.file); });
   Promise.all(linked.map(k => markSynced(k, bindingOf(k)!))).then(notify, e => console.error('roster linked', e));
@@ -773,9 +784,9 @@ async function planOut(kind: ListKind): Promise<WritePreview | { ok: false; erro
     if (!book && !isStatusKind(kind)) return fail('Δεν βρέθηκε το ' + b.file);
     const had = !!book?.sheets.some(x => x.name === b.sheet);
     if (!had && !isStatusKind(kind)) return fail('Δεν υπάρχει φύλλο «' + b.sheet + '» στο ' + path.basename(b.file));
-    const tc0 = timeCols(kind, had ? sheet : null, b, store.state, today()); const tc1 = capExtraCols(kind, had ? sheet : null, tc0.b, store.state); b = tc1.b;
+    const tc0 = b.own ? { b, head: [] as ReturnType<typeof timeCols>['head'] } : timeCols(kind, had ? sheet : null, b, store.state, today()); const tc1 = b.own ? { b, head: [] as ReturnType<typeof capExtraCols>['head'] } : capExtraCols(kind, had ? sheet : null, tc0.b, store.state); b = tc1.b;
     const tc = { head: [...tc0.head.map(h => ({ ...h, why: kind === 'people' ? 'για τα στοιχεία των καρτελών (IBAN, ΑΜΚΑ, ΑΦΜ)' : 'για τις ώρες των αδειών' })), ...tc1.head.map(h => ({ ...h, why: 'για όσους δεν κάνουν αυτή την υπηρεσία' }))] };
-    const plan = planSource(kind, had ? sheet : null, b, store.state, srcMeta.get(kind), today());
+    const plan = planSourceOwn(kind, had ? sheet : null, b, store.state, srcMeta.get(kind), today(), book ? book.sheets : []);
     const steps = plan.inserts || [], sheet2 = steps.length ? withRows(sheet, steps) : sheet;
     const lines = describeSets(kind, sheet2, b, plan.sets, plan.insert ? new Set(Array.from({ length: plan.insert.n }, (_, i) => plan.insert!.after + 1 + i)) : stepRows(steps));
     for (const d of plan.deletes || []) { const v: Record<string, CellValue> = {}; for (const k in b.cols) v[k] = (sheet2.rows[d] || [])[b.cols[k]]; lines.push({ r: d, who: rowName(v), text: 'η γραμμή σβήνεται (αναιρέθηκε στην εφαρμογή)' }); }
@@ -1394,7 +1405,7 @@ else {
         // αν η εφαρμογή έχει ήδη τα ίδια με το Excel γράφει μόνη της από εδώ και πέρα· αλλιώς πρώτα «Ενημέρωση Excel» με προεπισκόπηση
         if (b && kind === 'people' && !srcMeta.get('people')) {
           const book = await readBook(b.file); const sh = sheetOf(book.sheets, b.sheet);
-          if (sh) { const snap = snapFromSheet(sh, b, store.state.people); srcMeta.set('people', { snap, keys: [], ...syncStamp(b, book), at: planPeopleWrite(sh, b, store.state, snap).sets.length ? '' : stampNow() }); }
+          if (sh) { const snap = (b.own ? ownSnap : snapFromSheet)(sh, b, store.state.people); srcMeta.set('people', { snap, keys: [], ...syncStamp(b, book), at: (b.own ? planSourceOwn('people', sh, b, store.state, { snap }, today(), book.sheets) : planPeopleWrite(sh, b, store.state, snap)).sets.length ? '' : stampNow() }); }
         }
         notify(); return reply('');
       } catch (e) { return fail(e); }

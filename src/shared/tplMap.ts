@@ -34,6 +34,7 @@ export const emptyChoices = (): Choices => ({ cols: {}, rows: {}, words: {} });
 export type TplCreate =
   | { k: 'hkRow'; name: string; grp: 'off' | 'nco'; after?: string; ranks?: string[] }
   | { k: 'leaveKind'; name: string; col: string }
+  | { k: 'subUnit'; name: string }            // Δυναμολόγιο άλλης μονάδας: νέος Λόχος / Ίλα στη λίστα των Ρυθμίσεων
   | { k: 'service'; name: string };           // έλεγχος υπηρεσιών: νέα υπηρεσία (ανενεργή, είδος «άλλη», με δική της στήλη στις δυνατότητες)· στο προφίλ είναι η θέση «@new:όνομα»
 
 // ------------------------------------------------------------------ names on screen
