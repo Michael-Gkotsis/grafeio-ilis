@@ -18,7 +18,7 @@ import { fullName, plainName, platoonsOf, platoonShort, shortName, unitOf, type 
 import { siOf, siShort } from '../../shared/si';
 import { byRoomName } from '../../shared/rosterLists';
 import { outHeadTxt, personMatch, statusHint } from '../../shared/weaponView';
-import { AUTO_KEY, WEAPON_FILTERS, bySeat, canOut, dutyPicks, idRange, isOut, noSeat, normPos, normRack, normWeapon, awayPeople, outPeople, outReasonOf, outReasons as byReason, posKey, outSplit, rackKey, redoGroups, sameRack, scanFind, seatTxt, skipTxt, sameWeapon, weaponInfo, weaponKey, weaponMatch, type WeaponFilter, type WeaponInfo } from '../../shared/weapons';
+import { AUTO_KEY, WEAPON_FILTERS, bySeat, moveOutTxt, canOut, dutyPicks, idRange, isOut, noSeat, normPos, normRack, normWeapon, awayPeople, outPeople, outReasonOf, outReasons as byReason, posKey, outSplit, rackKey, redoGroups, sameRack, scanFind, seatTxt, skipTxt, sameWeapon, weaponInfo, weaponKey, weaponMatch, type WeaponFilter, type WeaponInfo } from '../../shared/weapons';
 import type { WeaponChange } from '../../shared/commands';
 import { live as liveSts, listOf, rankTxt } from '../../shared/ranks';
 import { collator } from '../../shared/text';
@@ -80,7 +80,7 @@ function TypeSelect({ p, types, onPick }: P) {
 }
 // Παρατήρηση: μία ετικέτα· με περισσότερες, «⚠ 2» και όλες στη συμβουλή (για να μην κόβονται και πέφτουν η μία πάνω στην άλλη)
 interface Note { tone: string; text: string; tip: string }
-function notes(p: Person, info: WeaponInfo, lists: P, pm: Map<number, Person>, statuses: P[], date: string) {
+export function notes(p: Person, info: WeaponInfo, lists: P, pm: Map<number, Person>, statuses: P[], date: string) {
   const out: Note[] = [];
   if (!p.active) out.push({ tone: 'warn', text: 'Εκτός δύναμης', tip: p.outOn ? 'Εκτός δύναμης από ' + dm(p.outOn) : 'Εκτός δύναμης' });
   const has = !!weaponKey(p.weapon);
@@ -92,8 +92,12 @@ function notes(p: Person, info: WeaponInfo, lists: P, pm: Map<number, Person>, s
   if (rk.length) out.push({ tone: 'warn', text: 'Ίδια θέση ×' + (rk.length + 1), tip: 'Η ίδια θέση (' + seatTxt(p.rack, p.wpos) + '): ' + rk.map(shortName).join(', ') });
   if (noSeat(p)) out.push({ tone: 'warn', text: 'Χωρίς θέση', tip: 'Έχει οπλοβαστό (' + normRack(p.rack) + ') αλλά όχι θέση: γράψε τη Θέση' });
   // ένοπλη υπηρεσία χωρίς όπλο: και πριν ξεκινήσει το νούμερο, για να προλάβει να του δοθεί (Michael, 24/10)
+  // Έξοδος όπλου χωρίς είσοδο ενώ ο αριθμός σβήστηκε μετά: δεν είναι ένοπλη υπηρεσία (έσπαγε η οθόνη, soon κενό, 18/11)
   const soon = info.arm.next.get(p.id);
-  if (!has && p.active && (isOut(info, p.id) || soon)) out.push({ tone: 'bad', text: 'Ένοπλη χωρίς όπλο', tip: 'Ένοπλη υπηρεσία (' + (info.out.get(p.id) || info.away.get(p.id) || soon!.label + ' ' + armWhen(soon!)) + ') χωρίς αριθμό όπλου' });
+  const armed = info.out.get(p.id) || info.away.get(p.id) || (soon ? soon.label + ' ' + armWhen(soon) : '');
+  const mv = info.moves.get(p.id);
+  if (!has && p.active && (isOut(info, p.id) || soon)) out.push(armed || !mv ? { tone: 'bad', text: 'Ένοπλη χωρίς όπλο', tip: 'Ένοπλη υπηρεσία (' + (armed || '—') + ') χωρίς αριθμό όπλου' }
+    : { tone: 'bad', text: 'Έξοδος χωρίς όπλο', tip: 'Έξοδος όπλου (' + moveOutTxt(mv) + ') χωρίς αριθμό όπλου: γράψε τον αριθμό ή κάνε είσοδο' });
   const hold = info.arm.holding.get(p.id);
   if (hold) out.push({ tone: 'info', text: 'Κρατά όπλο θέσης', tip: 'Κρατά το όπλο της θέσης (' + hold.label + ') του ' + (pm.get(hold.owner) ? rkShort(pm.get(hold.owner)!) : '—') + ' ως τις ' + hmOf(hold.in) });
   // «αυτόματα»: εκτός λόγω ένοπλης υπηρεσίας (ξεχωρίζει από τον χειροκίνητο λόγο ΥΠΗΡΕΣΙΑ), δεν μετρά στο «⚠ n»
