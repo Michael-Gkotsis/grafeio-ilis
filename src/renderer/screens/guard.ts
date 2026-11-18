@@ -214,8 +214,8 @@ function RulesDialog({ onClose, onTab, onFixed }: P) {
         ${item('Σ.Ι.', html`<span>${chg(info.si)} <${GoLink} view="templates" params=${{ tab: 'duty', dsub: 'si' }}>Ρυθμίσεις › Σ.Ι.<//></span>`)}
         ${item('Ποιος κάνει τι', html`<span>${ppl(info.caps)} με «δεν κάνει» <${TabLink} onGo=${() => onTab('who')}>Άνοιγμα<//></span>`)}
         ${item('Εξαιρέσεις', html`<span>${info.skips} τις επόμενες 7 μέρες <${TabLink} onGo=${() => onTab('skips')}>Άνοιγμα<//></span>`)}
-        ${item('Μέρες χωρίς υπηρεσία', html`<span>${ppl(info.off)} <${GoLink} view="people">Δυναμολόγιο<//></span>`)}
-        ${item('Πόστα', html`<span>${ppl(info.post)}, μόνο με το χέρι (ούτε Λ/Υ-Δ/Υ) <${GoLink} view="people">Δυναμολόγιο<//></span>`)}
+        ${item('Μέρες χωρίς υπηρεσία', html`<span>${ppl(info.off)} <${GoLink} view="people">Στρατιώτες<//></span>`)}
+        ${item('Πόστα', html`<span>${ppl(info.post)}, μόνο με το χέρι (ούτε Λ/Υ-Δ/Υ) <${GoLink} view="people">Στρατιώτες<//></span>`)}
         ${item('Μόνιμοι Λ/Υ-Δ/Υ', html`<span>${info.fixed.length ? info.fixed.join(', ') + ' · μπαίνουν μόνοι τους' : 'κανένας'} <${TabLink} onGo=${onFixed}>Όρισε<//></span>`)}
         ${item('ΕΠΟΠ/ΟΒΑ', html`<span>μόνο με το χέρι, ${info.cadre} με όριο τον μήνα <${GoLink} view="cadre">Στελέχη<//></span>`)}
       </div>
@@ -411,7 +411,7 @@ export function GuardScreen() {
     io.observe(el); return () => io.disconnect();
   }, [tab, mobile]);
   // γιατί είναι γκρι η «Αυτόματη συμπλήρωση» (UX Μ5)
-  const afWhy = locked ? 'Περασμένη μέρα: πάτα πρώτα «Ξεκλείδωσε για διόρθωση»' : !people.length ? 'Δεν υπάρχουν στρατιώτες στο Δυναμολόγιο' : !empty.length ? 'Δεν υπάρχουν κενές θέσεις' : '';
+  const afWhy = locked ? 'Περασμένη μέρα: πάτα πρώτα «Ξεκλείδωσε για διόρθωση»' : !people.length ? 'Δεν έχουν μπει στρατιώτες (μενού Στρατιώτες)' : !empty.length ? 'Δεν υπάρχουν κενές θέσεις' : '';
   const fileName = frouraName(state.settings, phase, date);
   const sheet = () => html`<${ExcelSheet} model=${model} fileName=${fileName} sheetName=${'ΦΡΟΥΡΑ ' + phaseName(state.settings, phase)} meta=${(empty.length ? '⚠ ' + empty.length + ' κενές' : '✓ Πλήρης') + ' · A4 οριζόντιο'}/>`;
   const left = html`<div className="guard__left">
@@ -426,7 +426,7 @@ export function GuardScreen() {
       footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${() => setClearAsk(false)}>Όχι<//><${Button} variant="destructive" onClick=${async () => { setClearAsk(false); if (await run({ t: 'clearDay', date }, false)) toast({ text: 'Άδειασαν οι θέσεις ' + dow(date) + ' ' + dm(date), actions: [undoMark()] }); }}>Ναι, άδειασέ τη<//>`}>
       <p style=${{ margin: 0 }}>Βγαίνουν και οι <b>${Object.values(g).filter(Boolean).length}</b> από τις θέσεις αυτής της μέρας (μένουν κενές). Μπορείς να το αναιρέσεις αμέσως μετά.</p><//>`}
     ${psk && html`<div className="psk"><div><b>Φρουρά ΠΣΚ</b><small>${psk.map(d => dow(d) + ' ' + dm(d) + ': ' + (pskEmpty(d) ? pskEmpty(d) + ' κενές' : 'πλήρης')).join(' · ')}</small></div>
-      <span className="psk__acts"><${Button} size="sm" variant="outline" disabled=${!people.length || psk.every(d => !pskEmpty(d)) || psk.some(d => d < today && !unlocked[d])} why=${!people.length ? 'Δεν υπάρχουν στρατιώτες στο Δυναμολόγιο' : psk.every(d => !pskEmpty(d)) ? 'Δεν υπάρχουν κενές θέσεις στο ΠΣΚ' : 'Μια μέρα του ΠΣΚ πέρασε: ξεκλείδωσέ τη πρώτα'} onClick=${async () => { if (await run({ t: 'autofillRange', dates: psk.filter(d => pskEmpty(d)), ...rArg }, false)) { setOnlyRooms([]); toast({ text: 'Συμπληρώθηκε το ΠΣΚ ' + dm(psk[0]) + '–' + dm(psk[2]) + fromTxt + ', μία μέρα μετά την άλλη, με τους κανόνες και ανάμεσά τους.', actions: [undoMark()] }); } }} data-tip="Γεμίζει Παρασκευή, Σάββατο και Κυριακή μαζί. Οι κανόνες (ανάπαυση, νούμερα, ΣΚ) ισχύουν και ανάμεσα στις τρεις μέρες.">Συμπλήρωση ΠΣΚ${rTag}<//>
+      <span className="psk__acts"><${Button} size="sm" variant="outline" disabled=${!people.length || psk.every(d => !pskEmpty(d)) || psk.some(d => d < today && !unlocked[d])} why=${!people.length ? 'Δεν έχουν μπει στρατιώτες (μενού Στρατιώτες)' : psk.every(d => !pskEmpty(d)) ? 'Δεν υπάρχουν κενές θέσεις στο ΠΣΚ' : 'Μια μέρα του ΠΣΚ πέρασε: ξεκλείδωσέ τη πρώτα'} onClick=${async () => { if (await run({ t: 'autofillRange', dates: psk.filter(d => pskEmpty(d)), ...rArg }, false)) { setOnlyRooms([]); toast({ text: 'Συμπληρώθηκε το ΠΣΚ ' + dm(psk[0]) + '–' + dm(psk[2]) + fromTxt + ', μία μέρα μετά την άλλη, με τους κανόνες και ανάμεσά τους.', actions: [undoMark()] }); } }} data-tip="Γεμίζει Παρασκευή, Σάββατο και Κυριακή μαζί. Οι κανόνες (ανάπαυση, νούμερα, ΣΚ) ισχύουν και ανάμεσα στις τρεις μέρες.">Συμπλήρωση ΠΣΚ${rTag}<//>
       ${hpPf.nodeAt('psk')}<${Button} size="sm" variant="outline" disabled=${!!xb} onClick=${() => ex('frouraPsk', psk[0], 'η ΦΡΟΥΡΑ του ΠΣΚ', false, undefined, hpPf.take())} data-tip="Ένα Excel με τρία φύλλα: Παρ, Σαβ, Κυρ">${xb === 'frouraPsk' ? 'Δημιουργία…' : 'Excel ΠΣΚ'}<//>
       ${hpPo.nodeAt('psk')}<${Button} size="sm" variant="ghost" disabled=${!!xb} onClick=${() => ex('outsPsk', psk[0], 'οι εξοδούχοι του ΠΣΚ', false, undefined, hpPo.take())} data-tip=${'Εξοδούχοι' + (isOutsAll(state.settings) ? ' (όλη η δύναμη)' : '-παραμένοντες') + ' για τις τρεις μέρες, ένα φύλλο ανά μέρα' + (isOutsAll(state.settings) ? ' (στην «Όλη η δύναμη» δύο: σελίδα 1 οι εξοδούχοι, σελίδα 2 η υπόλοιπη δύναμη)' : '') + '. Η μορφή αλλάζει από τους Εξοδούχους.'}>${xb === 'outsPsk' ? 'Δημιουργία…' : 'Εξοδούχοι ΠΣΚ'}<//></span></div>`}
     <div className="gtable">

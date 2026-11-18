@@ -21,8 +21,8 @@ import { LeaveTab } from './cadreLeave';
 import { CadrePlanView } from './cadrePlan';
 import { CadreDutyView, DutyPersonDialog } from './cadreDuty';
 import { dutyCfgOf, monthLimit, personOf } from '../../shared/cadreDuty';
-import { noDutyOf, rangeTxt } from '../../shared/cadrePlan';
-import { apalLeft, leaveOverdraft, summaries } from '../../shared/cadreBalance';
+import { noDutyOf, quotaShort, rangeTxt } from '../../shared/cadrePlan';
+import { apalLeft, leaveCols, leaveOverdraft, summaries } from '../../shared/cadreBalance';
 import { NoteDot, NotesTab, TodayAlert, notesTabLabel } from './notes';
 import { noteIndex, personGroups, remLine } from '../../shared/notes';
 const lastDuty = (s: AppState, pid: number) => dutyStats(s).get(pid)?.last || null;
@@ -32,8 +32,8 @@ const TONE: Record<CadreGroup, string> = { kol: 'info', apo: 'warn', list: 'outl
 // στήλες όπως στο Δυναμολόγιο (Michael, 18/10): βαθμός, Ο/Σ, επίθετο, όνομα, ΑΜ, τηλέφωνο, θέση. Χωρά σε οθόνη 1024 χωρίς
 // κύλιση· η γραμμή της ΗΚΑΙ φαίνεται στην καρτέλα του στελέχους και στο Excel
 const GRID = '24px 40px 92px 44px minmax(110px,1.4fr) minmax(80px,1fr) 66px 100px minmax(56px,.6fr) minmax(110px,1.4fr) 118px';   // χωράει στα 858px του 1024 με μαζεμένο μενού
-// Άδειες και Απαλλ. (Michael, 17/11): δύο στενές στήλες· κάτω από 1280px κρύβονται (styles.css .cadre-tbl) και ο πίνακας γυρνά στις παλιές στήλες
-const GRID_LV = GRID.replace(/ 118px$/, ' 66px 62px 118px');
+// Άδειες ανά είδος και Απαλλ. (Michael, 17/11· ανά είδος: σχόλιο συναδέλφου): μία στενή στήλη για κάθε είδος άδειας (ΚΑ, ΑΜΔ…) και μία για τις απαλλαγές· κάτω από 1280px κρύβονται (styles.css .cadre-tbl) και ο πίνακας γυρνά στις παλιές στήλες
+const gridLv = (nq: number) => GRID.replace(/ 118px$/, ' 58px'.repeat(nq) + ' 62px 118px');
 const CADRE_VIEWS = [{ value: 'list', label: 'Λίστα' }, { value: 'plan', label: 'Πρόγραμμα αδειών' }, { value: 'duty', label: 'Υπηρεσίες στελεχών' }];
 const range = (a: CadreAbs) => dm(a.from) + (a.to !== a.from ? '–' + dm(a.to) : '');
 const stBadge = (st: CadreStatus | undefined, lists?: UserLists) => (st ? html`<${Badge} tone=${TONE[st.group]} data-tip=${st.label + ' · ' + range(st.abs) + ' · ' + (st.group === 'list' ? 'Δεν μετρά στην ' + HK() : GROUP_NAME[st.group] + ' στην ' + HK() + ', στήλη «' + colShort(st.col, lists) + '»')}>${st.label} · ${range(st.abs)}<//>` : html`<${Badge} tone="ok">Παρών<//>`);
@@ -61,6 +61,8 @@ export function CadreScreen() {
   const end = () => { setDrag(null); setOver(null); };
   const year = +today.slice(0, 4);
   const sums = useMemo(() => summaries(state, year, today), [state.cadreList, state.cadreAbs, state.cadreGrants, state.settings, state.guards, state.dutyLog, year, today]);
+  const lvCols = useMemo(() => leaveCols(state, sums), [state.cadreList, state.settings, sums]);
+  const GRID_LV = useMemo(() => gridLv(lvCols.length), [lvCols]);
   const stOf = useMemo(() => { const m = new Map<string, CadreStatus | undefined>(); all.forEach(c => m.set(c.id, cadreStateOn(state, c.id, date))); return m; }, [all, state.cadreAbs, state.cadreDuties, state.settings, date]);
   const counts = useMemo(() => Object.fromEntries(CADRE_FILTERS.map(([f]) => [f, all.filter(c => cadreMatch(f, c, stOf.get(c.id))).length])), [all, stOf]);
   const rows = all.filter(c => cadreMatch(filter, c, stOf.get(c.id)) && cadreSearch(c, dq));
@@ -113,7 +115,7 @@ export function CadreScreen() {
       <span className="toolbar__count">${rows.length} από ${filter === 'inactive' ? counts.inactive || 0 : active}</span></div>
     ${rows.length === 0 ? html`<div className="ui-card empty">${!all.length ? html`Δεν έχουν μπει στελέχη. Αν δεν τα περάσεις, η ${HK()} παίρνει τους αριθμούς ανά βαθμό που γράφεις στην οθόνη της. <${Button} variant="link" onClick=${() => setEdit({ hk: 'Λοχίες' })}>Πέρασε το πρώτο<//>` : html`Κανείς δεν ταιριάζει. <${Button} variant="link" onClick=${clear}>Καθάρισε αναζήτηση και φίλτρα<//>`}</div>` :
     html`<div className="ptable ptable--roster" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div className="cadre-tbl">
-      <div className="ptable__head" role="row" style=${{ gridTemplateColumns: GRID_LV }}><span></span><span>Α/Α</span><span>Βαθμός</span><span>Ο/Σ</span><span>Επίθετο</span><span>Όνομα</span><span>ΑΜ</span><span>Τηλέφωνο</span><span>Θέση</span><span>${'Κατάσταση' + (dateLbl ? ' · ' + dateLbl : '')}</span><span className="cadre-lv" data-tip=${'Άδειες που μένουν από όσες δικαιούται το ' + year}>Άδειες</span><span className="cadre-lv" data-tip="Απαλλαγές που μένουν">Απαλλ.</span><span></span></div>
+      <div className="ptable__head" role="row" style=${{ gridTemplateColumns: GRID_LV }}><span></span><span>Α/Α</span><span>Βαθμός</span><span>Ο/Σ</span><span>Επίθετο</span><span>Όνομα</span><span>ΑΜ</span><span>Τηλέφωνο</span><span>Θέση</span><span>${'Κατάσταση' + (dateLbl ? ' · ' + dateLbl : '')}</span>${lvCols.map(q => html`<span key=${q.id} className="cadre-lv" data-tip=${q.name + ': μένουν από όσες δικαιούται το ' + year}>${quotaShort(q, state.settings.lists)}</span>`)}<span className="cadre-lv" data-tip="Απαλλαγές που μένουν">Απαλλ.</span><span></span></div>
       ${rows.map((c, i) => { const st = stOf.get(c.id); return html`<div key=${c.id} className=${cx('ptable__row', i % 2 === 1 && 'is-odd', card === c.id && 'is-sel', drag === c.id && 'is-drag', over?.id === c.id && drag !== c.id && (over.after ? 'is-drop-after' : 'is-drop-before'))} style=${{ gridTemplateColumns: GRID_LV }} role="row" tabIndex="0"
         draggable="true" onDragStart=${(e: any) => { setDrag(c.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', c.id); }} onDragEnd=${end}
         onDragOver=${(e: any) => { if (!drag) return; e.preventDefault(); const r = e.currentTarget.getBoundingClientRect(); const after = e.clientY > r.top + r.height / 2; if (over?.id !== c.id || over.after !== after) setOver({ id: c.id, after }); }}
@@ -121,7 +123,7 @@ export function CadreScreen() {
         onClick=${() => openCard(c.id)} onKeyDown=${(e: any) => { if (e.key === 'Enter') openCard(c.id); else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); const nb = rows[i + (e.key === 'ArrowUp' ? -1 : 1)]; if (nb) move(c.id, nb.id, e.key === 'ArrowDown'); } }}>
         <span className="drag-h" aria-hidden="true" data-tip="Σύρε για να αλλάξεις σειρά (ή Alt+↑/↓)">⠿</span><span className="num muted">${i + 1}</span><span data-tip=${rankTxt(c)}>${rankTxt(c)}</span><span>${c.spec || ''}</span><span data-tip=${c.last}><b>${c.last}</b>${marks.get('c' + c.id) && html`<${NoteDot} m=${marks.get('c' + c.id)}/>`}</span><span data-tip=${c.first}>${c.first}</span><span className="num">${c.am || ''}</span><span className="num">${c.phone || ''}</span><span data-tip=${c.role || undefined}>${c.role || ''}</span>
         <span className="badges">${c.active ? stBadge(st, state.settings.lists) : html`<${Badge} tone="outline">Εκτός δύναμης<//>`}</span>
-        ${(() => { const sm = c.active ? sums.get(c.id) : undefined; const num = (n: number) => String(Math.round(n * 100) / 100).replace('.', ','); return html`<span className="cadre-lv num" data-tip=${sm ? 'Άδειες που μένουν: ' + num(sm.leaveLeft) + ' από ' + num(sm.leaveEntitled) + ' το ' + year : undefined} style=${sm && sm.leaveLeft < 0 ? { color: 'var(--bad)' } : undefined}>${sm ? num(sm.leaveLeft) + '/' + num(sm.leaveEntitled) : ''}</span><span className="cadre-lv num" data-tip=${sm ? 'Απαλλαγές που μένουν' : undefined} style=${sm && sm.apal < 0 ? { color: 'var(--bad)' } : undefined}>${sm ? num(sm.apal) : ''}</span>`; })()}
+        ${(() => { const sm = c.active ? sums.get(c.id) : undefined; const num = (n: number) => String(Math.round(n * 100) / 100).replace('.', ','); return html`${lvCols.map(q => { const b = sm?.quotas.find(x => x.quota.id === q.id); return html`<span key=${q.id} className="cadre-lv num" data-tip=${b ? q.name + ': μένουν ' + num(b.left) + ' από ' + num(b.entitled) + ' το ' + year : undefined} style=${b && b.left < 0 ? { color: 'var(--bad)' } : undefined}>${b ? num(b.left) + '/' + num(b.entitled) : ''}</span>`; })}<span key="apal" className="cadre-lv num" data-tip=${sm ? 'Απαλλαγές που μένουν' : undefined} style=${sm && sm.apal < 0 ? { color: 'var(--bad)' } : undefined}>${sm ? num(sm.apal) : ''}</span>`; })()}
         <span onClick=${(e: any) => e.stopPropagation()}>${c.active && html`<${Button} size="sm" variant="outline" aria-label=${'Κατάσταση: ' + rankTxt(c) + ' ' + c.last} onClick=${() => setStFor({ c })} data-tip="Κατάσταση της ${HK()}: υπηρεσία, ΕΥ, άδεια, νοσοκομείο…" data-tip-side="left">Κατάσταση…<//>`}</span></div>`; })}
     </div></div></div>`}
     ${edit && html`<${CadreDialog} c=${edit} onClose=${() => setEdit(null)}/>`}

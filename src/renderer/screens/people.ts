@@ -212,7 +212,7 @@ function PeopleList() {
   const narrow = useMedia('(max-width: 1279px)'), noPR = useMedia('(max-width: 1599px)');
   const [grid, gridMin] = gridOf(narrow, withSt, unitMode, withSub, noPR); const cols = colsOf(narrow, unitMode, withSub, noPR);
   return html`<div>
-    <${PageHeader} title="Δυναμολόγιο" sub=${unitMode ? 'Δύναμη μονάδας: ' + total + ' άτομα από ' + essoList.length + ' ΕΣΣΟ. Πάτα ένα όνομα για την καρτέλα του.' : 'Δύναμη ' + UNIT().gen + ': ' + total + ' άτομα. Πάτα ένα όνομα για την καρτέλα του.'}>
+    <${PageHeader} title="Στρατιώτες" sub=${unitMode ? 'Δύναμη μονάδας: ' + total + ' άτομα από ' + essoList.length + ' ΕΣΣΟ. Πάτα ένα όνομα για την καρτέλα του.' : 'Δύναμη ' + UNIT().gen + ': ' + total + ' άτομα. Πάτα ένα όνομα για την καρτέλα του.'}>
       <${Button} variant="outline" onClick=${() => setAdding('one')} data-tip="Γράφεται και στο Δυναμολόγιο, αν έχει οριστεί στα Αρχεία Excel">${narrow ? '+ Στρατιώτης' : '+ Νέος στρατιώτης'}<//>
       <${Button} variant="outline" onClick=${() => nav.go('templates', { tab: 'import' })} data-tip="Από το Excel του Δυναμολογίου (Ρυθμίσεις › Εισαγωγή Δυναμολογίου)">${narrow ? 'Εισαγωγή' : 'Εισαγωγή Δυναμολογίου'}<//>
       ${hp.node}
