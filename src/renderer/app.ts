@@ -36,7 +36,7 @@ import { HK, setUnitKind } from '../shared/unit';
 import type { Command } from '../shared/commands';
 
 const SCREENS: Record<string, [string, any, any]> = {
-  home: ['Σήμερα', Icon.home, TodayScreen], people: ['Δυναμολόγιο', Icon.people, PeopleScreen], cadre: ['Στελέχη', Icon.cadre, CadreScreen], guard: ['Υπηρεσίες', Icon.guard, GuardScreen],
+  home: ['Σήμερα', Icon.home, TodayScreen], people: ['Στρατιώτες', Icon.people, PeopleScreen], cadre: ['Στελέχη', Icon.cadre, CadreScreen], guard: ['Υπηρεσίες', Icon.guard, GuardScreen],
   outs: ['Εξοδούχοι', Icon.out, OutsScreen], records: ['Ιατρικά', Icon.med, RecordsScreen], strength: ['Δύναμη', Icon.strength, StrengthScreen],
   hkai: ['ΗΚΑΙ', Icon.file, HkaiScreen], weapons: ['Οπλισμός', Icon.weapon, WeaponsScreen], vehicles: ['Οχήματα', Icon.vehicle, VehiclesScreen], reports: ['Έντυπα', Icon.print, ReportsScreen], notes: ['Σημειώσεις', Icon.notes, NotesScreen], history: ['Ιστορικό', Icon.history, HistoryScreen], templates: ['Ρυθμίσεις', Icon.gear, TemplatesScreen], guide: ['Οδηγός', Icon.help, GuideScreen],
   diag: ['Διάγνωση', Icon.gear, DiagScreen]   // κρυφή: Ctrl+Shift+D ή από την αναζήτηση

@@ -178,7 +178,7 @@ export function AssignDialog({ row, onClose }: P) {
   const holder: AssetHolder | null | undefined = kind === 'none' ? null : kind === 'unit' || kind === 'ext' ? (name.trim() ? { k: kind, name: name.trim() } : undefined) : who?.h;
   const primary = who && weapon && !(row.link && holder && holder.k === row.link.k && JSON.stringify(holder) === JSON.stringify(row.link)) ? hasPrimaryWeapon(state, who.h) : false;
   const note = holder === undefined ? '' : row.link && holder !== null && holder && JSON.stringify(holder) === JSON.stringify(row.link) ? 'Ήδη χρεωμένο σε αυτόν από το Δυναμολόγιο.'
-    : row.link ? 'Το όπλο είναι το κύριο όπλο του ' + holderText(state, row.link) + ': θα σβηστεί από εκεί (Δυναμολόγιο › Όπλα) και θα πάει στον νέο κάτοχο.'
+    : row.link ? 'Το όπλο είναι το κύριο όπλο του ' + holderText(state, row.link) + ': θα σβηστεί από εκεί (καρτέλα › Όπλα) και θα πάει στον νέο κάτοχο.'
     : who && weapon ? (primary ? 'Έχει ήδη κύριο όπλο: αυτό θα μπει ως δεύτερο όπλο, στο μητρώο.' : 'Δεν έχει όπλο: θα γραφτεί και ως κύριο όπλο του στο Δυναμολόγιο (Οπλισμός › Όπλα).') : '';
   const warn = holder && row.link ? (holder.k === 'person' || holder.k === 'cadre') && hasPrimaryWeapon(state, holder) ? 'έχει ήδη άλλο κύριο όπλο' : undefined : undefined;
   return html`<${Dialog} title=${'Χρέωσε σε… · ' + nm} onClose=${onClose}

@@ -43,7 +43,7 @@ function UnitEssoTable() {
       ${rows.map(r => { const d = essoDischarge(r.esso, 12, em), n = daysToDischarge(d, today);
         return html`<tr key=${r.txt}><td className="nw"><b>${r.txt}</b></td><td>${r.active}</td><td>${r.inactive}</td>
           <td>${dischargeLabel(d)}${n >= 0 && n <= 30 && html` <${Badge} tone="warn">σε ${n} ${n === 1 ? 'μέρα' : 'μέρες'}<//>`}${n < 0 && r.active > 0 && html` <${Badge} tone="bad">πέρασε<//>`}</td>
-          <td><${Button} size="sm" variant="outline" disabled=${!r.active} why=${r.active ? '' : 'Κανείς δεν είναι σε δύναμη'} onClick=${() => nav.go('people', { filter: 'esso:' + r.txt })} data-tip="Δυναμολόγιο, μόνο αυτή η ΕΣΣΟ">Ποιοι<//><${Button} size="sm" variant="outline" disabled=${!r.active} why=${r.active ? '' : 'Κανείς δεν είναι σε δύναμη'} onClick=${() => setDis(r.txt)}>Απόλυση ΕΣΣΟ…<//></td></tr>`; })}</tbody></table>`
+          <td><${Button} size="sm" variant="outline" disabled=${!r.active} why=${r.active ? '' : 'Κανείς δεν είναι σε δύναμη'} onClick=${() => nav.go('people', { filter: 'esso:' + r.txt })} data-tip="Στρατιώτες, μόνο αυτή η ΕΣΣΟ">Ποιοι<//><${Button} size="sm" variant="outline" disabled=${!r.active} why=${r.active ? '' : 'Κανείς δεν είναι σε δύναμη'} onClick=${() => setDis(r.txt)}>Απόλυση ΕΣΣΟ…<//></td></tr>`; })}</tbody></table>`
       : html`<p className="note" style=${{ margin: 0 }}>Κανείς από τους στρατιώτες δεν έχει ΕΣΣΟ στην καρτέλα του.</p>`}
     ${noEsso > 0 && html`<p className="note">${noEsso} ${noEsso === 1 ? 'στρατιώτης σε δύναμη δεν έχει' : 'στρατιώτες σε δύναμη δεν έχουν'} ΕΣΣΟ στην καρτέλα τους.</p>`}
     <div className="field-row" style=${{ alignItems: 'flex-end' }}>${ESSO_SERIES.map(s => html`<div className="field" key=${s} style=${{ flex: 'none' }}><label className="field__label" htmlFor=${'em-' + s}>Μήνας κατάταξης ${s}΄</label>
@@ -169,7 +169,7 @@ function EssoDone({ r, onClose }: P) {
   const { state } = useStore(); const nav = useNav(); const name = state.settings.essos ? essoName(state.settings.essos) : 'νέα ΕΣΣΟ';
   const n = state.people.filter(p => p.active).length;
   return html`<${Dialog} title=${'Ξεκίνησε η ' + name} onClose=${onClose}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Κλείσιμο<//><${Button} onClick=${() => { onClose(); if (n) nav.go('people'); else nav.go('people', { quickAdd: true }); }}>${n ? 'Στο Δυναμολόγιο (' + n + ')' : 'Γράψε τους στρατιώτες'}<//>`}>
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Κλείσιμο<//><${Button} onClick=${() => { onClose(); if (n) nav.go('people'); else nav.go('people', { quickAdd: true }); }}>${n ? 'Στους Στρατιώτες (' + n + ')' : 'Γράψε τους στρατιώτες'}<//>`}>
     <dl className="kv"><dt>Αρχείο</dt><dd><span className="plan__fn">${r.archive}</span> <${Button} variant="link" onClick=${() => window.api.essoOpen(r.archive)}>Άνοιξε<//></dd>
       <dt>Φάκελος</dt><dd><span className="plan__fn">${r.dir}</span> <${Button} variant="link" onClick=${() => window.api.essoOpen(r.dir)}>Άνοιξε<//></dd>
       <dt>Excel</dt><dd>${r.files.length ? r.files.map((f: string) => html`<div key=${f}><${Button} variant="link" onClick=${() => window.api.openPath(f)}>${f.split(/[\\/]/).pop()}<//></div>`) : 'κανένα'}</dd></dl>

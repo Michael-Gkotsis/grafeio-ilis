@@ -164,6 +164,12 @@ export function summaries(s: AppState, year: number, today?: ISODate): Map<strin
   return new Map((s.cadreList || []).map(c => [c.id, cadreSummary(s, c, year, today)]));
 }
 
+// Τα είδη άδειας που παίρνουν στήλη στη λίστα Στελέχη: ίδιος κανόνας με τα φύλλα του Excel (όσα είναι για όλους ή έχει κάποιο ενεργό στέλεχος)
+export function leaveCols(s: AppState, sums: Map<string, CadreSummary>): LeaveQuota[] {
+  const act = (s.cadreList || []).filter(c => c.active);
+  return leaveCfgOf(s.settings).quotas.filter(q => q.all || act.some(c => sums.get(c.id)?.quotas.some(b => b.quota.id === q.id)));
+}
+
 // ---- Excel «ΑΔΕΙΕΣ-ΑΠΑΛΛΑΓΕΣ ΣΤΕΛΕΧΩΝ»: νέο αρχείο, χωριστό από το ΣΤΕΛΕΧΗ.xlsx. Κεφαλαία τα βάζει το excel.ts ----
 export const LEAVE_SHEET_NAMES = { all: 'ΥΠΟΛΟΙΠΑ', apal: 'ΚΑΡΤΕΛΑ ΑΠΑΛΛΑΓΩΝ', one: 'ΑΔΕΙΕΣ ΣΤΕΛΕΧΟΥΣ' };
 export function leaveSheets(s: AppState, year: number, today: ISODate, cid?: string): RosterSheet[] {
