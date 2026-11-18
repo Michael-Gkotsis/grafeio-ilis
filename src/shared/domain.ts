@@ -61,6 +61,7 @@ export interface Person {
   email?: string;        // E-mail, e-mail συγγενή, ομάδα αίματος (shared/personal.ts): φύλλο ΘΑΛΑΜΟΙ του Δυναμολογίου και στήλες στα Έντυπα
   relEmail?: string;
   blood?: string;        // Α+, Α-, Β+, Β-, ΑΒ+, ΑΒ-, 0+, 0- (ή κείμενο όπως ήρθε από το Excel)
+  religion?: string;     // Θρήσκευμα (Michael, 18/11): από τη λίστα Ρυθμίσεις › Λίστες › Θρησκεύματα· καρτέλα, φίλτρο στο Προσωπικό και στα Έντυπα, στήλη στα Έντυπα· καμία επίδραση σε υπηρεσίες/ΗΚΑΙ, δεν γράφεται στα Excel του Δυναμολογίου
 }
 
 // Κίνηση δύναμης (μονάδα): out = βγαίνει εκτός δύναμης, in = ξαναμπαίνει. on: η μέρα που ισχύει (και μελλοντική)· done: έχει εφαρμοστεί·
@@ -726,7 +727,7 @@ export function markOldRequests(s: AppState, today: ISODate): AppState | null {
 // Υπηρεσιών (αρνητικός, για να μη συμπέσει με στρατιώτη), δίνεται μία φορά και μένει για το ιστορικό (rules.ts cadreSeat)
 // Κάθε ενεργό στέλεχος μπαίνει με το χέρι σε οποιαδήποτε θέση (Michael, 26/10): παίρνει το pid τη στιγμή που μπαίνει πρώτη φορά
 // στις θέσεις (commands.ts assign), όχι μόνο όσοι έχουν monthMax. weapon/wtype/rack/wpos: όπλο στελέχους, όπως του Person (ένοπλες θέσεις)
-export interface Cadre { id: string; rank: string; origin?: string; hk: string; last: string; first: string; spec?: string; am?: string; phone?: string; role?: string; active: boolean; pos?: number; monthMax?: number; pid?: number; weapon?: string; wtype?: string; rack?: string; wpos?: string; eid?: string; iban?: string; amka?: string; afm?: string }
+export interface Cadre { id: string; rank: string; origin?: string; hk: string; last: string; first: string; spec?: string; am?: string; phone?: string; role?: string; active: boolean; pos?: number; monthMax?: number; pid?: number; weapon?: string; wtype?: string; rack?: string; wpos?: string; eid?: string; iban?: string; amka?: string; afm?: string; religion?: string }
 export interface CadreAbs { id: string; cid: string; kind: string; from: ISODate; to: ISODate; note?: string }
 // «Δεν θέλει υπηρεσία» (Michael, 17/11, πρόταση λοχία): μέρες που το στέλεχος ζητά να μην μπει σε υπηρεσία. Δεν είναι κατάσταση (CadreAbs):
 // φαίνεται μόνο στο Πρόγραμμα αδειών και στην καρτέλα του, και θα το διαβάζει το πρόγραμμα υπηρεσιών στελεχών

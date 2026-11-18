@@ -22,7 +22,7 @@ import { dropSigMoves, type Layout } from '../../shared/layout';
 import { sigsClean, sigsCustom, sigsSaved, sigsText, type Sig } from '../../shared/sigs';
 import { DAY_CHOICES, addDays, dayName, dm } from '../../shared/dates';
 import { siCombos } from '../../shared/si';
-import { rankTxt, statusLbl } from '../../shared/ranks';
+import { itemKey, listOf, rankTxt, statusLbl } from '../../shared/ranks';
 import { TYPES, blocksOf, shortName, type TypeKey, type AppState, type Person, type Status } from '../../shared/domain';
 import { cadreSeat, pickPeople } from '../../shared/rules';
 import { WEAPON_FILTERS } from '../../shared/weapons';
@@ -1185,8 +1185,17 @@ function StepPick({ r, upd, p, sub, bsrc }: P) {
   const stNewBox = html`<label className="ui-checkrow" data-tip="Τα φίλτρα ιατρικό, ποινή, άδεια, εισαγωγή και οι στήλες καταστάσεων κοιτάνε μόνο όσα ξεκινούν τη μέρα του εντύπου, όχι ό,τι ισχύει γενικά."><input type="checkbox" className="ui-check" checked=${!!pk.stNew} onChange=${(e: any) => upd({ pick: { ...pk, stNew: e.target.checked ? true : undefined } })}/>Μόνο όσα δηλώθηκαν τη μέρα του εντύπου (ιατρικά, ποινές, άδειες, εισαγωγές)</label>`;
   // τυχαίοι: από προεπιλογή μόνο όσοι είναι παρόντες χωρίς υπηρεσία σήμερα και αύριο (μπορείς να το αλλάξεις)
   const noConds = () => condGroups(pk).every(c => !c.need.length && !c.not.length);
-  const setMode = (mode: RepPick['mode']) => set(mode === 'random' && pk.mode !== 'random' && people && pk.from === 'all' && !pk.view && noConds() ? { ...defaultPick('random'), n: pk.n || 10, si: pk.si, rooms: pk.rooms } : { mode, n: mode === 'all' ? pk.n : pk.n || 10 });
+  const setMode = (mode: RepPick['mode']) => set(mode === 'random' && pk.mode !== 'random' && people && pk.from === 'all' && !pk.view && noConds() ? { ...defaultPick('random'), n: pk.n || 10, si: pk.si, rooms: pk.rooms, religions: pk.religions } : { mode, n: mode === 'all' ? pk.n : pk.n || 10 });
   const toggle = <T,>(list: T[] | undefined, x: T) => { const s = new Set(list || []); if (s.has(x)) s.delete(x); else s.add(x); return [...s]; };
+  // θρήσκευμα (Michael, 18/11): κουμπιά μόνο για όσα έχουν δηλωθεί σε κάποιον (και όσα έχεις ήδη διαλέξει), με τη σειρά της λίστας
+  const relOpts = useMemo(() => {
+    const used = new Set<string>(); for (const p of state.people) if (p.religion) used.add(itemKey(p.religion));
+    const base = listOf(state.settings.lists, 'religions'); const have = new Set(base.map(itemKey)); const extra: string[] = [];
+    for (const p of state.people) if (p.religion && !have.has(itemKey(p.religion))) { have.add(itemKey(p.religion)); extra.push(p.religion); }
+    for (const g of pk.religions || []) if (!have.has(itemKey(g))) { have.add(itemKey(g)); extra.push(g); }
+    return [...base, ...extra].filter(g => used.has(itemKey(g)) || pk.religions?.some(x => itemKey(x) === itemKey(g)));
+  }, [state.people, state.settings.lists, pk.religions]);
+  const toggleRel = (g: string) => (pk.religions?.some(x => itemKey(x) === itemKey(g)) ? pk.religions.filter(x => itemKey(x) !== itemKey(g)) : [...(pk.religions || []), g]);
   return html`<div className="rep-pick">
     <div className="stack">
       ${status && html`<div><span className="field__label">Ποιες καταστάσεις</span><div className="rep-chips">${ST_CATS.map(c => html`<button key=${c.id} type="button" className="ui-chip ui-chip--sm" aria-pressed=${(pk.cats || []).includes(c.id)} onClick=${() => { const cats = toggle<StCat>(pk.cats, c.id); if (cats.length) set({ cats }); }}>${c.label}</button>`)}</div></div>`}
@@ -1227,6 +1236,7 @@ function StepPick({ r, upd, p, sub, bsrc }: P) {
         <span className="field__label rep-gall">Για όλες τις ομάδες</span>${stNewBox}</div>`}
       ${soldiers && html`<div><span className="field__label">Θάλαμοι <small className="muted">(κανένας = όλοι)</small></span><div className="rep-chips">${roomList(state).map(n => html`<button key=${n} type="button" className="ui-chip ui-chip--sm" aria-pressed=${!!pk.rooms?.includes(n)} onClick=${() => set({ rooms: toggle(pk.rooms, n) })}>Θ${n}</button>`)}</div></div>`}
       ${soldiers && html`<div><span className="field__label">Σ.Ι. <small className="muted">(κανένα = όλα)</small></span><div className="rep-chips">${siCombos(state.settings.lists?.si).map(s => html`<button key=${s} type="button" className="ui-chip ui-chip--sm" aria-pressed=${!!pk.si?.includes(s)} onClick=${() => set({ si: toggle(pk.si, s) })}>${s}</button>`)}</div></div>`}
+      ${soldiers && relOpts.length > 0 && html`<div><span className="field__label">Θρήσκευμα <small className="muted">(κανένα = όλα)</small></span><div className="rep-chips">${relOpts.map(g => html`<button key=${g} type="button" className="ui-chip ui-chip--sm" aria-pressed=${!!pk.religions?.some(x => itemKey(x) === itemKey(g))} onClick=${() => set({ religions: toggleRel(g) })}>${g}</button>`)}</div></div>`}
       ${people && html`<div className="field-row">
         <div className="field"><label className="field__label" htmlFor="p-always">Πάντα μέσα <small className="muted">(ό,τι κι αν λένε τα φίλτρα)</small></label><${PersonPicker} id="p-always" multiple=${true} value=${pk.always || []} onChange=${(always: number[]) => set({ always, never: (pk.never || []).filter(x => !always.includes(x)) })}/></div>
         <div className="field"><label className="field__label" htmlFor="p-never">Ποτέ σε αυτό το έντυπο</label><${PersonPicker} id="p-never" multiple=${true} value=${pk.never || []} onChange=${(never: number[]) => set({ never, always: (pk.always || []).filter(x => !never.includes(x)) })}/></div>

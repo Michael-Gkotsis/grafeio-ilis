@@ -161,7 +161,7 @@ export type Command =
   | { t: 'setPersonMove'; pid: number; field: 'inOn' | 'outOn'; date: ISODate | null }
   // Οπλισμός: αριθμοί όπλων, πολλοί μαζί με μία αναίρεση (επικόλληση στήλης, μεταφορά από άλλον). '' = χωρίς όπλο / παρέδωσε
   | { t: 'setWeapons'; changes: WeaponChange[]; what?: string }
-  | { t: 'setPersonal'; pid?: number; cid?: string; iban?: string; amka?: string; afm?: string; email?: string; relEmail?: string; blood?: string }   // IBAN/ΑΜΚΑ/ΑΦΜ από την καρτέλα (οπλίτη ή στελέχους)· e-mail, e-mail συγγενή, ομάδα αίματος μόνο οπλίτη
+  | { t: 'setPersonal'; pid?: number; cid?: string; iban?: string; amka?: string; afm?: string; email?: string; relEmail?: string; blood?: string; religion?: string }   // θρήσκευμα (στρατιώτη ή στελέχους, Michael 18/11)· IBAN/ΑΜΚΑ/ΑΦΜ από την καρτέλα (οπλίτη ή στελέχους)· e-mail, e-mail συγγενή, ομάδα αίματος μόνο οπλίτη
   // Έξοδος και είσοδος όπλων από τον οπλοβαστό (Michael, 18/10). Ώρα ΩΩ:ΛΛ (η φόρμα βάζει την τωρινή). Είσοδος χωρίς reason:
   // ο λόγος εισαγωγής κάθε εξόδου από τη λίστα (ΕΚΠ → ΛΗΞ ΕΚΠ)
   | { t: 'weaponOut'; pids: number[]; reason: string; day: ISODate; time: string; note?: string }
@@ -649,7 +649,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       if (c0.phone?.trim()) x.phone = c0.phone.trim(); if (c0.role?.trim()) x.role = c0.role.trim();
       if (old?.pos != null) x.pos = old.pos;
       if (c0.eid?.trim()) x.eid = upper(c0.eid.trim().replace(/\s+/g, ' '));   // ειδικότητα (Δυναμολόγιο-Παρουσιολόγιο στελεχών)
-      for (const k of ['iban', 'amka', 'afm'] as const) if (old?.[k]) x[k] = old[k];   // έξτρα στοιχεία: αλλάζουν μόνο από το tab τους (setPersonal)
+      for (const k of ['iban', 'amka', 'afm', 'religion'] as const) if (old?.[k]) x[k] = old[k];   // έξτρα στοιχεία: αλλάζουν μόνο από το tab τους (setPersonal)
       // ΕΠΟΠ/ΟΒΑ με υπηρεσίες τον μήνα: αριθμός θέσης μία φορά (αρνητικός), και μένει ακόμα κι αν σβήσεις το όριο
       const mx = Math.floor(Number(c0.monthMax)); if (mx > 0) x.monthMax = mx;
       if (old?.pid != null) x.pid = old.pid; else if (mx > 0) x.pid = nextCadrePid(s.cadreList);
@@ -1241,8 +1241,8 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     case 'setPersonal': {
       // Έξτρα στοιχεία (IBAN, ΑΜΚΑ, ΑΦΜ, e-mail, ομάδα αίματος): γράφονται μόνα τους στο Δυναμολόγιο/ΣΤΕΛΕΧΗ (kindsForPeople)· όχι τα νούμερα στο ιστορικό ενεργειών
       const keys = ['iban', 'amka', 'afm'] as const;
-      const patch = <T extends Person | Cadre>(o: T): T => { const q: T = { ...o }; for (const k of keys) { if (c[k] === undefined) continue; const v = normPersonal(k, c[k]); if (v) q[k] = v; else delete q[k]; } return q; };
-      const same = (a: Person | Cadre, b: Person | Cadre) => keys.every(k => a[k] === b[k]) && XKEYS.every(k => (a as Person)[k] === (b as Person)[k]);
+      const patch = <T extends Person | Cadre>(o: T): T => { const q: T = { ...o }; for (const k of keys) { if (c[k] === undefined) continue; const v = normPersonal(k, c[k]); if (v) q[k] = v; else delete q[k]; } if (c.religion !== undefined) { const v = itemName(c.religion, 'religions'); if (v) q.religion = v; else delete q.religion; } return q; };
+      const same = (a: Person | Cadre, b: Person | Cadre) => keys.every(k => a[k] === b[k]) && a.religion === b.religion && XKEYS.every(k => (a as Person)[k] === (b as Person)[k]);
       if (c.cid) {
         const o = s.cadreList.find(x => x.id === c.cid); if (!o) throw new Error('Δεν βρέθηκε το στέλεχος');
         const q = patch(o); if (same(o, q)) return { state: s, text: '', files: [] };
