@@ -30,7 +30,7 @@ import { collator, normGreek, upper } from '../../shared/text';
 import { useRowH } from '../prefs';
 import { useNowMin } from '../clock';
 import { MoveDialog, MovesHistory } from './moves';
-import { dischargeLabel, personDischarge } from '../../shared/mode';
+import { dischargeLabel, essoMonthsOf, personDischarge } from '../../shared/mode';
 import { NoteDot, NotesTab, TodayAlert, notesTabLabel } from './notes';
 import { PersonalTab } from './personal';
 import { ImerTab } from './imerologio';
@@ -304,7 +304,7 @@ export function PersonSheet({ pid, list, onMove, onClose }: P) {
       <dt>Δικαίωμα ΔΝ</dt><dd><label className="kv__check"><input type="checkbox" className="ui-check" checked=${!!p.dn} onChange=${async (e: any) => { const dn = e.target.checked; if (await run({ t: 'updatePerson', person: { ...p, dn } }, false)) toast({ text: rkShort(p) + (dn ? ' έχει δικαίωμα ΔΝ' : ' δεν έχει δικαίωμα ΔΝ') }); }}/><span>${p.dn ? 'Ναι' : 'Όχι'}</span></label></dd>
       ${p.notes && html`<dt>Σημ. Δυναμολογίου</dt><dd>${p.notes}</dd>`}
       <${HeldBlock} pid=${p.id}/>
-      ${isUnit(state.settings) && personDischarge(p) && html`<dt>Απόλυση περίπου</dt><dd>${dischargeLabel(personDischarge(p)!)} <span className="muted" style=${{ fontSize: '12px' }}>(${p.serve === 9 ? '9' : '12'} μήνες θητεία)</span></dd>`}
+      ${isUnit(state.settings) && personDischarge(p, essoMonthsOf(state.settings)) && html`<dt>Απόλυση περίπου</dt><dd>${dischargeLabel(personDischarge(p, essoMonthsOf(state.settings))!)} <span className="muted" style=${{ fontSize: '12px' }}>(${p.serve === 9 ? '9' : '12'} μήνες θητεία)</span></dd>`}
     </dl>
     ${isUnit(state.settings) && html`<${MovesHistory} p=${p}/>`}
     `}
@@ -460,7 +460,7 @@ function rosterNote(state: P, isNew: boolean): string {
 // Τα πεδία ενός στρατιώτη: ίδια στη διόρθωση και στον νέο
 function PersonFields({ x, setX, id, isNew }: P) {
   const { state, today } = useStore(); const unit = isUnit(state.settings);
-  const choices = useMemo(() => essoChoices(state.people, today), [state.people, today]);
+  const choices = useMemo(() => essoChoices(state.people, today, essoMonthsOf(state.settings)), [state.people, today, state.settings.essoMonth]);
   const ranks = useMemo(() => optionsOf(listOf(state.settings.lists, 'soldierRanks'), state.people.map((y: Person) => y.rank)), [state.people, state.settings.lists]);
   const specs = useMemo(() => optionsOf(listOf(state.settings.lists, 'specs'), state.people.map((y: Person) => y.spec)), [state.people, state.settings.lists]);
   const origins = useMemo(() => optionsOf(listOf(state.settings.lists, 'origins'), [...state.people.map((y: Person) => y.origin), ...state.cadreList.map((c: Cadre) => c.origin)]), [state.people, state.cadreList, state.settings.lists]);
@@ -506,7 +506,7 @@ function NewPersonDialog({ onClose, onMany }: P) {
   const { run, state, undoMark, today } = useStore(); const toast = useToast(); const nav = useNav();
   // η πιο συχνή ΕΣΣΟ όσων είναι σε δύναμη
   const unit = isUnit(state.settings);
-  const essos = useMemo(() => (unit ? defaultEsso(state.people, today) : state.settings.essos ? essoPersonTxt(state.settings.essos) : currentEssos(state.people)), [unit, today, state.settings.essos, state.people]);
+  const essos = useMemo(() => (unit ? defaultEsso(state.people, today, essoMonthsOf(state.settings)) : state.settings.essos ? essoPersonTxt(state.settings.essos) : currentEssos(state.people)), [unit, today, state.settings.essos, state.people]);
   // μονάδα: και ημερομηνία εισαγωγής (σήμερα) και «Ήρθε από»
   const blank = (c: P = {}) => ({ rank: 'ΣΤΡ', spec: '', last: '', first: '', father: '', asm: '', phone: '', room: null, si: 'Ι1', post: null, role: null, essos, attached: false, notes: '', weapon: '', ...(unit ? { inOn: today, came: '', sub: undefined } : {}), ...c });
   const [x, setX] = useState<P>(blank);

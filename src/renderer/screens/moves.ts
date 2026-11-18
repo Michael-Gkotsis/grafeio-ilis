@@ -5,13 +5,14 @@ import { useNav, useStore } from '../store';
 import { DateField } from '../common';
 import { RkName, rkShort } from '../rankName';
 import { addDays, dm, dmy } from '../../shared/dates';
-import { essoDischarge, essoKeyOf, monthEnd, moveRows, pendingMoves } from '../../shared/mode';
+import { essoDischarge, essoKeyOf, essoMonthsOf, monthEnd, moveRows, pendingMoves } from '../../shared/mode';
 import { parseEsso } from '../../shared/esso';
 import { fullName, type Move, type Person } from '../../shared/domain';
 import { HK } from '../../shared/unit';
+import { itemKey, itemName, listRows } from '../../shared/ranks';
 type P = any;
 
-const WHYS = ['ΜΕΤΑΘΕΣΗ', 'ΑΠΟΣΠΑΣΗ', 'ΑΠΟΛΥΣΗ', 'ΑΛΛΟ'];
+// Οι λόγοι: η λίστα «Λόγοι κίνησης» (οι βασικές τιμές πρώτες, πάντα εκεί) και το «Άλλο…» (ΑΛΛΟ) για κάτι που γράφεις τώρα
 const WHY_LBL: Record<string, string> = { ΜΕΤΑΘΕΣΗ: 'Μετάθεση', ΑΠΟΣΠΑΣΗ: 'Απόσπαση', ΑΠΟΛΥΣΗ: 'Απόλυση', ΑΛΛΟ: 'Άλλο…' };   // με τόνους στα κουμπιά
 const label = (m: Move) => [m.why, m.where].filter(Boolean).join(' · ');
 const moveTxt = (m: Move) => dmy(m.on) + (m.dir === 'out' ? ' ' + label(m) + (m.back ? ' (επιστρέφει ' + dmy(m.back) + ')' : '') : ' ξανά σε δύναμη') + (m.done ? '' : ' · προγραμματισμένη');
@@ -26,15 +27,22 @@ export function MovesHistory({ p }: P) {
 }
 
 export function MoveDialog({ p, onClose }: P) {
-  const { run, today } = useStore(); const toast = useToast();
+  const { state, run, today } = useStore(); const toast = useToast();
+  const whys = [...listRows(state.settings.lists, 'moveWhys').filter(r => r.builtin || !r.hidden).map(r => r.name), 'ΑΛΛΟ'];
+  const [remember, setRemember] = useState(false);
   const pend = (p.moves || []).filter((m: Move) => !m.done);
   const [dir, setDir] = useState<'out' | 'in'>(p.active ? 'out' : 'in');
   const [why, setWhy] = useState('ΜΕΤΑΘΕΣΗ'); const [other, setOther] = useState(''); const [where, setWhere] = useState('');
   const [on, setOn] = useState<string>(today); const [back, setBack] = useState<string>('');
-  const reason = why === 'ΑΛΛΟ' ? other.trim() : why;
+  const reason = why === 'ΑΛΛΟ' ? itemName(other, 'moveWhys') : why;
+  const known = listRows(state.settings.lists, 'moveWhys').some(r => itemKey(r.name) === itemKey(reason) && (r.builtin || !r.hidden));
   const miss = dir === 'out' && !reason ? 'Λείπει: Λόγος' : back && back <= on ? 'Η επιστροφή πρέπει να είναι μετά την ημέρα που φεύγει' : '';
   const save = async () => {
     const ok = await run({ t: 'addMove', pid: p.id, dir, why: dir === 'out' ? reason : undefined, where: where.trim() || undefined, on, back: dir === 'out' && back ? back : undefined }, false);
+    if (ok && dir === 'out' && why === 'ΑΛΛΟ' && remember && reason && !known) {   // «Άλλο» που το θυμάται η λίστα «Λόγοι κίνησης»
+      const l = state.settings.lists || {}, u = l.moveWhys || {};
+      await run({ t: 'setSettings', settings: { lists: { ...l, moveWhys: { ...u, add: [...(u.add || []), { name: reason }], hide: (u.hide || []).filter(x => itemKey(x) !== itemKey(reason)) } } }, text: 'λίστα Λόγοι κίνησης: + ' + reason }, false);
+    }
     if (ok) { toast({ text: rkShort(p) + (dir === 'out' ? (on <= today ? ': εκτός δύναμης' : ': φεύγει στις ' + dm(on)) : (on <= today ? ': ξανά σε δύναμη' : ': ξαναμπαίνει στις ' + dm(on))) }); onClose(); }
   };
   const info = on <= today ? (dir === 'out' ? 'Βγαίνει εκτός δύναμης από τώρα, φεύγει από τις υπηρεσίες από ' + 'σήμερα' + ' και γράφεται στις 2. ΔΙΑΓΡΑΦΕΣ της ' + HK() + ' της ' + dm(on) + '.' : 'Ξαναμπαίνει σε δύναμη και γράφεται στις 1. ΕΓΓΡΑΦΕΣ της ' + HK() + ' της ' + dm(on) + '.')
@@ -42,8 +50,9 @@ export function MoveDialog({ p, onClose }: P) {
   return html`<${Dialog} title="Κίνηση δύναμης" description=${html`<${RkName} p=${p}/>`} onClose=${onClose}
     footer=${html`<${Why} text=${miss}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!!miss} why=${miss} onClick=${save}>Αποθήκευση κίνησης<//>`}>
     <div className="field"><${Segmented} value=${dir} onChange=${setDir} items=${[{ value: 'out', label: 'Φεύγει από τη δύναμη', disabled: !p.active && !pend.some((m: Move) => m.dir === 'in') }, { value: 'in', label: 'Ξαναμπαίνει στη δύναμη', disabled: p.active && !pend.some((m: Move) => m.dir === 'out') }]}/></div>
-    ${dir === 'out' && html`<div className="field"><span className="field__label">Λόγος</span><${Segmented} value=${why} onChange=${setWhy} items=${WHYS.map(w => ({ value: w, label: WHY_LBL[w] }))}/>
-      ${why === 'ΑΛΛΟ' && html`<input className="ui-input" aria-label="Λόγος" data-autofocus="" placeholder="π.χ. ΝΟΣΟΚΟΜΕΙΟ" value=${other} onChange=${(e: any) => setOther(e.target.value)}/>`}</div>`}
+    ${dir === 'out' && html`<div className="field"><span className="field__label">Λόγος</span><${Segmented} value=${why} onChange=${setWhy} items=${whys.map(w => ({ value: w, label: WHY_LBL[w] || w }))}/>
+      ${why === 'ΑΛΛΟ' && html`<input className="ui-input" aria-label="Λόγος" data-autofocus="" placeholder="π.χ. ΝΟΣΟΚΟΜΕΙΟ" value=${other} onChange=${(e: any) => setOther(e.target.value)}/>
+        <label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${remember} disabled=${known} onChange=${(e: any) => setRemember(e.target.checked)}/> ${known ? 'Υπάρχει ήδη στη λίστα «Λόγοι κίνησης»' : 'Πρόσθεσέ το στη λίστα «Λόγοι κίνησης»'}</label>`}</div>`}
     <div className="field-row">
       <div className="field"><label className="field__label" htmlFor="mv-wh">Πού</label><input id="mv-wh" className="ui-input" placeholder=${dir === 'out' ? 'π.χ. ΣΣΕ' : 'π.χ. από πού'} value=${where} onChange=${(e: any) => setWhere(e.target.value)}/></div>
       <div className="field"><label className="field__label" htmlFor="mv-on">Από</label><${DateField} id="mv-on" className="ui-input" max=${addDays(today, 366)} value=${on} onChange=${(e: any) => e.target.value && setOn(e.target.value)}/></div>
@@ -60,7 +69,7 @@ export function DischargeDialog({ esso, onClose }: P) {
   const { state, run, today } = useStore(); const toast = useToast();
   const people: Person[] = useMemo(() => state.people.filter((p: Person) => p.active && essoKeyOf(p) === esso).sort((a: Person, b: Person) => a.last.localeCompare(b.last, 'el') || a.first.localeCompare(b.first, 'el')), [state.people, esso]);
   const e = parseEsso(esso);
-  const def = e ? monthEnd(essoDischarge(e)) : today;
+  const def = e ? monthEnd(essoDischarge(e, 12, essoMonthsOf(state.settings))) : today;
   const [on, setOn] = useState<string>(def < today ? today : def);
   const [keep, setKeep] = useState<Set<number>>(new Set());   // εξαιρέσεις: όσοι μένουν
   const pids = people.filter(p => !keep.has(p.id)).map(p => p.id);

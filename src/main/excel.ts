@@ -19,7 +19,7 @@ import { activePeople, allPosts, cadreSeats, isHol, postBy, statusesFrom, dutyMi
 import { isUnit } from '../shared/mode';
 import { colName, fitBook, sheetSafe } from './xlsx';
 import { fileNameOf } from '../shared/fileNames';
-import { DUTY_CODES, IMER_ROWS, imerCode, imerDays, imerGrid, imerSheets, imerTitle, sumTotals, type ImerPart, type ImerReq } from '../shared/imer';
+import { DUTY_CODES, IMER_ROWS, imerCode, imerDays, imerGrid, imerRowOn, imerSheets, imerTitle, sumTotals, type ImerPart, type ImerReq } from '../shared/imer';
 import { currentEsso, essoName } from '../shared/esso';
 import type { MadeMark } from './exports';
 import { widthChars } from './textfit';
@@ -389,7 +389,7 @@ export async function imerBook(s: AppState, o: ImerReq): Promise<Made> {
   const light = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFF2F2F2' } };
   const esso = currentEsso(s); const title = upper(imerTitle(s.settings) + (esso ? ' ' + essoName(esso) : ''));
   const used = new Set<string>();
-  const legend: [string, string][] = [...IMER_ROWS.filter(r => r.edit).map(r => [imerCode(s.settings, r.key), r.label] as [string, string]),
+  const legend: [string, string][] = [...IMER_ROWS.filter(r => imerRowOn(s.settings, r)).map(r => [imerCode(s.settings, r.key), r.label] as [string, string]),
     ...[['th', 'Θαλαμοφύλακας'], ['op', 'Οπλοφύλακας'], ['sk', 'Σκοπός'], ['mg', 'Μαγειρεία'], ['ly', 'Λ/Υ - Δ/Υ'], ['tae', 'ΤΑΕ'], ['other', 'Περιπολία / άλλη υπηρεσία']].map(([k, n]) => [DUTY_CODES[k as DutyKind], n] as [string, string]), ['ΓΡ', 'Γραφέας'], ['ΕΣΤ', 'Εστιάτορας']];
   for (const x of sheets) {
     const nm = upper(x.g.name).replace(/^(\d+)ΟΣ/, '$1ος'); let name = sheetSafe(nm); for (let i = 2; used.has(name); i++) name = sheetSafe(nm).slice(0, 28) + ' ' + i; used.add(name);

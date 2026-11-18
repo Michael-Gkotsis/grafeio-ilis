@@ -31,7 +31,7 @@ import { cadreCountRows } from '../../shared/ranks';
 import { UNIT_KINDS, hkRowLabel, unitKindOf, unitSettingsFor, unitText, type UnitKind, HK } from '../../shared/unit';
 import { isUnit } from '../../shared/mode';
 import { HkHeadFields, HkRowsButton, HkRowsCard, UnitKindField } from './hkrows';
-import { HkColsCard } from './hkcols';
+import { HkColsCard, TypeColsCard } from './hkcols';
 import { SigEditor } from '../sigs';
 import { LayoutDialog } from '../layout';
 import { HeadsSection } from './docHeads';
@@ -376,7 +376,7 @@ export function TemplatesScreen() {
       <p className="note" style=${{ marginTop: '10px' }}>Για να αλλάξεις ένα έντυπο (π.χ. νέα κεφαλίδα), άνοιξε τον φάκελο templates, βάλε εκεί το δικό σου αρχείο με το ίδιο όνομα. Τα κομμάτια βρίσκονται από τις λέξεις τους (τίτλοι, «Λ/Υ:», ονόματα βαθμών, επικεφαλίδες), όχι από τη θέση τους: κράτα τις λέξεις, τα κελιά μπορούν να μετακινηθούν. Η εφαρμογή γράφει μόνο τιμές και δεν αλλάζει τύπους, στυλ ή διάταξη σελίδας.</p>
       <${Button} variant="outline" onClick=${() => window.api.openFolder('templates')}>Άνοιξε τον φάκελο templates<//>
     </div>`;
-  const body = tab === 'unit' ? html`<div className="stack"><${SettingsCard}/><${SigsCard}/><${HkRowsCard}/><${HkColsCard}/><${CadreLeaveCard}/></div>` : tab === 'heads' ? html`<${HeadsSection}/>` : tab === 'rooms' ? html`<${RoomsCard}/>` : tab === 'duty' ? html`<${DutySection}/>` : tab === 'cadreDuty' ? html`<${CadreDutyCard}/>` : tab === 'assets' ? html`<${AssetsCard}/>`
+  const body = tab === 'unit' ? html`<div className="stack"><${SettingsCard}/><${SigsCard}/><${HkRowsCard}/><${HkColsCard}/><${TypeColsCard}/><${CadreLeaveCard}/></div>` : tab === 'heads' ? html`<${HeadsSection}/>` : tab === 'rooms' ? html`<${RoomsCard}/>` : tab === 'duty' ? html`<${DutySection}/>` : tab === 'cadreDuty' ? html`<${CadreDutyCard}/>` : tab === 'assets' ? html`<${AssetsCard}/>`
     : tab === 'lists' ? html`<${ListsCard}/>` : tab === 'import' ? html`<${ImportCard}/>` : tab === 'files' ? html`<div className="stack"><${SourcesView}/><${FoldersCard}/></div>`
     : tab === 'names' ? html`<${FileNamesCard}/>` : tab === 'excel' ? html`<${XlLookCard}/>` : tab === 'look' ? html`<div className="stack"><${BrandCard}/><${AppearanceCard}/></div>` : tab === 'backup' ? html`<${BackupsCard}/>` : tab === 'update' ? html`<${UpdatesCard}/>` : tab === 'esso' ? html`<${EssoCards}/>` : tab === 'clock' ? html`<${ClockCard}/>` : templates;
   return html`<div>

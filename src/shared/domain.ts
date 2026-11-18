@@ -157,8 +157,8 @@ export const adikGroupOf = (st: { outsAdik?: Partial<Record<string, AdikGroup>> 
 };
 export const ADIK_WORD: Record<string, string> = { AGN: 'ΑΓΝΟΙΑ', LIP: 'ΛΙΠΟΤΑΞΙΑ', ADK: 'ΑΔΙΚΑΙΟΛΟΓΗΤΗ ΑΠΟΥΣΙΑ' };
 export const TYPE_KEYS = Object.keys(TYPES) as TypeKey[];
-export const effects = (t: TypeDef) =>
-  [t.away && 'Απών', t.noDuty ? 'Καμία υπηρεσία' : t.noArmed && 'Όχι σε ένοπλη θέση', !t.noDuty && t.light && 'Όχι μαγειρεία, σκοπιά μόνο αν δεν υπάρχει άλλος', t.noOut && 'Δεν βγαίνει έξοδο', t.kolAuto && 'Κωλυόμενος' + (STEP_COL ? ' (ΗΚΑΙ: ' + kolColName(STEP_COL) + ')' : ' (δεν μετρά σε στήλη της ΗΚΑΙ)'), t.cat === 'kol' && 'Έξοδος και ΗΚΑΙ όπως τα ορίζεις στη δήλωση'].filter(Boolean).join(' · ');
+export const effects = (t: TypeDef, lists?: Pick<UserLists, 'hkCols' | 'stepCol'> | null) =>
+  [t.away && 'Απών', t.noDuty ? 'Καμία υπηρεσία' : t.noArmed && 'Όχι σε ένοπλη θέση', !t.noDuty && t.light && 'Όχι μαγειρεία, σκοπιά μόνο αν δεν υπάρχει άλλος', t.noOut && 'Δεν βγαίνει έξοδο', t.kolAuto && 'Κωλυόμενος' + (stepColOf(lists) ? ' (ΗΚΑΙ: ' + kolColName(stepColOf(lists)!, lists) + ')' : ' (δεν μετρά σε στήλη της ΗΚΑΙ)'), t.cat === 'kol' && 'Έξοδος και ΗΚΑΙ όπως τα ορίζεις στη δήλωση'].filter(Boolean).join(' · ');
 export const typeTip = (t: TypeDef) => t.long + (effects(t) ? ': ' + effects(t) : '');
 export const RECORD_CATS: Cat[] = ['med', 'other', 'pun'];
 export const PUN_KINDS = ['Περιορισμός', 'Κράτηση', 'Φυλάκιση', 'Στέρηση εξόδου'];
@@ -537,6 +537,7 @@ export interface Settings {
   reportTpls?: RepTpl[];                 // Έντυπα: τα πρότυπά σου (αρχεία στον φάκελο «Πρότυπα εντύπων»), shared/reports.ts
   reports?: Report[];                    // Έντυπα: τα έτοιμα έντυπα (πρότυπο, στήλες, ποιοι μπαίνουν, πού βγαίνει)
   mode?: 'centre' | 'unit';              // Λειτουργία: κέντρο εκπαίδευσης (μία ΕΣΣΟ τη φορά, προεπιλογή) ή μονάδα (συνεχής ροή, πολλές ΕΣΣΟ)· λείπει = centre (shared/mode.ts)
+  essoMonth?: Partial<Record<'Α' | 'Β' | 'Γ' | 'Δ', number>>;   // Λειτουργία μονάδας: ο μήνας (1–12) που κατατάσσεται κάθε σειρά ΕΣΣΟ, μόνο όσες άλλαξες· λείπει = ESSO_MONTH (mode.ts)
   essos?: Esso;                          // η τωρινή ΕΣΣΟ (Ρυθμίσεις › ΕΣΣΟ, «Νέα ΕΣΣΟ»)· χωρίς αυτήν, η πιο συχνή των ατόμων (esso.ts)
   dutyStart?: string;                    // πότε ξεκινά ο κύκλος των υπηρεσιών (ΩΩ:ΛΛ, κενό = 14:00): η μέρα της υπηρεσίας είναι από τότε ως την ίδια ώρα την επόμενη
   outsFmt?: OutsFmt | 'tab4';                     // Excel Εξοδούχων: 'cur' = Τωρινή (προεπιλογή), 'all' = Όλη η δύναμη (το παλιό 'tab4' διαβάζεται ως 'all', isOutsAll)· η τελευταία επιλογή μένει, και το αυτόματο ξαναγράψιμο την ακολουθεί
@@ -765,7 +766,7 @@ export const KOL_DEFAULT_COL = 'yp';
 // Παλιές δηλώσεις (hkCol λείπει) μένουν στην Υπηρεσία όπως πάντα.
 export const KOL_NO_COL = '-';
 // Η στήλη της ΗΚΑΙ ενός κωλυόμενου (άκυρη ή λείπει: Υπηρεσία· '-' = καμία). Δική σου στήλη κωλυομένων (lists.hkCols, 'kol') δεκτή όσο υπάρχει
-type OwnCols = { hkCols?: { key: string; name: string; grp: string; short?: string }[] };
+type OwnCols = { hkCols?: { key: string; name: string; grp: string; short?: string }[]; stepCol?: string };
 const ownKol = (k: string | undefined, lists?: OwnCols | null) => !!k && !!lists?.hkCols?.some(x => x.key === k && x.grp === 'kol' && x.name?.trim());
 export const kolColOf = (s: { hkCol?: string }, lists?: OwnCols | null): string => (s.hkCol === KOL_NO_COL ? KOL_NO_COL : KOL_COLS.some(x => x[0] === s.hkCol) || ownKol(s.hkCol, lists) ? s.hkCol! : KOL_DEFAULT_COL);
 // Η στήλη της ΗΚΑΙ που μετρά πραγματικά, null όταν δεν μπαίνει σε καμία
@@ -776,6 +777,10 @@ export const kolColsOf = (lists?: OwnCols | null): [string, string][] => [...KOL
 // Η στήλη της ΗΚΑΙ για όποιον έχει ΣΤΕΠ (Michael, 29/10: κωλυόμενος αυτόματα, «πουθενά» για τώρα). null = δεν μετρά σε καμία στήλη (μόνο στη Δύναμη
 // και στο Σήμερα)· κλειδί των KOL_COLS ('ey', 'yp'…) = μπαίνει σε εκείνη τη στήλη της ΗΚΑΙ ως κωλυόμενος. Μία γραμμή για να αλλάξει.
 export const STEP_COL = null as string | null;
+// Λ1: «Στήλη ΗΚΑΙ για ΣΤΕΠ» στις Ρυθμίσεις (lists.stepCol): κλειδί στήλης κωλυομένων (βασικής ή δικής σου)· λείπει ή άκυρο (π.χ. σβήστηκε η στήλη) = dflt (τώρα πουθενά)
+export const stepColOf = (lists?: OwnCols | null, dflt: string | null = STEP_COL): string | null => {
+  const c = lists?.stepCol; return c && kolColsOf(lists).some(x => x[0] === c) ? c : dflt;
+};
 // Προηγούμενες υπηρεσίες ανά είδος (+ πόσες σε ΣΚ/αργία), γραμμένες με το χέρι
 export type Baseline = Partial<Record<DutyKind, number>> & { hol?: number };
 // Ό,τι στην ΗΚΑΙ δεν βγαίνει από την εφαρμογή: αριθμοί ανά βαθμό και στήλη, και κείμενα της πίσω σελίδας

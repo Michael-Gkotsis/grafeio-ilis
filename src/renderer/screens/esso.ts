@@ -3,9 +3,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { html, Alert, Badge, Button, Why, Card, Dialog, Segmented, useToast } from '../ui';
 import { useNav, useStore } from '../store';
 import { ESSO_SERIES, currentEsso, essoName, nextEsso, parseEsso, type Esso, type EssoSeries } from '../../shared/esso';
-import { dmy } from '../../shared/dates';
+import { MONTHS, dmy } from '../../shared/dates';
+import { Select } from '../select';
 import { newStem } from '../../shared/fileNames';
-import { dischargeLabel, daysToDischarge, essoDischarge, essoRows, isUnit } from '../../shared/mode';
+import { dischargeLabel, daysToDischarge, ESSO_MONTH, essoDischarge, essoMonthsOf, essoRows, isUnit } from '../../shared/mode';
 import type { EssoArchiveInfo, EssoInfo, EssoResult, ImportPreview } from '../../shared/api';
 import { UNIT_KINDS, reportOf, unitKindOf, unitSettingsFor, type UnitKind, HK } from '../../shared/unit';
 import { UnitKindField } from './hkrows';
@@ -27,19 +28,27 @@ function EssoFields({ v, onChange, id }: P) {
 
 // Λειτουργία μονάδας: οι ΕΣΣΟ που υπάρχουν στη δύναμη, με πόσοι είναι μέσα/έξω και πότε απολύονται περίπου
 function UnitEssoTable() {
-  const { state, today } = useStore(); const nav = useNav();
+  const { state, run, today } = useStore(); const nav = useNav();
   const rows = useMemo(() => essoRows(state.people), [state.people]);
+  const em = essoMonthsOf(state.settings);
+  // Λ4: μήνας κατάταξης ανά σειρά (αλλάζει αμέσως, με αναίρεση)· στις Ρυθμίσεις μένουν μόνο όσες άλλαξες
+  const setMonth = (s: EssoSeries, m: number) => {
+    const cur = { ...(state.settings.essoMonth || {}) }; if (m === ESSO_MONTH[s]) delete cur[s]; else cur[s] = m;
+    return run({ t: 'setSettings', settings: { essoMonth: Object.keys(cur).length ? cur : undefined }, text: 'μήνας κατάταξης ' + s + '΄ ΕΣΣΟ: ' + MONTHS[m - 1] }, false);
+  };
   const [dis, setDis] = useState<string | null>(null);
   const noEsso = state.people.filter(p => p.active && !parseEsso(p.essos)).length;
   return html`<${Card} title="ΕΣΣΟ στη μονάδα">
     ${rows.length ? html`<table className="legend"><thead><tr><th>ΕΣΣΟ</th><th>Σε δύναμη</th><th>Εκτός δύναμης</th><th>Απόλυση περίπου</th><th></th></tr></thead><tbody>
-      ${rows.map(r => { const d = essoDischarge(r.esso), n = daysToDischarge(d, today);
+      ${rows.map(r => { const d = essoDischarge(r.esso, 12, em), n = daysToDischarge(d, today);
         return html`<tr key=${r.txt}><td className="nw"><b>${r.txt}</b></td><td>${r.active}</td><td>${r.inactive}</td>
           <td>${dischargeLabel(d)}${n >= 0 && n <= 30 && html` <${Badge} tone="warn">σε ${n} ${n === 1 ? 'μέρα' : 'μέρες'}<//>`}${n < 0 && r.active > 0 && html` <${Badge} tone="bad">πέρασε<//>`}</td>
           <td><${Button} size="sm" variant="outline" disabled=${!r.active} why=${r.active ? '' : 'Κανείς δεν είναι σε δύναμη'} onClick=${() => nav.go('people', { filter: 'esso:' + r.txt })} data-tip="Δυναμολόγιο, μόνο αυτή η ΕΣΣΟ">Ποιοι<//><${Button} size="sm" variant="outline" disabled=${!r.active} why=${r.active ? '' : 'Κανείς δεν είναι σε δύναμη'} onClick=${() => setDis(r.txt)}>Απόλυση ΕΣΣΟ…<//></td></tr>`; })}</tbody></table>`
       : html`<p className="note" style=${{ margin: 0 }}>Κανείς από τους στρατιώτες δεν έχει ΕΣΣΟ στην καρτέλα του.</p>`}
     ${noEsso > 0 && html`<p className="note">${noEsso} ${noEsso === 1 ? 'στρατιώτης σε δύναμη δεν έχει' : 'στρατιώτες σε δύναμη δεν έχουν'} ΕΣΣΟ στην καρτέλα τους.</p>`}
-    <p className="note">Η απόλυση βγαίνει από τον μήνα κατάταξης κάθε σειράς (Α΄ Φεβρουάριος, Β΄ Μάιος, Γ΄ Αύγουστος, Δ΄ Νοέμβριος) και 12 μήνες μετά. Είναι ενδεικτική: για όσους κάνουν μικρότερη θητεία ισχύει η ημερομηνία που θα ορίσεις εσύ.</p>
+    <div className="field-row" style=${{ alignItems: 'flex-end' }}>${ESSO_SERIES.map(s => html`<div className="field" key=${s} style=${{ flex: 'none' }}><label className="field__label" htmlFor=${'em-' + s}>Μήνας κατάταξης ${s}΄</label>
+      <${Select} id=${'em-' + s} className="ui-select" value=${String(em[s])} onChange=${(e: any) => setMonth(s, +e.target.value)}>${MONTHS.map((n, i) => html`<option key=${i} value=${String(i + 1)}>${n}${i + 1 === ESSO_MONTH[s] ? ' (προεπιλογή)' : ''}</option>`)}<//></div>`)}</div>
+    <p className="note">Η απόλυση βγαίνει από τον μήνα κατάταξης κάθε σειράς (προεπιλογή: Α΄ Φεβρουάριος, Β΄ Μάιος, Γ΄ Αύγουστος, Δ΄ Νοέμβριος· τον αλλάζεις παραπάνω) και 12 μήνες μετά. Είναι ενδεικτική: για όσους κάνουν μικρότερη θητεία ισχύει η ημερομηνία που θα ορίσεις εσύ.</p>
     ${dis && html`<${DischargeDialog} esso=${dis} onClose=${() => setDis(null)}/>`}
   <//>`;
 }

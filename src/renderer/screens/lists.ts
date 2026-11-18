@@ -12,13 +12,15 @@ import { requestLeave } from '../pending';
 import { collator, normGreek, upper } from '../../shared/text';
 import { CADRE_ABS, TYPES, type Person, type TypeKey } from '../../shared/domain';
 import { OWN_COL_TAG, hkColsOf, leaveColOpts, LEAVE_NO_COL, LIST_BASE, LIST_NAME, MED_LIKE, cadreAbsOf, cadreLeaveKey, guessHk, hkCadreRows, hkRowsOf, siUnarmed, itemKey, itemName, leaveCol, leaveEffect, leaveKey, leaveNameKey, listRows, rankTxt, weaponBack, type LeaveText, type ListId, type ListItem, type ListRow, type UserLists } from '../../shared/ranks';
+import { PLAN_CODE_MAX, planCode, planCodeSet } from '../../shared/cadrePlan';
 import { cadreLeaveHk, hkRange, leaveDest, leaveHk } from '../../shared/hkaiText';
 import { HK_A, HK_K, hkRankOf, personMap } from '../../shared/rules';
 import { hkRowLabel, HK } from '../../shared/unit';
 import { punAcc, punMax } from '../../shared/punish';
 
-const IDS: ListId[] = ['soldierRanks', 'cadreRanks', 'origins', 'specs', 'religions', 'medKinds', 'punKinds', 'leaveKinds', 'cadreAbs', 'weaponTypes', 'weaponOut', 'siUnarmed', 'subUnits'];
+const IDS: ListId[] = ['soldierRanks', 'cadreRanks', 'origins', 'specs', 'religions', 'medKinds', 'punKinds', 'leaveKinds', 'cadreAbs', 'weaponTypes', 'weaponOut', 'siUnarmed', 'subUnits', 'moveWhys'];
 const HELP = (): Record<ListId, string> => ({
+  moveWhys: 'Στο «Λόγος» της Κίνησης δύναμης (καρτέλα στρατιώτη, λειτουργία μονάδας). Οι βασικοί (Μετάθεση, Απόσπαση, Απόλυση) μένουν πάντα· ό,τι γράφεις στο «Άλλο…» μπορεί να μπει εδώ.',
   religions: 'Στο πεδίο «Θρήσκευμα» της καρτέλας στοιχείων (στρατιώτη και στελέχους), ως φίλτρο στο Προσωπικό και στα Έντυπα και ως στήλη στα Έντυπα. Δεν επηρεάζει υπηρεσίες, έξοδο ή ΗΚΑΙ. Πρόσθεσε ό,τι χρειάζεσαι, π.χ. «Ορθόδοξος Μουσουλμάνος»· ό,τι κρύψεις δεν προτείνεται πια, αλλά μένει σε όσους το έχουν.',
   subUnits: 'Μόνο στη λειτουργία μονάδας. Στο πεδίο «Λόχος / Ίλη» του στρατιώτη (νέος στρατιώτης, Γρήγορη εισαγωγή, καρτέλα) και στο Δυναμολόγιο, όπου υπάρχει στήλη και φίλτρο. Γράψε τα ονόματα όπως τα θες, π.χ. 1ος ΛΟΧΟΣ, 4η ΙΛΗ. Με τα βέλη αλλάζει η σειρά, με το «Μετονομασία» αλλάζει το όνομα και στους στρατιώτες που το έχουν. Όποιο το έχει κάποιος δεν σβήνεται, μόνο κρύβεται.',
   soldierRanks: 'Στη φόρμα στρατιώτη και στο dropdown «Βαθμός» του Δυναμολογίου. Κάθε δικός σου βαθμός λέει σε ποια γραμμή της ' + HK() + ' μετρά.',
@@ -88,6 +90,7 @@ export function ListsCard() {
     else if (id === 'cadreAbs') state.cadreAbs.forEach(a => add(a.kind, undefined, cName(cm.get(a.cid))));
     else if (id === 'punKinds' || id === 'leaveKinds' || id === 'medKinds') { const ok = (t: TypeKey) => (id === 'punKinds' ? t === 'PUN' : id === 'leaveKinds' ? t === 'LEAVE' : MED_LIKE.includes(t)); state.statuses.forEach(x => { if (ok(x.type)) add(x.kind || '', x.pid); }); }
     else if (id === 'weaponTypes') state.people.forEach(p => add(p.wtype, p.id));
+    else if (id === 'moveWhys') state.people.forEach(p => (p.moves || []).forEach(m => add(m.why, p.id)));
     else if (id === 'weaponOut') (state.weaponLog || []).forEach(w => add(w.reason, w.pid));
     else if (id === 'subUnits') state.people.forEach(p => add(p.sub, p.id));
     else if (id === 'religions') { state.people.forEach(p => add(p.religion, p.id)); state.cadreList.forEach(c => add(c.religion, undefined, cName(c))); }
@@ -159,6 +162,14 @@ export function ListsCard() {
   const setNoteOf = (r: ListRow, on: boolean) => save(withList(u => { u.add = u.add.map(x => { if (itemKey(x.name) !== itemKey(r.name)) return x; const y: ListItem = { ...x, note: true }; if (on) delete y.warn; else { delete y.note; delete y.noteBadge; delete y.noteXl; } return y; }); }), r.name + ': ' + (on ? 'μόνο σημείωση' : 'όχι πια μόνο σημείωση'));
   const setNoteFlag = (r: ListRow, f: 'noteBadge' | 'noteXl', on: boolean) => save(withList(u => { u.add = u.add.map(x => { if (itemKey(x.name) !== itemKey(r.name)) return x; const y: ListItem = { ...x, [f]: true }; if (!on) delete y[f]; return y; }); }), r.name + ': ' + (f === 'noteBadge' ? (on ? 'φαίνεται και σαν σήμα στις οθόνες' : 'δεν φαίνεται σαν σήμα') : (on ? 'γράφεται και στο Excel ΕΑ-ΕΥ' : 'δεν γράφεται στο Excel ΕΑ-ΕΥ')));
   const setCodeOf = (r: ListRow, v: string) => { const c = v.trim().toUpperCase(); if (c === (r.code || '')) return; if (!codeOk(c)) { setErr('Ο κωδικός του «' + r.name + '» θέλει τελεία ή κάθετο, π.χ. Ε.Γ.'); return; } setErr(null); setRow(r, 'code', c, c ? 'κωδικός ' + c : 'κωδικός του βασικού'); };
+  // Λ5: «Κωδικός στο Πρόγραμμα αδειών» ανά κατάσταση στελέχους (βασική ή δική σου)· κενό = προεπιλεγμένος
+  const planKeyOf = (r: ListRow) => cadreAbsOf(r.name, lists)?.[0] || r.name;
+  const setPlanCode = (r: ListRow, v: string) => {
+    const k = planKeyOf(r), c = planCodeSet({ planCodes: { [k]: v } }, k); if (c === planCodeSet(lists, k)) return;
+    const all = { ...(lists.planCodes || {}) }; if (c) all[k] = c; else delete all[k];
+    const next: UserLists = { ...lists }; if (Object.keys(all).length) next.planCodes = all; else delete next.planCodes;
+    return save(next, r.name + ': κωδικός στο Πρόγραμμα αδειών ' + (c ? '«' + c + '»' : 'αυτόματος'));
+  };
   const setBackOf = (r: ListRow, v: string) => { const b = v.trim().replace(/\s+/g, ' ').toUpperCase(); if (b === (r.back || '')) return; setRow(r, 'back', b, 'εισαγωγή ' + (b || weaponBack(r.name))); };
   const info = (r: ListRow) => {
     if (id === 'weaponOut') return 'εισαγωγή: ' + weaponBack(r.name, lists);
@@ -195,9 +206,10 @@ export function ListsCard() {
       ${id === 'subUnits' && !r.builtin && (ren?.key === key(r.name)
         ? html`<input className="ui-input" style=${{ width: '200px' }} aria-label=${'Νέο όνομα για ' + r.name} data-autofocus="" value=${ren!.name} onChange=${(e: any) => setRen({ key: ren!.key, name: e.target.value })} onKeyDown=${(e: any) => { if (e.key === 'Enter') renameSub(r); if (e.key === 'Escape') setRen(null); }}/><${Button} size="sm" onClick=${() => renameSub(r)}>Αποθήκευση<//><${Button} size="sm" variant="ghost" onClick=${() => setRen(null)}>Άκυρο<//>`
         : html`<${Button} size="sm" variant="ghost" aria-label=${'Άνοδος ' + r.name} onClick=${() => moveSub(r, -1)}>▲<//><${Button} size="sm" variant="ghost" aria-label=${'Κάθοδος ' + r.name} onClick=${() => moveSub(r, 1)}>▼<//><${Button} size="sm" variant="ghost" onClick=${() => setRen({ key: key(r.name), name: r.name })}>Μετονομασία<//>`)}
+      ${id === 'cadreAbs' && !r.hidden && html`<input key=${r.name + '|' + planCodeSet(lists, planKeyOf(r))} className="ui-input" style=${{ width: '90px' }} maxLength=${PLAN_CODE_MAX} aria-label=${'Κωδικός στο Πρόγραμμα αδειών: ' + r.name} data-tip="Ο σύντομος κωδικός της κατάστασης στο Πρόγραμμα αδειών (οθόνη και Excel). Κενό = αυτόματος" placeholder=${planCode(planKeyOf(r), { lists: { ...lists, planCodes: undefined } as UserLists, cadreLeave: state.settings.cadreLeave }).code} defaultValue=${planCodeSet(lists, planKeyOf(r))} onBlur=${(e: any) => setPlanCode(r, e.target.value)}/>`}
       <span style=${{ flex: 1 }}></span>
       ${id !== 'siUnarmed' && (usedN(r) ? html`<button type="button" className="linkish lists__n" aria-expanded=${who === key(r.name)} data-tip=${who === key(r.name) ? 'Κλείσε' : 'Δες ποιοι'} onClick=${() => setWho(who === key(r.name) ? null : key(r.name))}>${(STAT_IDS.includes(id) ? 'Δηλώθηκε σε ' : 'Το έχουν ') + usedN(r)}</button>` : html`<span className="muted lists__n">Κανείς</span>`)}
-      ${id === 'medKinds' && r.builtin ? html`<span className="muted" style=${{ fontSize: '12px' }}>βασικός τύπος</span>`
+      ${(id === 'medKinds' || id === 'moveWhys') && r.builtin ? html`<span className="muted" style=${{ fontSize: '12px' }}>${id === 'moveWhys' ? 'βασικός λόγος' : 'βασικός τύπος'}</span>`
         : r.builtin || isUsed(r)
         ? html`<${Button} size="sm" variant="ghost" onClick=${() => toggle(r)} data-tip=${id === 'siUnarmed' ? (r.hidden ? 'Να ισχύει ξανά' : 'Να μη θεωρείται άοπλος όποιος έχει αυτό το Σ.Ι.') : r.hidden ? 'Να προτείνεται ξανά' : 'Να μην προτείνεται στις φόρμες' + (id === 'soldierRanks' || id === 'origins' || id === 'specs' ? ' και στο Excel' : '')}>${id === 'siUnarmed' ? (r.hidden ? 'Να ισχύει' : 'Να μην ισχύει') : r.hidden ? 'Εμφάνιση' : 'Απόκρυψη'}<//>`
         : html`<${Button} size="sm" variant="ghost" aria-label=${'Σβήσε ' + r.name} onClick=${() => remove(r)}>✕<//>`}
@@ -263,4 +275,4 @@ function WhoHas({ e }: { e?: { pids: Set<number>; names: Set<string> } }) {
   const ids = ps.map(p => p.id);
   return html`<div className="lists__who">${ps.map(p => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => nav.openPerson(p.id, ids)}>${rkShort(p)}${!p.active && html` <span className="muted">(εκτός)</span>`}</button>`)}${[...e.names].sort(collator.compare).map(n => html`<span key=${n} className="na">${n}</span>`)}</div>`;
 }
-const PH: Record<ListId, string> = { soldierRanks: 'π.χ. ΚΛΗΡ', cadreRanks: 'π.χ. ΣΜΧΟΣ', origins: 'π.χ. ΣΣΑΣ', specs: 'π.χ. ΠΝ', punKinds: 'π.χ. Επίπληξη', leaveKinds: 'π.χ. Γονική', cadreAbs: 'π.χ. Σχολείο', medKinds: 'π.χ. ΕΛ ΓΥΜΝ', siUnarmed: 'π.χ. Ι5', weaponTypes: 'π.χ. M1911', weaponOut: 'π.χ. ΦΡΟΥΡΑ', subUnits: 'π.χ. 1ος ΛΟΧΟΣ', religions: 'π.χ. Σιχ' };
+const PH: Record<ListId, string> = { soldierRanks: 'π.χ. ΚΛΗΡ', cadreRanks: 'π.χ. ΣΜΧΟΣ', origins: 'π.χ. ΣΣΑΣ', specs: 'π.χ. ΠΝ', punKinds: 'π.χ. Επίπληξη', leaveKinds: 'π.χ. Γονική', cadreAbs: 'π.χ. Σχολείο', medKinds: 'π.χ. ΕΛ ΓΥΜΝ', siUnarmed: 'π.χ. Ι5', weaponTypes: 'π.χ. M1911', weaponOut: 'π.χ. ΦΡΟΥΡΑ', subUnits: 'π.χ. 1ος ΛΟΧΟΣ', religions: 'π.χ. Σιχ', moveWhys: 'π.χ. ΝΟΣΟΚΟΜΕΙΟ' };

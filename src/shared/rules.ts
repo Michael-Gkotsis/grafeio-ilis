@@ -3,13 +3,13 @@ import { HK } from './unit';
 import { isUnit } from './mode';
 import { collator, upper } from './text';
 import { addDays, daysBetween, dm, dmy, greekHolidays, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
-import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, HK_A, HK_COL_KEY, absKeysOf, hkColsOf, isAbsCol, isKolCol, kolKeysOf, isAway, svcAbsent, svcColOf, svcDefault, isEpopOrigin, LEAVE_AWAY_NO_COL, LEAVE_NO_COL, leaveCol, leaveMode, leaveNameKey, live, medNote, medNoteXl, medWarns, notesOf, noDutyOf, originRow, statusLbl, type UserLists } from './ranks';
+import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, HK_COL_KEY, absKeysOf, hkColsOf, isAbsCol, isKolCol, kolKeysOf, isAway, svcAbsent, svcColOf, svcDefault, isEpopOrigin, LEAVE_AWAY_NO_COL, LEAVE_NO_COL, leaveCol, typeHkOf, leaveMode, leaveNameKey, live, medNote, medNoteXl, medWarns, notesOf, noDutyOf, originRow, statusLbl, type UserLists } from './ranks';
 import { siAllows, siIsUnarmed, siOf } from './si';
 import { STAT_ROWS, statDefault, statIsUnarmed, statNoOut, statOn, type StatCell } from './stat';
 import { backBy, hasTimes, mins } from './hours';
 import { dayTimes, leaveOut, outHeld } from './returns';   // κυκλική εξάρτηση: καλείται μέσα σε συναρτήσεις (returns.ts)
 import {
-  ADIK_TYPES, TYPES, TYPE_KEYS, RECORD_CATS, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, STEP_COL, kolColName, kolColOf, kolColsOf, kolHk, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
+  ADIK_TYPES, TYPES, TYPE_KEYS, RECORD_CATS, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, STEP_COL, stepColOf, kolColName, kolColOf, kolColsOf, kolHk, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
   KIND_NAME, type AppState, type CapKey, type Caps, type Phase, type Baseline, type Cadre, type CadreAbs, type CadreDuty, type DutyLog, type Person, type PersonRequest, type Post, type Skip, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
 } from './domain';
 
@@ -1406,7 +1406,8 @@ export function planStatusChange(s: AppState, cmd0: StatusCmd, today?: ISODate):
   else if (t.cat === 'abs') files.push({ fn: HK(), desc: 'Απόντες: ' + t.long + ' ' + rows(n) });
   else if (cmd.type === 'KOL') files.push({ fn: HK(), desc: cmd.minus ? (kolHk(cmd) ? 'Κωλυόμενοι: ' + kolColName(kolColOf(cmd)) + ' +' + n : 'Κωλυόμενος στη Δύναμη, όχι στην ΗΚΑΙ') : 'Μένει στους παρόντες: δεν μπαίνει στους κωλυόμενους' });
   // άγνοια/λιποταξία/αδικαιολόγητη απουσία: στήλη των απόντων, όχι των κωλυομένων
-  if (t.hkai && cmd.type !== 'PUN' && t.cat !== 'abs' && !isNote) files.push({ fn: HK(), desc: (HK_A.some(x => x[0] === t.hkai) && ADIK_TYPES.includes(cmd.type) ? 'Απόντες: ' : 'Κωλυόμενοι: ') + t.long + ' ' + rows(n) });
+  const tHk = typeHkOf(cmd.type, lists);   // η στήλη της κατάστασης (Ρυθμίσεις › Στήλη ΗΚΑΙ ανά κατάσταση)
+  if (tHk && cmd.type !== 'PUN' && t.cat !== 'abs' && !isNote) files.push({ fn: HK(), desc: (isAbsCol(tHk, lists) && ADIK_TYPES.includes(cmd.type) ? 'Απόντες: ' : 'Κωλυόμενοι: ') + t.long + ' ' + rows(n) });
   const keep = (x: Status) => splitOut(x, cmd.from, outCutTo(s, cmd), () => '').map(y => rangeTxt(y.from, y.to)).join(', ');
   if (cancels.length) files.push({ fn: 'Εξοδούχοι', warn: true, desc: 'Ακυρώνεται η έξοδος: ' + cancels.map(x => shortName(pm.get(x.pid)!) + ' (' + rangeTxt(x.from, x.to) + (keep(x) ? ', μένει ' + keep(x) : '') + ')').join(', ') + '. ' + (cmd.type === 'PUN' ? 'Ο τιμωρημένος' : t.label) + ' δεν βγαίνει έξοδο.' });
   files.push(...conflictFiles(s, conflicts));
@@ -1527,12 +1528,13 @@ export function svcAwayOf(s: AppState, ss: Status[], dc: DutyCol | undefined, da
 function soldierCol(s: AppState, ss: Status[], dc: DutyCol | undefined, date: ISODate, at: number, noCol?: Status[]): string | null {
   const lists = s.settings.lists;
   const abs = ss.find(x => isAway(x, lists) && TYPES[x.type].hkai);
-  if (abs) { const lc = abs.type === 'LEAVE' ? leaveCol(abs.kind, lists) : TYPES[abs.type].hkai!; if (lc === LEAVE_AWAY_NO_COL) noCol?.push(abs);   // απών στην εφαρμογή, σε καμία στήλη (Michael, 3/11)
+  if (abs) { const lc = abs.type === 'LEAVE' ? leaveCol(abs.kind, lists) : typeHkOf(abs.type, lists)!; if (lc === LEAVE_AWAY_NO_COL) noCol?.push(abs);   // απών στην εφαρμογή, σε καμία στήλη (Michael, 3/11)
     return lc === LEAVE_NO_COL || lc === LEAVE_AWAY_NO_COL ? null : lc; }
   const kol = kolMinus(ss, date, at, lists), kc = kol && (kol.type === 'LEAVE' ? leaveCol(kol.kind, lists) : kolHk(kol, lists));   // άδεια δικού σου είδους με στήλη κωλυομένων: σαν δήλωση κωλυόμενου με αφαίρεση (Michael, 3/11)   // hkCol '-' (Michael, 29/10): σαν να μην υπήρχε η δήλωση ως προς τη στήλη
   // υπηρεσία εκτός στρατοπέδου: μετρά απούσα μόνο αν δεν υπερισχύει κάτι άλλο (απουσία: επάνω, κωλυόμενος, ΣΤΕΠ)· αλλιώς όπως πάντα. Η έξοδος/ΔΝ δεν μετρά στην ΗΚΑΙ
   const duty = dc ? (svcAbsent(dc.col, lists) && (kol || stepOn(ss, date, at)) ? dc.def : dc.col) : undefined;
-  return kc ? kc : STEP_COL && stepOn(ss, date, at) ? STEP_COL : duty ? duty : ss.find(x => x.type === 'EY') ? 'ey' : ss.find(x => x.type === 'PUN') ? 'tim' : null;
+  const sc = stepColOf(lists, STEP_COL);
+  return kc ? kc : sc && stepOn(ss, date, at) ? sc : duty ? duty : ss.find(x => x.type === 'EY') ? typeHkOf('EY', lists)! : ss.find(x => x.type === 'PUN') ? typeHkOf('PUN', lists)! : null;
 }
 // Ε1 (Michael, 1/11: «παρών ως να φύγει»): άδεια, αναρρωτική ή τιμητική που ξεκινά τη μέρα με ώρα αναχώρησης μετά τη στιγμή m δεν μετρά ακόμα.
 // Στη μέτρηση της ΗΚΑΙ και στη Δύναμη/Σήμερα με την ώρα (statusesAt): οι υπηρεσίες, η έξοδος και το 3. ΑΔΕΙΕΣ μένουν όπως ήταν. Χωρίς ώρα αναχώρησης: απών όλη τη μέρα.
@@ -1639,7 +1641,7 @@ export function kolView(s: AppState, date: ISODate, at = hkMin(s.rules)): KolVie
     if (col && cols[col]) { cols[col].push(p); n++; }
     const km = kolMinus(ss, date, at, s.settings.lists), sp = km ? undefined : stepOn(ss, date, at);
     const k = km || sp || ss.find(x => x.type === 'KOL' && kolStarted(x, date, at));
-    if (k) man.push({ p, st: k, col: sp ? STEP_COL || '' : k.type === 'LEAVE' ? leaveCol(k.kind, s.settings.lists) : kolColOf(k, s.settings.lists), minus: !!(k.minus || sp || k.type === 'LEAVE') });
+    if (k) man.push({ p, st: k, col: sp ? stepColOf(s.settings.lists, STEP_COL) || '' : k.type === 'LEAVE' ? leaveCol(k.kind, s.settings.lists) : kolColOf(k, s.settings.lists), minus: !!(k.minus || sp || k.type === 'LEAVE') });
   }
   return { cols, n, man, minus: man.filter(x => x.minus), keep: man.filter(x => !x.minus) };
 }

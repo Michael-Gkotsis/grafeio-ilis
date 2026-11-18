@@ -39,7 +39,7 @@ export function optionsOf(base: readonly string[], seen: Iterable<string | null 
 // Λίστες που συμπληρώνει ο χρήστης (Ρυθμίσεις › Λίστες, Michael 13/10). Στις ρυθμίσεις μένουν μόνο οι προσθήκες
 // και όσα βασικά έκρυψε: οι βασικές λίστες είναι εδώ, οπότε χωρίς προσθήκες όλα μένουν όπως πριν.
 // ---------------------------------------------------------------------------
-export type ListId = 'soldierRanks' | 'cadreRanks' | 'origins' | 'specs' | 'punKinds' | 'leaveKinds' | 'cadreAbs' | 'medKinds' | 'siUnarmed' | 'weaponTypes' | 'weaponOut' | 'subUnits' | 'religions';
+export type ListId = 'soldierRanks' | 'cadreRanks' | 'origins' | 'specs' | 'punKinds' | 'leaveKinds' | 'cadreAbs' | 'medKinds' | 'siUnarmed' | 'weaponTypes' | 'weaponOut' | 'subUnits' | 'religions' | 'moveWhys';
 // hk: γραμμή της ΗΚΑΙ όπου μετρά ο βαθμός · col: στήλη της ΗΚΑΙ (άδεια, απουσία στελέχους· κενό = μόνο στη λίστα)
 // acc: πώς γράφεται η ποινή στο κείμενο («με δύο (02) ημέρες …») · max: ανώτατες ημέρες (προειδοποίηση)
 // like: βασικός τύπος ιατρικού (ΕΑ/ΕΥ/ΕΟ/ΕΑΡΒ): στην ΗΚΑΙ μετρά μόνο ο ΕΥ· υπηρεσίες και έξοδος στον πίνακα Καταστάσεων.
@@ -56,8 +56,14 @@ export interface UserList { add?: ListItem[]; hide?: string[] }
 // hkNames: άλλο όνομα για μια γραμμή (κλειδί → όνομα), π.χ. «Ίλαρχοι» → «Ίλαρχοι-Λοχαγοί»· το κλειδί δεν αλλάζει
 // leaveText: «Κείμενο στην ΗΚΑΙ» ανά είδος άδειας (1/11), κλειδί leaveKey: t = πώς γράφεται το είδος στο 3. ΑΔΕΙΕΣ και στο 5. ΑΙΤΗΣΕΙΣ
 // (κενό = αυτόματο), dest = γράφεται και η κατεύθυνση της άδειας («… ΜΕ ΚΑΤΕΥΘΥΝΣΗ ΚΟΡΙΝΘΟ»)
+// planCodes: «Κωδικός» στο Πρόγραμμα αδειών ανά κατάσταση στελέχους (κλειδί = ο κωδικός της κατάστασης, ή το όνομα της δικής σου)· λείπει = ο προεπιλεγμένος (cadrePlan.ts)
+// stepCol: «Στήλη ΗΚΑΙ για ΣΤΕΠ» (στήλη κωλυομένων· λείπει = πουθενά, domain.ts stepColOf)
+// typeCols: άλλη στήλη ΗΚΑΙ για βασική κατάσταση (μόνο όσες άλλαξες· λείπει = του TYPES, typeHkOf)
+// moveWhys (λίστα «Λόγοι κίνησης»): οι βασικοί (MOVE_WHYS) δεν σβήνονται ούτε κρύβονται· τους ξεχωρίζει η σταθερή τιμή, όχι η θέση
 export interface LeaveText { t?: string; dest?: boolean }
-export type UserLists = Partial<Record<ListId, UserList>> & { si?: SiConfig; stat?: StatConfig; hkRows?: HkRowDef[]; hkCols?: HkColDef[]; hkNames?: Record<string, string>; leaveText?: Record<string, LeaveText> };
+export type UserLists = Partial<Record<ListId, UserList>> & { si?: SiConfig; stat?: StatConfig; hkRows?: HkRowDef[]; hkCols?: HkColDef[]; hkNames?: Record<string, string>; leaveText?: Record<string, LeaveText>; planCodes?: Record<string, string>; stepCol?: string; typeCols?: Partial<Record<TypeKey, string>> };
+// Λόγοι κίνησης δύναμης (Λειτουργία μονάδας): οι σταθερές τιμές που γράφονται στο Move.why· η Απόλυση και η Απόσπαση τις ξέρουν με αυτές
+export const MOVE_WHYS = ['ΜΕΤΑΘΕΣΗ', 'ΑΠΟΣΠΑΣΗ', 'ΑΠΟΛΥΣΗ'];
 export const LIST_BASE: Record<ListId, readonly string[]> = {
   soldierRanks: SOLDIER_RANKS, cadreRanks: CADRE_RANKS, origins: ORIGINS, specs: SPECS, punKinds: PUN_KINDS, leaveKinds: LEAVE_KINDS,
   cadreAbs: CADRE_ABS.map(x => x[1]),   // στις απουσίες στελεχών οι βασικές έχουν κωδικό (ka, an…)· οι δικές σου το όνομά τους
@@ -66,13 +72,14 @@ export const LIST_BASE: Record<ListId, readonly string[]> = {
   weaponTypes: WEAPON_TYPES,
   weaponOut: WEAPON_OUT.map(x => x[0]),
   subUnits: [],   // Λόχοι / Ίλες της μονάδας: μόνο δικές σου (λειτουργία μονάδας)
-  religions: RELIGIONS
+  religions: RELIGIONS,
+  moveWhys: MOVE_WHYS
 };
-export const LIST_NAME: Record<ListId, string> = { soldierRanks: 'Βαθμοί στρατιωτών', cadreRanks: 'Βαθμοί στελεχών', origins: 'Προελεύσεις', specs: 'Ο/Σ (όπλα και σώματα)', punKinds: 'Είδη ποινής', leaveKinds: 'Είδη άδειας', cadreAbs: 'Καταστάσεις στελεχών', medKinds: 'Ιατρικά', siUnarmed: 'Σ.Ι. άοπλων', weaponTypes: 'Τύποι όπλων', weaponOut: 'Λόγοι εξόδου όπλου', subUnits: 'Λόχοι / Ίλες', religions: 'Θρησκεύματα' };
+export const LIST_NAME: Record<ListId, string> = { moveWhys: 'Λόγοι κίνησης', soldierRanks: 'Βαθμοί στρατιωτών', cadreRanks: 'Βαθμοί στελεχών', origins: 'Προελεύσεις', specs: 'Ο/Σ (όπλα και σώματα)', punKinds: 'Είδη ποινής', leaveKinds: 'Είδη άδειας', cadreAbs: 'Καταστάσεις στελεχών', medKinds: 'Ιατρικά', siUnarmed: 'Σ.Ι. άοπλων', weaponTypes: 'Τύποι όπλων', weaponOut: 'Λόγοι εξόδου όπλου', subUnits: 'Λόχοι / Ίλες', religions: 'Θρησκεύματα' };
 // ίδιο κλειδί για «Ε.Π.Ο.Π στρ» και «ΕΠΟΠ ΣΤΡ»: χωρίς τόνους, τελείες και διπλά κενά, λατινικά που μοιάζουν → ελληνικά
 export const itemKey = (v: string) => normGreek(v).replace(/\./g, '').replace(/\s+/g, ' ').trim();
 // βαθμοί, προελεύσεις, Ο/Σ και ιατρικά με κεφαλαία, όπως στα Excel· είδη ποινής, άδειας, απουσίας όπως γράφτηκαν
-const UPPER: ListId[] = ['soldierRanks', 'cadreRanks', 'origins', 'specs', 'medKinds', 'siUnarmed', 'weaponTypes', 'weaponOut'];
+const UPPER: ListId[] = ['soldierRanks', 'cadreRanks', 'origins', 'specs', 'medKinds', 'siUnarmed', 'weaponTypes', 'weaponOut', 'moveWhys'];
 export const itemName = (v: string, id: ListId = 'specs') => { const t = v.trim().replace(/\s+/g, ' '); return UPPER.includes(id) ? t.toUpperCase() : t; };
 export interface ListRow extends ListItem { builtin: boolean; hidden: boolean }
 // Όλες οι γραμμές μιας λίστας για την κάρτα: πρώτα οι βασικές, μετά οι δικές σου με τη σειρά που μπήκαν
@@ -243,6 +250,19 @@ export const svcAbsent = (c: string | undefined | null, lists?: Pick<UserLists, 
 export const svcDefault = (kind: string): string => (kind === 'mg' ? 'mag' : 'yp');
 // η στήλη της ΗΚΑΙ ενός ατόμου σε υπηρεσία του είδους kind με hkCol
 export const svcColOf = (kind: string, hkCol?: string, lists?: Pick<UserLists, 'hkCols'> | null): string => svcColOk(hkCol, lists) || svcDefault(kind);
+// Λ2: η στήλη της ΗΚΑΙ μιας βασικής κατάστασης: ό,τι διάλεξες στις Ρυθμίσεις (lists.typeCols), αλλιώς του TYPES. Μόνο στήλη της ίδιας ομάδας
+// (κωλυόμενοι ή απόντες, βασική ή δική σου)· άκυρη (π.χ. σβήστηκε η δική σου στήλη) = η προεπιλογή. undefined = η κατάσταση δεν έχει στήλη
+export function typeHkOf(type: TypeKey, lists?: Pick<UserLists, 'hkCols' | 'typeCols'> | null): string | undefined {
+  const def = TYPES[type].hkai, ov = lists?.typeCols?.[type];
+  if (!def || !ov || ov === def) return def;
+  return (isAbsCol(def, lists) ? isAbsCol(ov, lists) : isKolCol(def, lists) && isKolCol(ov, lists)) ? ov : def;
+}
+// οι στήλες που μπορεί να πάρει μια βασική κατάσταση: της ομάδας της προεπιλογής της (απόντες ή κωλυόμενοι), βασικές και δικές σου
+export function typeHkChoices(type: TypeKey, lists?: Pick<UserLists, 'hkCols'> | null): [string, string][] {
+  const def = TYPES[type].hkai; if (!def) return [];
+  const abs = isAbsCol(def, lists), own = hkColsOf(lists).filter(x => x.grp === (abs ? 'abs' : 'kol'));
+  return [...(abs ? HK_A : SVC_KOL_COLS).map(([k, , full]) => [k, full] as [string, string]), ...own.map(x => [x.key, x.name + OWN_COL_TAG] as [string, string])];
+}
 // Άδεια → στήλη της ΗΚΑΙ: η «Ειδική» στις Ειδικές (Michael, 13/10), οι άλλες βασικές στις Κανονικές. Τα δικά σου είδη διαλέγουν μόνα τους (Michael, 3/11):
 // στήλη απόντων (απών παντού), στήλη κωλυομένων (κωλυόμενος: αφαιρείται από τους παρόντες, χωρίς υπηρεσία και έξοδο) ή '-' (LEAVE_NO_COL, «Πουθενά»:
 // παρών παντού, δεν μετρά σε στήλη· υπηρεσίες και έξοδος μόνο αν το ζητήσεις: ListItem.duty / out)
@@ -273,7 +293,7 @@ export function leaveCol(kind: string | undefined, lists?: UserLists): string {
   const k = itemKey(kind || '');
   if (k === itemKey('Ειδική') || k === itemKey('Ειδική άδεια')) return 'eid';
   const own = ownLeave(kind, lists)?.col;
-  return own && (LEAVE_COLS.some(c => c[0] === own) || !!hkColOwn(own, lists)) ? own : 'ka';
+  return own && (LEAVE_COLS.some(c => c[0] === own) || !!hkColOwn(own, lists)) ? own : typeHkOf('LEAVE', lists)!;
 }
 // Πώς μετρά μια άδεια (Michael, 3/11): 'away' απών (τα βασικά και όσα έχουν στήλη απόντων), 'kol' κωλυόμενος, 'present' παρών. undefined: δεν είναι άδεια.
 // Ρωτιέται για κάθε άτομο σε κάθε μέτρηση: κρατιέται ανά είδος και ανά τις δικές σου Λίστες
