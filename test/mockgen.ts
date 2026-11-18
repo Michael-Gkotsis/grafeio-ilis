@@ -850,3 +850,124 @@ export function genUnitGrid(seed: number, people: Person[], seatsOf: Record<stri
   for (let i = 0; i < out.length; i++) if (!rows[i]) out[i] = new Array(width).fill(null);
   return { sheet: { name: 'ΥΠΗΡΕΣΙΕΣ', rows: out, fx }, ym, days: nd, people: ppl, rowOf, dayCol0: d1, cells, vocab, flags: [...flags, own ? 'own-codes' : 'our-codes', 'days' + nd], heads: Object.fromEntries(L.filter(x => x.role).map(x => [x.role!, x.h])), sumCols: sums.map((_s, j) => d1 + nd + j), first, last: first + ppl.length - 1 };
 }
+
+// ------------------------------------------------------------------ λίστες ΑΛΛΗΣ μονάδας (3β)
+// Κατάσταση υπηρεσιών ΣΕ ΛΙΣΤΑ: λέξη θέσης στην πρώτη γραμμή κάθε μπλοκ, νούμερα, βάρδιες Φ/Κ, προτυπωμένος βαθμός, επικεφαλίδα που μπορεί να είναι
+// μετατοπισμένη, διαχωριστικές κενές γραμμές, άγνωστες θέσεις, τίτλος με παλιά ημερομηνία, υπογραφές. Αλήθεια: ποιο μπλοκ είναι ποια υπηρεσία της εφαρμογής.
+export interface SvcTargetIn { value: string; label: string; kind: string; groups: number[] }   // groups: πόσες θέσεις έχει κάθε νούμερο
+export interface SvcMockBlock { label: string; truth: string | null; sureOk: boolean; rows: { r: number; g: number; j: number }[] }   // truth: υπηρεσία της εφαρμογής (null = δεν είναι· δεν γράφεται ποτέ)
+export interface SvcMock { buf: Buffer; sheet: string; blocks: SvcMockBlock[]; rankCol: number; nameCol: number; headRank: number; headName: number; titleRow: number; sigRow: number; foreign: { r: number; c: number }[]; filled: { r: number; c: number; text: string }[]; flags: string[] }
+const LABELS: Record<string, string[]> = { th: ['ΘΑΛΑΜΟΦΥΛΑΚΕΣ', 'ΘΑΛΑΜΟΦΥΛΑΚΑΣ', 'Θαλαμοφύλακες'], op: ['ΟΠΛΟΦΥΛΑΚΕΣ', 'Οπλοφύλακες'], mg: ['ΜΑΓΕΙΡΕΙΑ', 'ΜΑΓΕΙΡΟΙ'], sk: ['ΣΚΟΠΟΙ', 'ΥΠΗΡΕΣΙΑ ΣΚΟΠΟΙ'], tae: ['ΤΑΕ'], ly: ['Λ/Υ'], dy: ['Δ/Υ'] };
+const LOOSE: Record<string, string[]> = { th: ['ΘΑΛΑΜΟΦΥΛΑΚΕΣ ΙΛΩΝ', 'ΘΑΛΑΜΟΦΥΛΑΚΕΣ Δ/Σ'], mg: ['ΜΑΓΕΙΡΑΣ'], sk: ['ΥΠΗΡΕΣΙΑ ΣΚΟΠΟΙ ΠΥΛΗΣ'] };
+const UNKNOWN_POSTS = ['ΕΣΤΙΑΤΟΡΑΣ', 'ΗΣΑ', 'ΚΕΠΙΚ', 'ΚΥΛΙΚΕΙΟ', 'ΔΑΣΟΠΕΡΙΠΟΛΟ', 'ΑΠΕΣΠΑΣΜΕΝΟΙ', 'ΕΕΑΣ', 'ΑΥΔΜ', 'ΠΕΡΙΠ. ΣΤΡΑΤΟΠΕΔΟΥ'];
+const PLACEHOLDER_RANKS = ['ΣΤΡ(ΤΘ)', 'ΣΤΡ', 'ΔΝΕΑΣ', 'ΑΝΘΣΤΗΣ', 'ΕΠΟΠ ΑΛΧΙΑΣ'];
+export function genSvcList(seed: number, targets: SvcTargetIn[], o: { fillNames?: boolean } = {}): SvcMock {
+  const r = rng(seed * 7919 + 17); const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('ΥΠΗΡΕΣΙΕΣ'); const flags: string[] = [];
+  const nameCol = pick(r, [5, 5, 6]), rankCol = 3, shiftCol = 4;
+  const put = (rr: number, cc: number, v: string | number | null) => { ws.getCell(rr + 1, cc + 1).value = v; };
+  // επικεφαλίδα: στη θέση της, ή μετατοπισμένη (το όνομα στη στήλη του βαθμού, ο βαθμός μία αριστερά: όπως τα συγχωνευμένα κελιά των αρχείων)
+  const mis = chance(r, 0.4); const headRank = mis ? rankCol + 1 : rankCol, headName = mis ? nameCol + 1 : nameCol; if (mis) flags.push('header-shifted');
+  const titleRow = int(r, 2, 4);
+  put(titleRow, 0, 'ΚΑΤΑΣΤΑΣΗ ΥΠΗΡΕΣΙΩΝ ΤΗΣ ' + int(r, 1, 28) + ' ΝΟΕΜΒΡΙΟΥ 2026'); ws.mergeCells(titleRow + 1, 1, titleRow + 1, 7);
+  const hr = titleRow + 1;
+  put(hr, 1, pick(r, ['Νο', 'Α/Α'])); put(hr, headRank, 'ΒΑΘΜΟΣ'); put(hr, headName, 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ'); if (mis) ws.mergeCells(hr + 1, headRank + 1, hr + 1, headRank + 2);
+  const blocks: SvcMockBlock[] = []; const foreign: SvcMock['foreign'] = []; const filled: SvcMock['filled'] = [];
+  let row = hr + 1;
+  const pool = shuffle(r, targets).slice(0, int(r, 1, targets.length));
+  type Item = { label: string; t: SvcTargetIn | null; sureOk: boolean };
+  const items: Item[] = [];
+  for (const t of pool) {
+    const dup = t.kind === 'th' && pool.filter(x => x.kind === 'th').length > 1;
+    const kindWord = t.value.startsWith('blk:') && ['th', 'op', 'mg', 'sk', 'tae'].includes(t.kind);
+    const loose = kindWord && !dup && chance(r, 0.3) && !!LOOSE[t.kind];
+    const label = t.value.startsWith('post:') ? pick(r, LABELS[t.value.slice(5)] || [t.label]) : !kindWord ? t.label : loose ? pick(r, LOOSE[t.kind]) : pick(r, LABELS[t.kind] || [t.label]);
+    items.push({ label, t, sureOk: !loose && !dup });
+  }
+  for (const u of shuffle(r, UNKNOWN_POSTS).slice(0, int(r, 1, 4))) items.push({ label: u, t: null, sureOk: false });
+  const order = shuffle(r, items);
+  // ίδιες λέξεις: το πρώτο μπλοκ του ίδιου είδους της εφαρμογής παίρνει την πρώτη υπηρεσία (όπως τη σειρά τους στην εφαρμογή) ή αντίστροφα
+  for (const it of order) {
+    const rows: SvcMockBlock['rows'] = []; const t = it.t;
+    const nG = t ? Math.max(1, t.groups.length + pick(r, [0, 0, 0, -1, 1])) : int(r, 1, 3);
+    const single = !t;
+    for (let g = 0; g < nG; g++) {
+      const per = t ? (t.groups[g] ?? 1) : 1;
+      for (let j = 0; j < per; j++) {
+        const rr = row++; rows.push({ r: rr, g, j });
+        if (rr === rows[0].r) put(rr, 0, it.label + (chance(r, 0.2) ? ' ' : ''));
+        if (per === 1 || j === 0) put(rr, 1, single && nG === 1 ? null : (g + 1) + 'ο');
+        if (chance(r, 0.6)) put(rr, 2, pick(r, ['06:00-09:00/15', '24 ΩΡΗ', '12:00-15:00/21']));
+        if (per > 1) put(rr, shiftCol, j === 0 ? 'Φ' : 'Κ');
+        put(rr, rankCol, pick(r, PLACEHOLDER_RANKS));
+        if (o.fillNames && chance(r, 0.5)) { const nm = 'ΠΑΛΑΙΟΣ' + rr; put(rr, nameCol, nm); filled.push({ r: rr, c: nameCol, text: nm }); put(rr, rankCol, 'ΣΤΡ'); filled.push({ r: rr, c: rankCol, text: 'ΣΤΡ' }); }
+        else if (chance(r, 0.04)) { put(rr, nameCol, 'ΜΕΝΕΙ ΕΔΩ'); foreign.push({ r: rr, c: nameCol }); }
+      }
+      if (chance(r, 0.1)) row++;           // κενή γραμμή ανάμεσα στα νούμερα
+    }
+    blocks.push({ label: it.label, truth: t ? t.value : null, sureOk: it.sureOk && !!t, rows });
+    row++;                                 // διαχωριστική κενή γραμμή
+  }
+  const sigRow = row + 1;
+  put(sigRow, 0, 'Ο'); put(sigRow, 2, 'ΤΟ'); put(sigRow, 5, 'Ο'); put(sigRow + 1, 0, 'ΑΛΧΙΑΣ ΙΛΗΣ'); put(sigRow + 1, 2, '2ο ΓΡΑΦΕΙΟ'); put(sigRow + 1, 5, 'ΔΚΤΗΣ ΕΠΧΙΑΣ');
+  if (chance(r, 0.5)) { put(sigRow + 5, 0, '……………………………'); }   // γραμμή ονόματος
+  return { buf: null as unknown as Buffer, sheet: 'ΥΠΗΡΕΣΙΕΣ', blocks, rankCol, nameCol, headRank, headName, titleRow, sigRow, foreign, filled, flags, ...{ _wb: wb } as object } as SvcMock;
+}
+export async function svcBuf(m: SvcMock): Promise<Buffer> { return Buffer.from(await ((m as unknown as { _wb: ExcelJS.Workbook })._wb).xlsx.writeBuffer()); }
+
+// Εξοδούχοι / Αδειούχοι δίπλα δίπλα + δικό τους κείμενο οδηγιών
+export interface OutsMock { wb: ExcelJS.Workbook; sheet: string; o: { first: number; ready: number; cols: Record<string, number> }; l: { first: number; ready: number; cols: Record<string, number> }; odigies: { r: number; c: number }[]; foreign: { r: number; c: number }[]; titleRow: number; flags: string[] }
+export function genOutsLists(seed: number): OutsMock {
+  const r = rng(seed * 4231 + 9); const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('ΕΞΟΔΟΥΧΟΙ'); const flags: string[] = [];
+  const put = (rr: number, cc: number, v: string | number | null) => { ws.getCell(rr + 1, cc + 1).value = v; };
+  const titleRow = int(r, 1, 3); put(titleRow, 0, 'ΚΑΤΑΣΤΑΣΗ ΕΞΟΔΟΥΧΩΝ ΤΗΣ ' + int(r, 1, 28) + ' ΝΟΕΜΒΡΙΟΥ 26');
+  const t = titleRow + 2; const withSub = chance(r, 0.7), withRank = chance(r, 0.4);
+  const ocols: Record<string, number> = { aa: 0 }; let c = 1;
+  if (withSub) ocols.sub = c++; if (withRank) ocols.rank = c++; ocols.name = c++;
+  const gap = int(r, 1, 3); const lc0 = c + gap;
+  const lcols: Record<string, number> = { aa: lc0, name: lc0 + 1, from: lc0 + 2, to: lc0 + 3 };
+  put(t, 0, 'ΕΞΟΔΟΥΧΟΙ'); put(t, lc0, 'ΑΔΕΙΟΥΧΟΙ');
+  const H: Record<string, string> = { aa: 'Α/Α', sub: 'ΙΛΗ', rank: 'ΒΑΘΜΟΣ', name: 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', from: 'ΕΝΑΡΞΗ', to: 'ΕΠΙΣΤΡΟΦΗ' };
+  for (const [k, cc] of Object.entries(ocols)) put(t + 1, cc, H[k]); for (const [k, cc] of Object.entries(lcols)) put(t + 1, cc, H[k]);
+  if (chance(r, 0.5)) { ws.mergeCells(t + 2, ocols.name + 1, t + 2, ocols.name + 2); flags.push('merged-name'); }   // δεν αλλάζει τη στήλη (η πρώτη)
+  const first = t + 2; const oReady = int(r, 3, 12), lReady = int(r, 3, 12); const foreign: { r: number; c: number }[] = [];
+  for (let i = 0; i < Math.max(oReady, lReady); i++) { if (i < oReady) put(first + i, 0, i + 1); if (i < lReady) put(first + i, lc0, i + 1); }
+  if (chance(r, 0.3)) { put(first + 1, ocols.name, 'ΧΕΙΡΟΓΡΑΦΟ'); foreign.push({ r: first + 1, c: ocols.name }); }
+  // οι οδηγίες της μονάδας: μακρύ κείμενο κάτω από τις λίστες και δίπλα τους
+  const odigies: { r: number; c: number }[] = []; const oc = lc0 + 5;
+  const odR = first + Math.max(oReady, lReady) + 2;
+  put(odR, 0, 'ΟΔΗΓΙΕΣ'); odigies.push({ r: odR, c: 0 }); for (let i = 1; i <= 3; i++) { put(odR + i, 0, 'ΟΔΗΓΙΑ ' + i + ': ΔΕΝ ΑΛΛΑΖΕΙ'); odigies.push({ r: odR + i, c: 0 }); }
+  put(first, oc, 'ΣΗΜΑΙΑ ΠΡΩΙ'); odigies.push({ r: first, c: oc });
+  const sig = odR + 6; put(sig, 0, 'Ο'); put(sig + 1, 0, 'ΑΛΧΙΑΣ ΙΛΗΣ');
+  return { wb, sheet: 'ΕΞΟΔΟΥΧΟΙ', o: { first, ready: oReady, cols: ocols }, l: { first, ready: lReady, cols: lcols }, odigies, foreign, titleRow, flags };
+}
+
+// Θαλαμιζόμενοι με VLOOKUP πάνω σε λίστα δεδομένων (φύλλο ΛΙΣΤΑ)
+export interface RoomMock { wb: ExcelJS.Workbook; room: string; data: string; keyCol: number; rows: number[]; people: { last: string; first: string; rank: string; key: string; dataRow: number }[]; rankCol: number; flags: string[] }
+export function genRoomLists(seed: number, people: { last: string; first: string; rank: string }[]): RoomMock {
+  const r = rng(seed * 997 + 5); const wb = new ExcelJS.Workbook(); const room = wb.addWorksheet('ΘΑΛΑΜΙΖΟΜΕΝΟΙ'); const data = wb.addWorksheet('ΛΙΣΤΑ'); const flags: string[] = [];
+  const hdr = int(r, 3, 6); const col0 = pick(r, [0, 3]);          // η λίστα δεδομένων ξεκινά σε άλλη στήλη
+  const H = ['ΕΠ', 'ΕΠΩΝΥΜΟ - ΟΝΟΜΑ', 'ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'ΒΑΘΜΟΣ'];
+  H.forEach((h, i) => { data.getCell(hdr + 1, col0 + i + 1).value = h; });
+  const letter = (cc: number) => { let n = cc + 1, s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
+  const out: RoomMock['people'] = [];
+  const shuffled = shuffle(r, people);
+  shuffled.forEach((p, i) => {
+    const rr = hdr + 1 + i + 1;
+    const key = p.last + ' ' + p.first.charAt(0) + '.';
+    data.getCell(rr, col0 + 3).value = p.last; data.getCell(rr, col0 + 4).value = p.first; data.getCell(rr, col0 + 5).value = p.rank;
+    data.getCell(rr, col0 + 2).value = { formula: letter(col0 + 2) + rr + '&" "&LEFT(' + letter(col0 + 3) + rr + ',1)&"."', result: key } as ExcelJS.CellFormulaValue;
+    out.push({ ...p, key, dataRow: rr - 1 });
+  });
+  const lastRow = hdr + 1 + shuffled.length + 1;
+  const range = 'ΛΙΣΤΑ!$' + letter(col0 + 1) + '$' + (hdr + 2) + ':$' + letter(col0 + 4) + '$' + (lastRow + 20);
+  const keyCol = pick(r, [2, 2, 1]); const rankCol = keyCol === 2 ? 1 : 2; const rows: number[] = [];
+  const n = int(r, 6, 20); const start = int(r, 8, 12);
+  room.getCell(start, 1).value = 'Α/Α'; room.getCell(start, rankCol + 1).value = 'ΒΑΘΜΟΣ'; room.getCell(start, keyCol + 1).value = 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ';
+  for (let i = 0; i < n; i++) {
+    const rr = start + 1 + i; rows.push(rr - 1); room.getCell(rr, 1).value = i + 1;
+    const k = letter(keyCol) + rr;
+    room.getCell(rr, rankCol + 1).value = { formula: `IF(${k}<>"",VLOOKUP(${k},${range},4,0),"")`, result: '' } as ExcelJS.CellFormulaValue;
+    room.getCell(rr, 4).value = { formula: `IF(ISERROR(VLOOKUP(${k},${range},2,0)),"",VLOOKUP(${k},${range},2,0))`, result: '' } as ExcelJS.CellFormulaValue;
+  }
+  return { wb, room: 'ΘΑΛΑΜΙΖΟΜΕΝΟΙ', data: 'ΛΙΣΤΑ', keyCol, rows, people: out, rankCol, flags };
+}

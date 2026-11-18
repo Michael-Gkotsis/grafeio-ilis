@@ -16,6 +16,7 @@ import { Workbook, colName, colNum, sheetSafe, splitRef, unesc, type Sheet, type
 import { HK_COLS, detectHkai, type HkaiMap } from '../shared/sources';
 import { hkOffText } from '../shared/cadre';
 import { foreignBack, hkaiAdaptive } from './tplAdapt';
+import { listsFill } from './tplLists';
 import { byRoom, outsAndStay, stayNote } from '../shared/outsStay';
 import { FROURA_FORMS, absenceOf, dutyName, frouraLayout, frouraTables, lyLine, tableRowSpan, type FrouraTable, type TableCols } from '../shared/froura';
 import { mapFroura, mapHkBack, mapOuts, textCells, tnorm, type FList, type FNum, type FrouraMap, type FTable, type TCell } from './tplmap';
@@ -276,6 +277,11 @@ function extendFroura(wb: Workbook, ws: Sheet, map: FrouraMap, over: Map<FTable,
 // sheet: φύλλο του template (Αρχεία Excel)· κενό = αυτό που έχει την «ΚΑΤΑΣΤΑΣΗ ΥΠΗΡΕΣΙΩΝ» (ή τους πίνακες)
 // Κάθε στοιχείο γράφεται εκεί που το έχει το template (tplmap.ts): κεφαλίδα, τίτλος, Λ/Υ, Δ/Υ, πίνακες, τιμωρημένοι και απόντες
 export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Phase = s.settings.phase || 'sven', sheet?: string, sigs?: Sig[] | null, headId?: string | null): Promise<ExportResult> {
+  // κατάσταση υπηρεσιών της μονάδας σε λίστα (Αντιστοίχιση… στο έντυπο ΦΡΟΥΡΑ): αν υπάρχει αποθηκευμένη αντιστοίχιση για αυτό το αρχείο γεμίζει με αυτήν, αλλιώς ό,τι ήταν πάντα
+  if (s.settings.tplProfiles?.length) {
+    const ad = await listsFill(tpl, s, d, { kind: 'services', sigs });
+    if (ad) return { name: frouraName(s.settings, phase, d), data: ad.data, warnings: ad.warnings, sheet: ad.sheet };
+  }
   // οι στήλες φαρδαίνουν όσο χρειάζεται: το έντυπο τυπώνεται σε μία σελίδα (fitToPage), απλώς λίγο μικρότερο
   const wb = await Workbook.open(tpl); wb.widen = true; await unitWords(wb, s);
   const name = await sheetWith(wb, sheet, /^ΚΑΤΑΣΤΑΣΗ ΥΠΗΡΕΣΙΩΝ|^ΘΑΛΑΜΟΦΥΛΑΚ|^ΦΡΟΥΡΑ/);
@@ -652,6 +658,11 @@ async function outsPlaces(wb: Workbook, want: { outs?: string; stay?: string }, 
 }
 // sheets: φύλλα εξοδούχων και παραμενόντων στο template (Αρχεία Excel)· κάθε στήλη από την επικεφαλίδα της (tplmap.ts)
 export async function fillOuts(tpl: Buffer, s: AppState, d: ISODate, sheets: { outs?: string; stay?: string } = {}, sigs?: Sig[] | null, headId?: string | null): Promise<ExportResult> {
+  // εξοδούχοι/αδειούχοι της μονάδας δίπλα δίπλα (Αντιστοίχιση… στο έντυπο Εξοδούχοι)
+  if (s.settings.tplProfiles?.length) {
+    const ad = await listsFill(tpl, s, d, { kind: 'outs', sigs });
+    if (ad) return { name: fileNameOf(s.settings, 'outs', d), data: ad.data, warnings: ad.warnings, sheet: ad.sheet };
+  }
   const wb = await Workbook.open(tpl); wb.widen = true; await unitWords(wb, s); const warnings: string[] = [];
   if (isOutsAll(s.settings)) return fillOutsAll(wb, s, d, sheets, sigs, warnings, headId);
   const marks: { ws: Sheet; key: string; refs: { head: string[]; date: string[] }; titles: number[] }[] = [];   // titles: οι γραμμές των τίτλων των λιστών του φύλλου

@@ -30,6 +30,8 @@ import { designMade, fillFroura, fillHkai, fillOuts, signMade, sigsOf, TemplateE
 import { modelOfFile, profileFor, restoreCopy, tryFill, xlsxBuffer, xlsxFile } from './tplAdapt';
 import type { TplReq } from '../shared/tplMap';
 import { unresolvedCodes } from '../shared/dutyGrid';
+import { listModelOf, listTry } from './tplLists';
+import type { ListReq } from '../shared/listMap';
 import { checkTemplate, makeHdDocx } from './hdDocx';
 import { headFor } from '../shared/docHead';
 import { cleanHd, hdHeadDate, hdTags, HD_SECTIONS, type HdDoc } from '../shared/hd';
@@ -1434,6 +1436,23 @@ else {
         return c.ok ? reply(c.text, false) : c;
       } catch (e) { return fail(e); }
     });
+    // Λίστες της μονάδας (3β): ΦΡΟΥΡΑ σε λίστα, Εξοδούχοι/Αδειούχοι, θαλαμιζόμενοι: μόνο όταν το έντυπο έχει δικό του template
+    const listFile = (f: FormKind, file?: string): string => {
+      if (f !== 'froura' && f !== 'frouraSpen' && f !== 'outs') throw new Error('Η αντιστοίχιση λίστας αφορά τα έντυπα ΦΡΟΥΡΑ και Εξοδούχοι');
+      const own = formBinding(f).file;
+      if (file && file !== own && !srcMeta.allowed(file)) throw new Error('Άγνωστο αρχείο: διάλεξέ το με το «Template…»');
+      const x = file || own; if (!x) throw new Error('Το έντυπο δεν έχει δικό σου template: διάλεξε πρώτα «Template…»');
+      return x;
+    };
+    const asListReq = (r: ListReq): ListReq => ({
+      posts: Object.fromEntries(Object.entries(r?.posts || {}).filter(([k, v]) => typeof k === 'string' && typeof v === 'string')) as Record<string, string>,
+      creates: Array.isArray(r?.creates) ? r.creates.filter(x => typeof x?.name === 'string').map(x => ({ name: x.name.slice(0, 60) })) : [],
+      cols: Object.fromEntries(Object.entries(r?.cols || {}).filter(([, v]) => typeof v === 'number')) as Record<string, number>,
+      rooms: Array.isArray(r?.rooms) ? r.rooms.filter(x => typeof x?.sheet === 'string').map(x => ({ sheet: x.sheet, who: String(x.who || ''), on: !!x.on })) : [],
+      ...(typeof r?.sheet === 'string' ? { sheet: r.sheet } : {})
+    });
+    ipcMain.handle('list:model', async (_e, f: FormKind, file?: string, sheet?: string) => { try { return (await listModelOf(listFile(f, file), store.state, f === 'outs' ? 'outs' : 'froura', sheet)).model; } catch (e) { return fail(e); } });
+    ipcMain.handle('list:try', async (_e, f: FormKind, req: ListReq) => { try { const r = asListReq(req); const m = await listModelOf(listFile(f, req?.file), store.state, f === 'outs' ? 'outs' : 'froura', r.sheet); return await listTry(m.sheets, m.buf, store.state, today(), f === 'outs' ? 'outs' : 'froura', m.model.sheet, r); } catch (e) { return fail(e); } });
     ipcMain.handle('tpl:restore', async (_e, f: FormKind, req: TplReq) => {
       try {
         const file = tplFile(f, req?.file); const m = await modelOfFile(file, store.state, today(), req?.sheet);

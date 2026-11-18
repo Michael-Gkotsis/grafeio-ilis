@@ -22,6 +22,7 @@ import type { DirTarget, FormInfo, FormOut, ImportPreview, SourceBook, SourceSta
 import type { Command } from '../../shared/commands';
 import { base, useSourceStatus } from './srcStatus';
 import { TplMapDialog } from './tplMap';
+import { ListMapDialog } from './listMap';
 import { DutyMapDialog } from './dutyMap';
 import { pickDuties } from '../../shared/dutyGrid';
 export { SourcesAlert } from './srcStatus';
@@ -567,6 +568,7 @@ function FormsCard({ outs }: { outs: FormOut[] }) {
   const { state, boot, refresh } = useStore(); const toast = useToast(); const printFile = usePrintFile();
   const [dlg, setDlg] = useState<{ form: FormKind; info: FormInfo } | null>(null);
   const [mapDlg, setMapDlg] = useState<{ form: FormKind; file?: string; sheet?: string } | null>(null);
+  const [listDlg, setListDlg] = useState<{ form: FormKind; file?: string; sheet?: string } | null>(null);
   const forms = state.settings.forms || {};
   const save = async (f: FormKind, b: FormBinding | null, text: string) => { const r = await window.api.formSave(f, b); if (!r.ok) { toast({ text: r.error }); return false; } await refresh(); toast({ text }); return true; };
   const pickTpl = async (f: FormKind) => { const r = await window.api.formPick(f); if (!r) return; if (!r.ok) { toast({ text: r.error }); return; } setDlg({ form: f, info: r }); };
@@ -584,6 +586,7 @@ function FormsCard({ outs }: { outs: FormOut[] }) {
           ${f !== 'check' && html`<${Button} size="sm" variant="outline" onClick=${() => pickTpl(f)}>Template…<//>`}
           ${f !== 'check' && (b.file || f === 'hkai' || f === 'outs') && html`<${Button} size="sm" variant="ghost" onClick=${() => editTpl(f)}>${f === 'hkai' ? 'Κελιά…' : 'Φύλλα…'}<//>`}
           ${f === 'hkai' && b.file && html`<${Button} size="sm" variant="ghost" data-tip="Πες στην εφαρμογή τι σημαίνει κάθε στήλη και γραμμή του εντύπου της μονάδας" onClick=${() => setMapDlg({ form: f, file: b.file, sheet: b.sheet })}>Αντιστοίχιση…<//>`}
+          ${(f === 'froura' || f === 'frouraSpen' || f === 'outs') && b.file && html`<${Button} size="sm" variant="ghost" data-tip=${f === 'outs' ? 'Πες στην εφαρμογή ποιες είναι οι λίστες εξοδούχων και αδειούχων του αρχείου της μονάδας' : 'Πες στην εφαρμογή ποια θέση της εφαρμογής είναι κάθε θέση της λίστας του αρχείου της μονάδας'} onClick=${() => setListDlg({ form: f, file: b.file, sheet: b.sheet })}>Αντιστοίχιση…<//>`}
           <${Button} size="sm" variant="ghost" onClick=${() => pickDir(f)}>Φάκελος…<//>
           ${(b.file || b.dir) && html`<${Button} size="sm" variant="ghost" data-tip="Template και φάκελος της εφαρμογής" onClick=${() => save(f, null, label + ': ξανά με το template και τον φάκελο της εφαρμογής')}>Προεπιλογή<//>`}
         </div>
@@ -591,6 +594,7 @@ function FormsCard({ outs }: { outs: FormOut[] }) {
       </li>`;
     })}</ul>
     ${dlg && html`<${FormDialog} form=${dlg.form} info=${dlg.info} current=${forms[dlg.form] || {}} onClose=${() => setDlg(null)} onSave=${async (b: FormBinding) => { if (await save(dlg.form, b, FORMS(state.settings).find(x => x[0] === dlg.form)![1] + ': ' + (b.file ? base(b.file) : 'template της εφαρμογής') + (b.sheet ? ' › ' + b.sheet : ''))) { const a = dlg.info.adapt; const f = dlg.form; setDlg(null); if (f === 'hkai' && b.file && a && a.needs && !a.saved) setMapDlg({ form: f, file: b.file, sheet: b.sheet }); } }} onMap=${(b: FormBinding) => { const f = dlg.form; setDlg(null); setMapDlg({ form: f, file: b.file, sheet: b.sheet }); }}/>`}
+    ${listDlg && html`<${ListMapDialog} form=${listDlg.form} file=${listDlg.file} sheet=${listDlg.sheet} onClose=${() => setListDlg(null)} onSaved=${() => setListDlg(null)}/>`}
     ${mapDlg && html`<${TplMapDialog} form=${mapDlg.form} file=${mapDlg.file} sheet=${mapDlg.sheet} onClose=${() => setMapDlg(null)} onSaved=${() => setMapDlg(null)}/>`}
   <//>`;
 }

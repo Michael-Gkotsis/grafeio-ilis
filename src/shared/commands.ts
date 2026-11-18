@@ -1134,10 +1134,19 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
         }));
         profile0 = { ...profile0, duty: { ...profile0.duty, codes } };
       }
+      // λίστες υπηρεσιών της μονάδας: η νέα υπηρεσία «blk:@new:όνομα» παίρνει το id του μπλοκ που μόλις φτιάχτηκε
+      if (profile0.lst?.posts) {
+        const posts = Object.fromEntries(Object.entries(profile0.lst.posts).map(([key, v]) => {
+          if (!v.startsWith('blk:@new:')) return [key, v];
+          const b = blocksOf(st.settings, st.settings.phase).find(x => itemKey(x.name) === itemKey(v.slice(9)));
+          return [key, b ? 'blk:' + b.id : 'ignore'];
+        }));
+        profile0 = { ...profile0, lst: { ...profile0.lst, posts } };
+      }
       const prof = sanitizeProfiles([profile0])[0]; if (!prof) throw new Error('Το πρότυπο δεν αποθηκεύεται (λάθος μορφή)');
       const all = profilesOf(st.settings); const at = all.findIndex(x => x.id === prof.id);
       const tplProfiles = at >= 0 ? all.map((x, i) => (i === at ? prof : x)) : [...all, prof];
-      return { state: { ...st, settings: { ...st.settings, tplProfiles } }, text: 'Πρότυπο μονάδας: ' + c.text + (made.length ? ' (νέα: ' + made.join(', ') + ')' : ''), files: prof.kind === 'duties' ? [] : [HK()] };
+      return { state: { ...st, settings: { ...st.settings, tplProfiles } }, text: 'Πρότυπο μονάδας: ' + c.text + (made.length ? ' (νέα: ' + made.join(', ') + ')' : ''), files: ['duties', 'services', 'outs', 'rooms'].includes(prof.kind) ? [] : [HK()] };
     }
     case 'printed':
       return { state: { ...s, printed: { ...s.printed, [c.date]: c.at } }, text: 'Βγήκε ' + c.files.join(', '), files: c.files, undoable: false };
