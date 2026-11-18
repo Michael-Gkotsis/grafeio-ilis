@@ -4,7 +4,7 @@
 import { dmy, type ISODate } from './dates';
 import { TYPES, coversDay, type AppState, type Person, type Status } from './domain';
 import { siOf } from './si';
-import { live, rankTxt, statusLbl } from './ranks';
+import { itemKey, live, rankTxt, statusLbl } from './ranks';
 import { leavePhrase } from './hkaiText';
 import { collator } from './text';
 import { backBy } from './hours';
@@ -31,6 +31,7 @@ export function rosterMatch(f: RosterFilter, p: Person, on: Status[]): boolean {
   if (f === 'inactive') return !p.active;
   if (!p.active) return false;
   if (f === 'all') return true;
+  if (f.startsWith('rel:')) return !!p.religion && itemKey(p.religion) === f.slice(4);   // αποθηκευμένη λίστα με θρήσκευμα (Προσωπικό)
   if (f === 'post') return !!p.post;
   if (f === 'dnright') return !!p.dn;
   return !!filterStatus(f, on);
