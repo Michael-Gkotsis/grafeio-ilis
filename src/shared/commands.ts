@@ -11,7 +11,7 @@ import { isUnit } from './mode';
 import { essoPersonTxt, parseEsso } from './esso';
 import { mergeDuties, type DutyCell } from './sources';
 import type { AbsNew, CadreNew } from './cadreSource';
-import { leaveCmdOf, sameLeave, nextCadrePid, seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, secondDuty, alreadyOn, twoMode, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
+import { leaveCmdOf, sameLeave, nextCadrePid, seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, rosterSameDay, secondDuty, alreadyOn, twoMode, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
 import { noNotes, svcColOk, svcDefault, cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, isAway, itemName, leavePhrase, listRows, rankTxt, statusLbl, weaponBack, withOrigin, type HkRowDef, type ListId, type UserLists } from './ranks';
 import { insertCadre, isManualOrder } from './cadre';
 import { clearRange, setNoDuty } from './cadrePlan';
@@ -960,7 +960,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
         const soft = dutyBlock(s.statuses, c.date, pid, post, s.settings.lists) || twice || capBlock(base, c.date, pid, post) || ruleBlock(base, c.date, pid, undefined, c.k);
         if (soft && !c.force) throw new Error(shortName(pm.get(pid)!) + ' δεν μπαίνει: ' + soft);
         if (soft) note += ' (παρά τον κανόνα: ' + soft + '. Αιτία: ' + c.force + ')';
-        const lr = lastResort(s.statuses, c.date, pid, post, s.settings.lists) || statusWarn(s, c.date, pid) || secondDuty(s, c.date, pid, post.k); if (lr) note += ' (' + lr + ')';
+        const lr = lastResort(s.statuses, c.date, pid, post, s.settings.lists) || statusWarn(s, c.date, pid) || rosterSameDay(base, c.date, pid) || secondDuty(s, c.date, pid, post.k); if (lr) note += ' (' + lr + ')';
       }
       let next = setGuard(base, c.date, c.k, pid || null);
       // είχε την ίδια μέρα υπηρεσία του ίδιου είδους χωρίς θέση (από Excel): τώρα έχει θέση

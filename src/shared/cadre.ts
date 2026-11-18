@@ -4,7 +4,7 @@ import { formText, hkRowLabel } from './unit';
 import { dmy, type ISODate } from './dates';
 import type { AppState, Cadre, CadreAbs } from './domain';
 import { cadreAbsOf, hkColOwn, hkColShortOf, hkRowsOf, isAbsCol, isKolCol, rankTxt, type UserLists } from './ranks';
-import { cadreAbsOn, rosterCol, HK_A, HK_K, HK_NCO, HK_OFFICERS } from './rules';
+import { cadreAbsOn, cadreRosterCol, rosterCol, HK_A, HK_K, HK_NCO, HK_OFFICERS } from './rules';
 import { collator, normGreek } from './text';
 import type { RosterSheet } from './rosterLists';
 
@@ -33,13 +33,23 @@ export const groupOfCol = (col: string | undefined, lists?: UserLists): CadreGro
 // η σύντομη επικεφαλίδα της στήλης στο έντυπο (Υπηρ., Κ.Άδ.…)
 export const colShort = (col: string, lists?: UserLists) => (hkColOwn(col, lists) ? hkColShortOf(col, lists) : [...HK_K, ...HK_A].find(x => x[0] === col)?.[1] || '');
 
-export interface CadreStatus { abs: CadreAbs; label: string; col: string; group: CadreGroup }
+export interface CadreStatus { abs: CadreAbs; label: string; col: string; group: CadreGroup; roster?: true }
 export function cadreStatusOf(abs: CadreAbs, lists?: UserLists): CadreStatus {
   const k = cadreAbsOf(abs.kind, lists); const col = k?.[2] || '';
   return { abs, label: k?.[1] || abs.kind, col, group: groupOfCol(col, lists) };
 }
 export function cadreStatusOn(s: Pick<AppState, 'cadreAbs' | 'settings'>, cid: string, d: ISODate): CadreStatus | undefined {
   const a = cadreAbsOn(s, cid, d); return a && cadreStatusOf(a, s.settings.lists);
+}
+// Η κατάσταση όπως τη δείχνουν οι οθόνες και τα έντυπα: η δηλωμένη, αλλιώς η υπηρεσία του προγράμματος στελεχών με στήλη στην ΗΚΑΙ
+// (rules.ts cadreRosterCol: η ίδια στήλη που βάζει η ΗΚΑΙ· Υπηρεσία εκτός στρατοπέδου = απών). Χωρίς στήλη = παρών. Δεν αλλάζει το cadreStatusOn (κανόνες προγράμματος).
+export function cadreStateOn(s: Pick<AppState, 'cadreAbs' | 'settings' | 'cadreDuties'>, cid: string, d: ISODate): CadreStatus | undefined {
+  const st = cadreStatusOn(s, cid, d); if (st) return st;
+  const col = cadreRosterCol(s, cid, d); if (!col) return undefined;
+  const x = (s.cadreDuties || []).find(y => y.cid === cid && y.date === d);
+  const v = x && (s.settings.cadreDuty?.groups || []).flatMap(g => g.services || []).find(y => y.id === x.svc);
+  const label = v?.name || colShort(col, s.settings.lists) || 'Υπηρεσία';
+  return { abs: { id: '', cid, kind: label, from: d, to: d }, label, col, group: groupOfCol(col, s.settings.lists), roster: true };
 }
 // οι καταστάσεις που δεν έχουν λήξει ως τη μέρα d (η τωρινή και οι επόμενες), με τη σειρά
 export const cadreAbsFrom = (s: Pick<AppState, 'cadreAbs'>, cid: string, d: ISODate) => (s.cadreAbs || []).filter(a => a.cid === cid && a.to >= d).sort((a, b) => a.from.localeCompare(b.from));
@@ -74,7 +84,7 @@ export function cadreSheets(s: AppState, d: ISODate): RosterSheet[] {
   const where = (st: CadreStatus) => (st.group === 'list' ? 'ΜΟΝΟ ΣΤΗ ΛΙΣΤΑ' : (st.group === 'kol' ? 'ΚΩΛΥΟΜΕΝΟΙ' : 'ΑΠΟΝΤΕΣ') + ' · ' + colShort(st.col, lists));
   const active = all.filter(c => c.active);
   const now = active.map((c, i) => {
-    const st = cadreStatusOn(s, c.id, d);
+    const st = cadreStateOn(s, c.id, d);
     return [i + 1, ...cells(c), st ? st.label : 'ΠΑΡΩΝ', st ? dmy(st.abs.from) : '', st ? dmy(st.abs.to) : ''];
   });
   const rows: (string | number)[][] = [];

@@ -11,7 +11,7 @@ import { TYPES, blocksOf, everyBlock, fullName, shortName, unitOf, roomCfg, type
 import { activePeople, isHol, personMap, seatMap, postBy, postsOf, statusesOn, strengthOf } from './rules';
 import { WEAPON_FILTERS, byOut, inOutText, moveById, moveInCell, moveOutCell, movesAll, isAuto, weaponInfo, weaponMatch, type WeaponFilter, type WeaponInfo } from './weapons';
 import { itemKey, live, leavePhrase, listOf, rankTxt, statusLbl } from './ranks';
-import { cadreStatusOn, dutyOfficers, orderedCadre } from './cadre';
+import { cadreStateOn, dutyOfficers, orderedCadre } from './cadre';
 import { currentEsso, essoName } from './esso';
 import { filterStatus, rosterMatch, type RosterFilter } from './rosterLists';
 import type { Sig } from './sigs';
@@ -616,7 +616,7 @@ export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: num
       case 'rank': return rankTxt(c); case 'rank1': return c.rank; case 'origin': return c.origin || ''; case 'spec': return c.spec || ''; case 'name': return nm; case 'who': return [rankTxt(c), c.spec ? '(' + c.spec + ')' : '', nm].filter(Boolean).join(' ');
       case 'last': return c.last; case 'first': return c.first; case 'am': return c.am || ''; case 'phone': return c.phone || ''; case 'role': return c.role || '';
       case 'iban': return c.iban || ''; case 'amka': return c.amka || ''; case 'afm': return c.afm || ''; case 'religion': return upper(c.religion);
-      case 'status': return cadreStatusOn(s, c.id, d)?.label || '';
+      case 'status': return cadreStateOn(s, c.id, d)?.label || '';
       case 'cspec': return c.eid || '';
       case 'absent': case 'areason': case 'aret': return absField(absenceOfCadre(s, c, d), f);
     }
@@ -711,7 +711,7 @@ export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'> & Pick<
   }
   if (r.kind === 'cadre') {
     const list = orderedCadre(s.cadreList || []).filter(c => c.active);
-    return pk.from === 'present' ? list.filter(c => !cadreStatusOn(s, c.id, d)) : list;
+    return pk.from === 'present' ? list.filter(c => !cadreStateOn(s, c.id, d)) : list;
   }
   const view = pk.view ? (s.settings.views || []).find(v => v.id === pk.view) : undefined;
   let list: Person[] = pk.from === 'inactive' ? s.people.filter(p => !p.active) : activePeople(s);

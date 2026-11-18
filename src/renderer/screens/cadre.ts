@@ -11,7 +11,7 @@ import type { Sig } from '../../shared/sigs';
 import { cadreAbsKinds, cadreAbsOf, guessHk, hkCadreRows, listOf, optionsOf, rankTxt, type UserLists } from '../../shared/ranks';
 import { hkRowLabel, HK, UNIT } from '../../shared/unit';
 import type { Cadre, CadreAbs } from '../../shared/domain';
-import { CADRE_FILTERS, GROUP_NAME, orderedCadre, cadreAbsFrom, cadreClash, cadreMatch, cadreSearch, cadreStatusOf, cadreStatusOn, colShort, groupOfCol, type CadreFilter, type CadreGroup, type CadreStatus } from '../../shared/cadre';
+import { CADRE_FILTERS, GROUP_NAME, orderedCadre, cadreAbsFrom, cadreClash, cadreMatch, cadreSearch, cadreStateOn, cadreStatusOf, colShort, groupOfCol, type CadreFilter, type CadreGroup, type CadreStatus } from '../../shared/cadre';
 import { addDays, dayName, dm, dow } from '../../shared/dates';
 import { EPOP_ROWS, cadreSeat, dutyStats, isEpop, monthTxt } from '../../shared/rules';
 import { seatTxt } from '../../shared/weapons';
@@ -61,7 +61,7 @@ export function CadreScreen() {
   const end = () => { setDrag(null); setOver(null); };
   const year = +today.slice(0, 4);
   const sums = useMemo(() => summaries(state, year, today), [state.cadreList, state.cadreAbs, state.cadreGrants, state.settings, state.guards, state.dutyLog, year, today]);
-  const stOf = useMemo(() => { const m = new Map<string, CadreStatus | undefined>(); all.forEach(c => m.set(c.id, cadreStatusOn(state, c.id, date))); return m; }, [all, state.cadreAbs, state.settings, date]);
+  const stOf = useMemo(() => { const m = new Map<string, CadreStatus | undefined>(); all.forEach(c => m.set(c.id, cadreStateOn(state, c.id, date))); return m; }, [all, state.cadreAbs, state.cadreDuties, state.settings, date]);
   const counts = useMemo(() => Object.fromEntries(CADRE_FILTERS.map(([f]) => [f, all.filter(c => cadreMatch(f, c, stOf.get(c.id))).length])), [all, stOf]);
   const rows = all.filter(c => cadreMatch(filter, c, stOf.get(c.id)) && cadreSearch(c, dq));
   const active = counts.all || 0;
@@ -168,7 +168,7 @@ export function CadreSheet({ cid, list, onMove, onClose }: P) {
     <div style=${{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>${c.active && html`<${Button} onClick=${() => setStFor({})}>+ Κατάσταση<//>`}<${Button} variant="outline" onClick=${() => setEdit(true)}>Διόρθωση στοιχείων<//></div>
     <${Tabs} value=${tab} onChange=${(t: string) => nav.guard(() => setTab(t))} items=${CADRE_TABS.map(t => (t.value === 'notes' ? { ...t, label: notesTabLabel(ng) } : t))}/>
     ${tab === 'abs' && html`<div style=${{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-      <div className="field"><span className="field__label">Σήμερα</span><div>${c.active ? stBadge(cadreStatusOn(state, c.id, today), state.settings.lists) : html`<${Badge} tone="outline">Εκτός δύναμης: δεν μετρά στην ${HK()}<//>`}</div></div>
+      <div className="field"><span className="field__label">Σήμερα</span><div>${c.active ? stBadge(cadreStateOn(state, c.id, today), state.settings.lists) : html`<${Badge} tone="outline">Εκτός δύναμης: δεν μετρά στην ${HK()}<//>`}</div></div>
       <div className="field"><span className="field__label">Τωρινές και επόμενες καταστάσεις</span>
         ${next.length ? html`<ul className="rec">${next.map(a => line(a, true))}</ul>` : html`<p className="note" style=${{ margin: 0 }}>Καμία. Χωρίς κατάσταση μετρά παρών στην ${HK()}.</p>`}</div>
       ${past.length > 0 && html`<div className="field"><span className="field__label">Προηγούμενες</span><ul className="rec">${past.map(a => line(a, false))}</ul></div>`}
