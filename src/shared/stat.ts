@@ -85,7 +85,7 @@ export function statSummary(s: Pick<Status, 'type' | 'kind'>, blocks: (Blk & { i
   if (lm === 'kol') return 'Κωλυόμενος (αφαιρείται από τους παρόντες) · Καμία υπηρεσία · Δεν βγαίνει έξοδο';
   if (lm === 'present') return 'Παρών · ' + (noDutyOf(s, lists) ? 'Καμία υπηρεσία' : 'Μπαίνει σε υπηρεσίες') + ' · ' + (noOutOf(s, lists) ? 'Δεν βγαίνει έξοδο' : 'Βγαίνει έξοδο');
   const r = statRowOf(s, lists); const bs = blocks.filter(b => b.kind !== 'ly' && !b.hidden);
-  if (!r || !bs.length) return effects(TYPES[s.type]);
+  if (!r || !bs.length) return effects(TYPES[s.type], lists);
   const of = (v: StatCell) => bs.filter(b => statCellOf(lists, r.type, r.own, b).v === v).map(b => b.name);
   const no = of('no'), last = of('last');
   return [no.length === bs.length ? 'Καμία υπηρεσία' : no.length && 'Όχι: ' + no.join(', '), last.length && 'Μόνο αν δεν υπάρχει άλλος: ' + last.join(', '),

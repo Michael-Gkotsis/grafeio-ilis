@@ -20,6 +20,9 @@ const SHORT: Record<string, string> = {
   prat: 'ΠΡΑΤ', adik: 'ΑΔΙΚ', fp: 'ΦΠ', fyl: 'ΦΥΛ', apal: 'ΑΠ', ekp: 'ΕΚΠ', allh: 'ΑΠΟΣ', other: 'ΑΛΛ'
 };
 // σύντομη μορφή δικού σου ονόματος: μία λέξη → τα 3 πρώτα γράμματα, περισσότερες → τα αρχικά (ως 3)
+// Λ5: ο κωδικός που διάλεξες για την κατάσταση (lists.planCodes)· κενός = ο προεπιλεγμένος
+export const PLAN_CODE_MAX = 6;
+export const planCodeSet = (lists: Settings['lists'], id: string): string => upper(String(lists?.planCodes?.[id] || '')).replace(/\s+/g, '').slice(0, PLAN_CODE_MAX);
 export function shortOf(name: string): string {
   const w = upper(name).replace(/[^A-ZΑ-Ω0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
   if (!w.length) return '?';
@@ -34,20 +37,21 @@ function codeMap(lists: Settings['lists']): Map<string, string> {
   const key = lists || NO_LISTS; let m = codeIdx.get(key); if (m) return m;
   m = new Map(); const used = new Set<string>(); const all = cadreAbsKinds(lists, true);
   const put = (id: string, want: string) => { let c = want, i = 2; while (used.has(c)) c = want + i++; used.add(c); m!.set(id, c); };
-  for (const [id] of all) if (SHORT[id]) put(id, SHORT[id]);
+  for (const [id] of all) { const c = planCodeSet(lists, id); if (c) put(id, c); }   // όσους κωδικούς όρισες: πρώτοι· δύο ίδιοι παίρνουν αριθμό (ΑΑ2…)
+  for (const [id] of all) if (SHORT[id] && !m.has(id)) put(id, SHORT[id]);
   for (const [id, name] of all) if (!SHORT[id] && !m.has(id)) put(id, shortOf(name));
   codeIdx.set(key, m); return m;
 }
 export function planCode(kind: string, settings: Pick<Settings, 'lists' | 'cadreLeave'>): PlanCode {
   const k = cadreAbsOf(kind, settings.lists); const base = k?.[0] || '';
   const name = k?.[1] || kind;
-  const code = (k && codeMap(settings.lists).get(k[0])) || SHORT[base] || shortOf(name);
+  const code = (k && codeMap(settings.lists).get(k[0])) || planCodeSet(settings.lists, base) || SHORT[base] || shortOf(name);
   const fam: PlanFam = base === 'ka' ? 'ka' : base === 'amd' ? 'amd' : base === 'apal' ? 'apal'
     : leaveCfgOf(settings).quotas.some(q => usesQuota(q, kind, settings.lists)) ? 'leave' : 'other';
   return { code, fam, name };
 }
 // κωδικός ενός είδους άδειας (Κανονική → ΚΑ, ΑΜΔ → ΑΜΔ, δικό σου → σύντομο όνομα)
-export const quotaShort = (q: QuotaBal['quota']): string => SHORT[q.kinds[0]] || shortOf(q.name);
+export const quotaShort = (q: QuotaBal['quota'], lists?: Settings['lists']): string => planCodeSet(lists, q.kinds[0]) || SHORT[q.kinds[0]] || shortOf(q.name);
 
 // ---- ημέρες του μήνα ----
 export interface PlanDay { d: ISODate; n: number; dow: string; we: boolean; hol?: string }
@@ -116,7 +120,7 @@ export function planRows(s: Pick<AppState, 'cadreList' | 'settings' | 'cadreDuty
 const num = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',');
 export function leaveLeftText(s: Pick<AppState, 'cadreAbs' | 'cadreGrants' | 'settings'>, cid: string, year: number): { text: string; neg: boolean; tip: string } {
   const b = quotaBalances(s, cid, year);
-  return { text: b.map(x => quotaShort(x.quota) + ' ' + num(x.left)).join(' · '), neg: b.some(x => x.left < 0), tip: b.map(x => x.quota.name + ': μένουν ' + num(x.left) + ' από ' + num(x.entitled)).join('\n') };
+  return { text: b.map(x => quotaShort(x.quota, s.settings.lists) + ' ' + num(x.left)).join(' · '), neg: b.some(x => x.left < 0), tip: b.map(x => x.quota.name + ': μένουν ' + num(x.left) + ' από ' + num(x.entitled)).join('\n') };
 }
 
 // ---- γράψιμο διαστήματος ----

@@ -1,7 +1,7 @@
 // Δικές σου στήλες της ΗΚΑΙ (UserLists.hkCols, Michael 17/11): προσθήκη, αλλαγή ονόματος, διαγραφή, με έλεγχο.
 // Όταν σβηστεί μια στήλη, όλα όσα τη χρησιμοποιούσαν (υπηρεσίες, είδη άδειας, δηλώσεις κωλυόμενου, υπηρεσίες και απουσίες στελεχών) γυρνούν στην
 // προεπιλογή τους και το ιστορικό γράφει ποια· κανείς δεν χάνεται από την ΗΚΑΙ (μετρά στην προεπιλεγμένη στήλη).
-import type { AppState, BlockDef, Settings } from './domain';
+import { TYPES, type AppState, type BlockDef, type Settings } from './domain';
 import { HK_A, HK_COLS_MAX, HK_K, hkColsOf, itemKey, type HkColDef, type UserLists } from './ranks';
 
 export interface HkColInput { key?: string; name: string; grp: 'kol' | 'abs'; short?: string }
@@ -51,6 +51,13 @@ function dropRefs(s: AppState, gone: HkColDef[], lists: UserLists): { state: App
   };
   fixItems('leaveKinds', leave, () => '');   // χωρίς στήλη: η προεπιλογή των αδειών (Κανονικές)
   fixItems('cadreAbs', cadreAbs, c => (c.grp === 'abs' ? 'ka' : 'yp'));
+  // Στήλη ΗΚΑΙ ανά κατάσταση και στήλη του ΣΤΕΠ (Ρυθμίσεις): γυρνούν στην προεπιλογή
+  const typeFell: string[] = [];
+  if (lists.stepCol && g.has(lists.stepCol)) { delete lists.stepCol; typeFell.push('ΣΤΕΠ'); }
+  if (lists.typeCols) {
+    const tc = { ...lists.typeCols }; for (const k of Object.keys(tc) as (keyof typeof tc)[]) if (tc[k] && g.has(tc[k]!)) { delete tc[k]; typeFell.push(TYPES[k].label); }
+    if (Object.keys(tc).length) lists.typeCols = tc; else delete lists.typeCols;
+  }
   const cd = st.cadreDuty;
   if (cd?.groups?.some(x => x.services?.some(v => v.hkCol && g.has(v.hkCol)))) {
     st.cadreDuty = { ...cd, groups: cd.groups.map(x => ({ ...x, services: (x.services || []).map(v => { if (!v.hkCol || !g.has(v.hkCol)) return v; svc.push(v.name); return { ...v, hkCol: g.get(v.hkCol)!.grp === 'abs' ? 'ka' : 'yp' }; }) })) };
@@ -58,6 +65,7 @@ function dropRefs(s: AppState, gone: HkColDef[], lists: UserLists): { state: App
   let stN = 0;
   const statuses = s.statuses.some(x => x.hkCol && g.has(x.hkCol)) ? s.statuses.map(x => { if (!x.hkCol || !g.has(x.hkCol)) return x; stN++; const { hkCol, ...r } = x; return r; }) : s.statuses;
   const uniq = (l: string[]) => [...new Set(l)];
+  if (typeFell.length) fell.push('η στήλη ανά κατάσταση ' + join(typeFell));
   if (blocks.length) fell.push('οι υπηρεσίες ' + join(uniq(blocks)));
   if (leave.length) fell.push('τα είδη άδειας ' + join(uniq(leave)) + ' (στις Κανονικές)');
   if (cadreAbs.length) fell.push('οι απουσίες στελεχών ' + join(uniq(cadreAbs)));

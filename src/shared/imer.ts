@@ -18,7 +18,8 @@ export const IMER_TITLES: Record<ImerTitle, string> = { imer: 'ΗΜΕΡΟΛΟΓ�
 export const AA = 'Α/Α', EE = 'Ε/Ε', DASH = '-';
 // Οι κωδικοί του πίνακα «Κωδικοί…»: key = ο προεπιλεγμένος κωδικός (ή DUTY/POST για τις υπηρεσίες και τα πόστα)
 // edit: ο κωδικός αλλάζει από τον χρήστη (οι υπηρεσίες και τα πόστα βγαίνουν από τις Ρυθμίσεις)
-export interface ImerRow { key: string; label: string; def: string; count: Count; from: string; edit: boolean }
+// extra: Άγνοια / Λιποταξία (Λ5): ο κωδικός αλλάζει στις Ρυθμίσεις, αλλά στο υπόμνημα, στις προτάσεις του κελιού και στο γραμμένο με το χέρι μετρούν μόνο όταν τον έχεις αλλάξει (αλλιώς όλα όπως πριν)
+export interface ImerRow { key: string; label: string; def: string; count: Count; from: string; edit: boolean; extra?: boolean }
 export const IMER_ROWS: ImerRow[] = [
   { key: 'Κ.Α', label: 'Κανονική άδεια', def: 'Κ.Α', count: 'A', from: 'Άδειες', edit: true },
   { key: 'ΑΝ.ΑΔ', label: 'Αναρρωτική άδεια', def: 'ΑΝ.ΑΔ', count: 'A', from: 'Άδειες', edit: true },
@@ -28,6 +29,8 @@ export const IMER_ROWS: ImerRow[] = [
   { key: 'DUTY', label: 'Σκοπός · Θαλαμοφύλακας · Οπλοφύλακας · …', def: 'ΣΚ · Θ · ΟΠ · ΠΕΡ', count: 'P', from: 'Υπηρεσίες της μέρας', edit: false },
   { key: 'POST', label: 'Γραφέας · Εστιάτορας (πόστο)', def: 'ΓΡ · ΕΣΤ', count: 'P', from: 'Πόστα', edit: false },
   { key: AA, label: 'Αδικαιολόγητα απών', def: AA, count: 'A', from: 'Νέο: δηλώνεται στην καρτέλα', edit: true },
+  { key: 'ΑΓ', label: 'Σε άγνοια', def: 'ΑΓ', count: 'A', from: 'Νέο: δηλώνεται στην καρτέλα', edit: true, extra: true },
+  { key: 'ΛΙΠ', label: 'Σε λιποταξία', def: 'ΛΙΠ', count: 'A', from: 'Νέο: δηλώνεται στην καρτέλα', edit: true, extra: true },
   { key: EE, label: 'Εργασίες επιλαρχίας', def: EE, count: 'P', from: 'Νέο: δηλώνεται στην καρτέλα', edit: true },
   { key: DASH, label: 'Πριν την κατάταξη / μετά τη διαγραφή', def: DASH, count: 'A', from: 'Εγγραφή / διαγραφή', edit: true }
 ];
@@ -36,6 +39,8 @@ const ROW = new Map(IMER_ROWS.map(r => [r.key, r]));
 export const DUTY_CODES: Record<DutyKind, string> = { ...KIND_CODE, sk: 'ΣΚ', other: 'ΠΕΡ' };
 const cfg = (st: Pick<Settings, 'imer'>): ImerSettings => st.imer || {};
 export const imerCode = (st: Pick<Settings, 'imer'>, key: string): string => { const r = ROW.get(key); return (r?.edit && cfg(st).codes?.[key]?.code?.trim()) || r?.def || key; };
+// η γραμμή μετρά στο υπόμνημα, στις προτάσεις και στο χέρι: οι κανονικές πάντα, οι «extra» μόνο αν άλλαξες κάτι
+export const imerRowOn = (st: Pick<Settings, 'imer'>, r: ImerRow): boolean => r.edit && (!r.extra || !!cfg(st).codes?.[r.key]?.code?.trim() || !!cfg(st).codes?.[r.key]?.count);
 export const imerCount = (st: Pick<Settings, 'imer'>, key: string, dflt: Count = 'P'): Count => cfg(st).codes?.[key]?.count || ROW.get(key)?.count || dflt;
 export const imerTitle = (st: Pick<Settings, 'imer'>) => IMER_TITLES[cfg(st).title === 'ekp' ? 'ekp' : 'imer'];
 export const imerSheets = (st: Pick<Settings, 'imer'>): ImerSheets => { const v = cfg(st).sheets; return v === 'all' || v === 'both' ? v : 'unit'; };
@@ -66,7 +71,7 @@ export function autoCell(s: AppState, p: Person, d: ISODate): ImerCell | null {
 // ό,τι γράφτηκε με το χέρι: ο κωδικός μετριέται όπως ο ίδιος κωδικός του πίνακα· ελεύθερο κείμενο = Π
 export function handCount(st: Pick<Settings, 'imer'>, text: string): { key: string; count: Count } {
   const t = normGreek(text);
-  for (const r of IMER_ROWS) if (r.edit && normGreek(imerCode(st, r.key)) === t) return { key: r.key, count: imerCount(st, r.key) };
+  for (const r of IMER_ROWS) if (imerRowOn(st, r) && normGreek(imerCode(st, r.key)) === t) return { key: r.key, count: imerCount(st, r.key) };
   return { key: text, count: 'P' };
 }
 export const handOf = (s: Pick<AppState, 'imer'>, d: ISODate, pid: number): string => s.imer?.[d]?.[pid] || '';
@@ -121,6 +126,6 @@ export function imerGrid(s: AppState, from: ISODate, to: ISODate, all: boolean, 
 export const sumTotals = (parts: ImerTotals[][]): ImerTotals[] => (parts[0] || []).map((_, i) => ({ p: parts.reduce((a, t) => a + t[i].p, 0), a: parts.reduce((a, t) => a + t[i].a, 0), show: parts[0][i].show }));
 // οι κωδικοί που προτείνονται όταν πατάς κελί
 export function handChoices(st: Pick<Settings, 'imer'>): string[] {
-  const rows = IMER_ROWS.filter(r => r.edit && r.key !== DASH).map(r => imerCode(st, r.key));
+  const rows = IMER_ROWS.filter(r => imerRowOn(st, r) && r.key !== DASH).map(r => imerCode(st, r.key));
   return [...new Set([AA, EE, ...rows, 'ΓΡ', 'ΕΣΤ', DUTY_CODES.th, DUTY_CODES.op, DUTY_CODES.sk, DUTY_CODES.other].map(x => upper(x)))];
 }

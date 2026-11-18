@@ -3,9 +3,11 @@
 // Τη διαλέγεις στη φόρμα της υπηρεσίας, στα είδη άδειας και στη δήλωση κωλυόμενου· ό,τι τη χρησιμοποιεί μετρά εκεί (shared/hkCols.ts).
 import { useEffect, useState } from 'react';
 import { html, Alert, Button, Card, Segmented, useToast } from '../ui';
+import { Select } from '../select';
 import { useStore } from '../store';
 import { usePending } from '../pending';
-import { HK_COLS_MAX, hkColsOf } from '../../shared/ranks';
+import { HK_COLS_MAX, hkColsOf, typeHkChoices, typeHkOf, type UserLists } from '../../shared/ranks';
+import { KOL_COLS, TYPES, kolColsOf, stepColOf, type TypeKey } from '../../shared/domain';
 import { HK_COL_NAME_MAX, HK_COL_SHORT_MAX, type HkColInput } from '../../shared/hkCols';
 import { HK } from '../../shared/unit';
 type P = any;
@@ -41,5 +43,40 @@ export function HkColsCard() {
       <${Button} size="sm" variant="outline" disabled=${rows.length >= HK_COLS_MAX} why=${'Το πολύ ' + HK_COLS_MAX + ' δικές σου στήλες'} onClick=${() => setRows([...rows, { name: '', grp: 'kol', short: '' }])}>+ Νέα στήλη<//>
       ${dirty && html`<${Button} size="sm" onClick=${save}>Αποθήκευση<//><${Button} size="sm" variant="ghost" onClick=${() => { setRows(saved); setErr(null); }}>Άκυρο<//>`}
     </div>
+  <//>`;
+}
+
+// Ρυθμίσεις › Μονάδα και έντυπα › «Στήλη ΗΚΑΙ ανά κατάσταση»: σε ποια στήλη της ΗΚΑΙ μετρά κάθε βασική κατάσταση (προεπιλογή: όπως πάντα) και η στήλη του ΣΤΕΠ.
+// Αλλάζει αμέσως, με αναίρεση· στο lists.typeCols μένουν μόνο όσες άλλαξες. Μια στήλη της ίδιας ομάδας (κωλυόμενοι ή απόντες), βασική ή δική σου.
+const TYPE_COL_KEYS: TypeKey[] = ['EY', 'PUN', 'NOS', 'LEAVE', 'HON', 'SICK', 'AGN', 'LIP', 'ADK'];
+export function TypeColsCard() {
+  const { state, run } = useStore();
+  const lists: UserLists = state.settings.lists || {}; const step = stepColOf(lists, null) || '';
+  const set = (patch: Partial<UserLists>, text: string) => {
+    const next: UserLists = { ...lists, ...patch };
+    if (!next.stepCol) delete next.stepCol; if (next.typeCols && !Object.keys(next.typeCols).length) delete next.typeCols;
+    return run({ t: 'setSettings', settings: { lists: next }, text: text + ' (' + HK() + ')' }, false);
+  };
+  const pickType = (k: TypeKey, col: string) => {
+    const cur = { ...(lists.typeCols || {}) }; if (!col || col === TYPES[k].hkai) delete cur[k]; else cur[k] = col;
+    return set({ typeCols: cur }, 'στήλη «' + TYPES[k].label + '»: ' + (hkLabel(typeHkChoices(k, lists), col || TYPES[k].hkai!)));
+  };
+  const hkLabel = (opts: [string, string][], c: string) => opts.find(x => x[0] === c)?.[1] || c;
+  const stepOpts = kolColsOf(lists);
+  return html`<${Card} title=${'Στήλη ' + HK() + ' ανά κατάσταση'}>
+    <p className="note" style=${{ marginTop: 0 }}>Σε ποια στήλη της ${HK()} μετρά κάθε κατάσταση. Αν δεν αλλάξεις τίποτα, μετρά όπως πάντα. Διαλέγεις στήλη από την ίδια ομάδα με την προεπιλογή της (κωλυόμενοι ή απόντες), και τις δικές σου στήλες. Οι άδειες δικού σου είδους έχουν τη στήλη τους στις Λίστες › Είδη άδειας.</p>
+    <div className="field-row" style=${{ alignItems: 'flex-end' }}>
+      <div className="field" style=${{ flex: '1 1 260px' }}><label className="field__label" htmlFor="tc-step">Στήλη ${HK()} για ΣΤΕΠ</label>
+        <${Select} id="tc-step" className="ui-select" value=${step} onChange=${(e: any) => set({ stepCol: e.target.value || undefined }, 'στήλη για ΣΤΕΠ: ' + (e.target.value ? hkLabel(stepOpts, e.target.value) : 'πουθενά'))}>
+          <option value="">Πουθενά</option>${stepOpts.map(([k, n]) => html`<option key=${k} value=${k}>${KOL_COLS.some(x => x[0] === k) ? n : n + ' (δική σου στήλη)'}</option>`)}<//></div>
+    </div>
+    <p className="note" style=${{ marginTop: 0 }}>«Πουθενά»: ο ΣΤΕΠ είναι κωλυόμενος στη Δύναμη και στο Σήμερα, αλλά δεν μετρά σε στήλη της ${HK()}.</p>
+    ${TYPE_COL_KEYS.map(k => {
+      const opts = typeHkChoices(k, lists), cur = typeHkOf(k, lists)!;
+      return html`<div key=${k} className="field-row" style=${{ alignItems: 'flex-end' }}>
+        <div className="field" style=${{ flex: '1 1 260px' }}><label className="field__label" htmlFor=${'tc-' + k}>${k === 'LEAVE' ? 'Κανονική άδεια, ΑΜΔ, ΥΕΘΑ' : TYPES[k].long}</label>
+          <${Select} id=${'tc-' + k} className="ui-select" value=${cur} onChange=${(e: any) => pickType(k, e.target.value)}>${opts.map(([c, n]) => html`<option key=${c} value=${c}>${n}${c === TYPES[k].hkai ? ' (προεπιλογή)' : ''}</option>`)}<//></div>
+      </div>`;
+    })}
   <//>`;
 }

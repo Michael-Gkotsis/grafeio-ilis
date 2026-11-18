@@ -10,7 +10,7 @@ import { listOf, optionsOf } from '../../shared/ranks';
 import { roomCfg, type Person } from '../../shared/domain';
 import { essoPersonTxt } from '../../shared/esso';
 import { addDays } from '../../shared/dates';
-import { defaultEsso, essoChoices, isUnit } from '../../shared/mode';
+import { defaultEsso, essoChoices, essoMonthsOf, isUnit } from '../../shared/mode';
 import { currentEssos } from '../../shared/rosterLists';
 import { siCombos } from '../../shared/si';
 import { CARRY, QA_COLS, carryOf, checkRows, emptyRow, isFilled, parsePaste, toNewPerson, type QaKey, type QaRow } from '../../shared/quickAdd';
@@ -48,8 +48,8 @@ const Row = memo(function Row({ r, i, err, lists, onCell, onKey, onPaste, onDel,
 export function QuickAddDialog({ onClose }: P) {
   const { state, run, undoMark, today } = useStore(); const toast = useToast(); const nav = useNav();
   const unit = isUnit(state.settings);
-  const choices = useMemo(() => essoChoices(state.people, today), [state.people, today]);
-  const defEssos = useMemo(() => (unit ? defaultEsso(state.people, today) : state.settings.essos ? essoPersonTxt(state.settings.essos) : currentEssos(state.people)), [unit, today, state.settings.essos, state.people]);
+  const choices = useMemo(() => essoChoices(state.people, today, essoMonthsOf(state.settings)), [state.people, today, state.settings.essoMonth]);
+  const defEssos = useMemo(() => (unit ? defaultEsso(state.people, today, essoMonthsOf(state.settings)) : state.settings.essos ? essoPersonTxt(state.settings.essos) : currentEssos(state.people)), [unit, today, state.settings.essos, state.people]);
   const [draft] = useState(loadDraft);
   const [rows, setRows] = useState<QaRow[]>(() => withTail(draft?.rows || []));
   const [essos, setEssos] = useState(draft?.essos || defEssos);
