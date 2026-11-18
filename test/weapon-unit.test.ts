@@ -12,7 +12,7 @@ import type { XlsConverter } from '../src/main/xlsConvert';
 import { genUnitWeapons, type UnitWeapons, type WpnHolder } from './mockgen';
 import { emptyState, type AppState, type Cadre, type Person } from '../src/shared/domain';
 import { apply } from '../src/shared/commands';
-import { registry } from '../src/shared/assets';
+import { assetCfgOf, placeText, registry } from '../src/shared/assets';
 import { weaponKey } from '../src/shared/weapons';
 import { emptyWpn, planWeapons, resolveWeapons, placeParts } from '../src/shared/weaponUnit';
 import type { WeaponProfile } from '../src/shared/tplStore';
@@ -90,19 +90,25 @@ describe('με προφίλ: σχέδιο = αλήθεια', () => {
   }, 600000);
 
   it('η εντολή εισαγωγής: κύριο όπλο στο Δυναμολόγιο, εγγραφές Μητρώου, επανάληψη χωρίς αλλαγές, τίποτα δεν σβήνεται', async () => {
+    let boxed = 0;
     for (let seed = 1; seed <= Math.min(N, 15); seed++) {
       const { holders, state } = world(); const g = await genUnitWeapons(seed, holders); const sheets = await load(g); const prof = userProf(g);
       const pl = planWeapons({ settings: state.settings, people: state.people, cadreList: state.cadreList, sheets, prof, state });
       const r = apply(state, { t: 'importWeapons', apply: pl.apply, source: 'x.xlsx', date: TODAY }, ctx()).state;
       expect(r.people.length).toBe(state.people.length); expect(r.cadreList.length).toBe(state.cadreList.length);
       for (const p of pl.apply.primary) { const o = p.owner.k === 'person' ? r.people.find(x => x.id === (p.owner as { pid: number }).pid)! : r.cadreList.find(x => x.id === (p.owner as { cid: string }).cid)!; expect(weaponKey(o.weapon)).toBe(weaponKey(p.weapon)); }
-      expect((r.assets || []).length).toBe(pl.apply.assets.length); expect((r.assetLog || []).length).toBe(pl.apply.assets.length);
+      // κύριο όπλο σε κιβώτιο/αποθήκη (ή με κάνη, σημείωση): και εγγραφή Μητρώου με τον ίδιο αριθμό, που ενώνεται με τη γραμμή του κύριου όπλου
+      const recs = pl.apply.primary.filter(p => p.rec).length;
+      expect((r.assets || []).length).toBe(pl.apply.assets.length + recs); expect((r.assetLog || []).length).toBe(pl.apply.assets.length + recs);
       const rows = registry(r).filter(x => !x.a.gone); expect(rows.length).toBe(pl.apply.assets.length + pl.apply.primary.length);
+      for (const p of pl.apply.primary) if (p.rec?.place) { boxed++; const row = rows.find(x => weaponKey(x.a.no) === weaponKey(p.weapon))!; expect(row.stored && !!row.link).toBe(true); expect(placeText(assetCfgOf(r.settings), row.a)).toBe(p.rec.place); }
+      for (const a of pl.apply.assets) if (/^ΚΙΒΩΤΙΟ/.test(a.fileWord || '')) expect(a.place).toBe(a.fileWord);
       // δεύτερη φορά: όλα υπάρχουν ήδη
       const pl2 = planWeapons({ settings: r.settings, people: r.people, cadreList: r.cadreList, sheets, prof, state: r });
       expect(pl2.apply.primary.length + pl2.apply.assets.length, 'seed ' + seed).toBe(0); expect(pl2.counts.conflicts).toBe(0);
       const r2 = apply(r, { t: 'importWeapons', apply: pl.apply, source: 'x.xlsx', date: TODAY }, ctx()).state; expect(r2.assets).toEqual(r.assets); expect(r2.people).toEqual(r.people);
     }
+    expect(boxed, 'κανένα κύριο όπλο σε κιβώτιο στα seeds').toBeGreaterThan(0);
   }, 600000);
 
   it('σύγκρουση: άλλο κύριο όπλο στην ίδια κατηγορία δεν γράφεται πάνω· άλλης κατηγορίας γίνεται δεύτερο όπλο', async () => {
