@@ -784,7 +784,7 @@ async function dropStay(wb: Workbook, ws: Sheet, loc: OutsLoc, stay: OutsLoc, pl
 async function fillOutsAll(wb: Workbook, s: AppState, d: ISODate, want: { outs?: string; stay?: string }, sigs: Sig[] | null | undefined, warnings: string[], headId?: string | null): Promise<ExportResult> {
   const place = s.settings.place;
   const [loc, stay0] = await outsPlaces(wb, want, place, DYN);
-  const name = 'ΕΞΟΔΟΥΧΟΙ-ΔΥΝΑΜΗ ' + dmy(d).replace(/\//g, '-') + '.xlsx';
+  const name = fileNameOf(s.settings, 'outs', d);   // Ρυθμίσεις › Ονόματα αρχείων· προεπιλογή: «ΕΞΟΔΟΥΧΟΙ-ΔΥΝΑΜΗ ηη-μμ-εεεε.xlsx»
   const freeName = () => { let n = sheetSafe(DYN), i = 2; while (wb.hasSheet(n)) n = sheetSafe(DYN + ' ' + i++); return n; };
   const mapOf = async (l: OutsLoc) => { const ws = await wb.sheet(l.sheet); return mapOuts(await wb.values(l.sheet, 2000, 40), ws.merges(), place, l.from, l.to); };
   if (!(await mapOf(loc))) { warnings.push('Στο φύλλο «' + loc.sheet + '» δεν βρέθηκαν οι επικεφαλίδες της λίστας (ΒΑΘΜΟΣ, ΕΠΩΝΥΜΟ, ΟΝΟΜΑ…): η ΔΥΝΑΜΗ δεν γράφτηκε'); return { name, data: await wb.save(), warnings, sheet: loc.sheet }; }

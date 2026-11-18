@@ -1,6 +1,6 @@
 // Εικόνες των επικεφαλίδων (Michael, 13/11): μικραίνουν ΜΙΑ φορά, όταν τις διαλέγεις (μεγαλύτερη πλευρά ως 600 px, PNG μένει PNG,
 // JPG γίνεται JPEG 85), και μένουν ως αρχεία στο «eikones» του φακέλου δεδομένων με όνομα το sha1 τους (ίδια εικόνα = ένα αρχείο).
-// Στο state μπαίνει μόνο το id. Με το αντίγραφο σε USB πάνε και οι εικόνες (main.ts, usb:copy).
+// Στο state μπαίνει μόνο το id. Με το αντίγραφο σε USB πάνε και οι εικόνες και τα «Πρότυπα εντύπων» (main.ts, usb:copy), και η επαναφορά τα φέρνει πίσω (backups:import).
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -78,4 +78,35 @@ export function copyImages(dataDir: string, to: string): number {
     writeDurable(path.join(dir, f), fs.readFileSync(path.join(from, f))); n++;
   }
   return n;
+}
+
+// «Πρότυπα εντύπων» (άλλων μονάδων): ο φάκελος του data και του USB έχουν το ίδιο όνομα
+export const TPL_FOLDER = 'Πρότυπα εντύπων';
+const TPL_FILE = /^[0-9a-f-]{36}\.(xlsx|xlsm|docx)$/i;
+const IMG_FILE = /^[0-9a-f]{40}\.(png|jpg)$/;
+// Αντιγράφει τα αρχεία του from στο to: όσα λείπουν (ή, με changed, όσα άλλαξαν). Δεν σβήνει τίποτα. Επιστρέφει πόσα γράφτηκαν.
+function copyMissing(from: string, to: string, ok: RegExp, changed: boolean): number {
+  if (!fs.existsSync(from)) return 0;
+  let n = 0, made = false;
+  for (const f of fs.readdirSync(from)) {
+    if (!ok.test(f)) continue;
+    const src = path.join(from, f), dst = path.join(to, f);
+    try {
+      if (!fs.statSync(src).isFile()) continue;
+      const buf = fs.readFileSync(src);
+      if (fs.existsSync(dst)) { if (!changed || fs.statSync(dst).size === buf.length && fs.readFileSync(dst).equals(buf)) continue; }
+      if (!made) { fs.mkdirSync(to, { recursive: true }); made = true; }
+      writeDurable(dst, buf); n++;
+    } catch (e) { console.error('αντίγραφο αρχείου', f, e); }
+  }
+  return n;
+}
+// USB: τα πρότυπα εντύπων του data στο «Πρότυπα εντύπων» του φακέλου αντιγράφων (όσα λείπουν ή άλλαξαν)
+export const copyTemplates = (dataDir: string, to: string): number => copyMissing(path.join(dataDir, TPL_FOLDER), path.join(to, TPL_FOLDER), TPL_FILE, true);
+// Επαναφορά: οι εικόνες και τα πρότυπα εντύπων που είναι δίπλα στο αντίγραφο και λείπουν από το data (τα υπάρχοντα δεν αλλάζουν)
+export function restoreExtras(backupDir: string, dataDir: string): { images: number; templates: number } {
+  return {
+    images: copyMissing(path.join(backupDir, IMG_DIR), path.join(dataDir, IMG_DIR), IMG_FILE, false),
+    templates: copyMissing(path.join(backupDir, TPL_FOLDER), path.join(dataDir, TPL_FOLDER), TPL_FILE, false)
+  };
 }

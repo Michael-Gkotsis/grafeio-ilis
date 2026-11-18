@@ -6,7 +6,8 @@ import { useNav, useStore } from '../store';
 import { requestLeave, usePending } from '../pending';
 import { DateField, useUsbCopy } from '../common';
 import { USB_DAYS, usbDue } from '../../shared/reminders';
-import { PHASE_NAME, blockShape, blocksOf, isOutsAll, phaseList, phaseName, type Phase, type Settings } from '../../shared/domain';
+import { ADIK_GROUPS, ADIK_TYPES, PHASE_NAME, TYPES, adikGroupOf, blockShape, blocksOf, isOutsAll, phaseList, phaseName, type AdikGroup, type Phase, type Settings } from '../../shared/domain';
+import { DAY_GROUPS } from '../../shared/outsDay';
 import { AddBlockDialog, PhaseDialog, PhaseSelect } from './guard';
 import { useBlockForm, BlockForm } from '../blockForm';
 import { phaseDelWhy } from '../../shared/commands';
@@ -207,6 +208,20 @@ function OutsSig2() {
       <div className="toolbar" style=${{ marginTop: '8px' }}><${Button} disabled=${!changed} why="Δεν άλλαξε κάτι" onClick=${save}>Αποθήκευση<//>${changed && html`<${Button} variant="ghost" onClick=${() => setEdit(undefined)}>Άκυρο<//>`}</div>`}
   </div>`;
 }
+// Εξοδούχοι «Όλη η δύναμη»: σε ποια ομάδα Β της ΔΥΝΑΜΗΣ μπαίνει όποιος είναι σε Άγνοια, Λιποταξία ή Αδικαιολόγητη απουσία (προεπιλογή: η δική τους, Β5)
+function OutsAdik() {
+  const { state, run } = useStore();
+  const pick = (type: string, g: AdikGroup) => {
+    const cur = { ...(state.settings.outsAdik || {}) }; if (g === 'B5') delete cur[type]; else cur[type] = g;
+    return run({ t: 'setSettings', settings: { outsAdik: Object.keys(cur).length ? cur : undefined }, text: 'ΔΥΝΑΜΗ εξοδούχων, ' + TYPES[type as 'AGN'].label + ': ομάδα ' + DAY_GROUPS.find(x => x[0] === g)![2] }, false);
+  };
+  return html`<div className="adikgrp" style=${{ marginTop: '14px', paddingTop: '10px', borderTop: '1px solid var(--line, #d0d4c4)' }}>
+    <div style=${{ marginBottom: '6px' }}><b>Στη ΔΥΝΑΜΗ των Εξοδούχων μπαίνει στην ομάδα</b></div>
+    ${ADIK_TYPES.map(ty => html`<div key=${ty} className="toolbar" style=${{ alignItems: 'center', marginBottom: '4px' }}><span style=${{ minWidth: '170px' }}>${TYPES[ty].label}</span>
+      <${Select} className="ui-select" aria-label=${'Ομάδα ΔΥΝΑΜΗΣ για: ' + TYPES[ty].long} value=${adikGroupOf(state.settings, ty)} onChange=${(e: any) => pick(ty, e.target.value as AdikGroup)}>${ADIK_GROUPS.map(g => html`<option key=${g} value=${g}>${'Β' + g[1] + '. ' + DAY_GROUPS.find(x => x[0] === g)![2]}</option>`)}<//></div>`)}
+    <p className="note" style=${{ marginTop: 0 }}>Ισχύει στη μορφή «Όλη η δύναμη», στη σελίδα 2 (ΔΥΝΑΜΗ). Η ομάδα Β5 γράφεται μόνο όταν υπάρχει κάποιος σε αυτήν.</p>
+  </div>`;
+}
 function SigsCard() {
   const { state, run, today } = useStore(); const toast = useToast();
   const [form, setForm] = useState<SigForm>('hkai'); const [lay, setLay] = useState(false);
@@ -248,7 +263,7 @@ function SigsCard() {
     <p className="note" style=${{ marginTop: 0 }}>Με τη σειρά που φαίνονται στο χαρτί, από αριστερά προς τα δεξιά. Οι λέξεις της μονάδας αλλάζουν μόνες τους όταν αλλάζει ο τύπος της (π.χ. ΔΚΤΗΣ ΙΛΗΣ → ΔΚΤΗΣ ΛΟΧΟΥ). Το όνομα γράφεται λίγο πιο κάτω, για να χωρά η υπογραφή.
       ${form === 'reports' ? ' Στα Έντυπα μπαίνουν όπου έχει {ΥΠΟΓΡΑΦΕΣ} ή υπογραφές του προτύπου (αλλιώς κάτω από τον πίνακα), εκτός αν το έντυπο έχει δικές του.' : made ? ' Αρχικά καμία. Μπαίνουν μία γραμμή κάτω από κάθε φύλλο, μοιρασμένες στο πλάτος του. Για μία φορά μόνο: «Υπογραφές…» δίπλα στο «Βγάλε το Excel».' : ' Για μία φορά μόνο: «Υπογραφές…» δίπλα στο «Βγάλε το Excel».'}</p>
     <${SigEditor} value=${list} onChange=${setList} id=${'sg-' + form}/>
-    ${form === 'outs' && isOutsAll(state.settings) && html`<${OutsSig2}/>`}
+    ${form === 'outs' && isOutsAll(state.settings) && html`<${OutsSig2}/><${OutsAdik}/>`}
     <label className="ui-checkrow" style=${{ marginTop: '10px' }} data-tip="Σε όλα τα έντυπα και τα Excel, εκτός από την ΗΚΑΙ που έχει πάντα την κεφαλίδα αριστερά: ημερομηνία (τόπος) πάνω αριστερά και κεφαλίδα (μονάδα) πάνω δεξιά. Ξετσέκαρε για την παλιά διάταξη."><input type="checkbox" className="ui-check" aria-label="Κεφαλίδα πάνω δεξιά, ημερομηνία πάνω αριστερά" checked=${!state.settings.hdLeft}
       onChange=${(e: any) => run({ t: 'setSettings', settings: { hdLeft: e.target.checked ? undefined : true }, text: 'κεφαλίδα και ημερομηνία: ' + (e.target.checked ? 'ημερομηνία αριστερά, κεφαλίδα δεξιά' : 'παλιά διάταξη') }, false)}/> Κεφαλίδα πάνω δεξιά, ημερομηνία πάνω αριστερά</label>
     <div className="toolbar" style=${{ marginTop: '12px' }}><${Button} disabled=${!changed} why="Δεν άλλαξε κάτι" onClick=${save}>Αποθήκευση<//>

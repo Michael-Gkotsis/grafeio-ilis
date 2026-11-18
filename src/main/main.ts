@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { Store, CorruptDbError, listBackups } from './db';
-import { addImage, copyImages, readImage } from './eikones';
+import { addImage, copyImages, copyTemplates, readImage, restoreExtras } from './eikones';
 import { copyDurable, dataDirOf, ownBinding, ownOsDir, writeAll, writeJson, freeName, isLocked, ChangedError, LockedError } from './files';
 import { preflight, hasErrors } from '../shared/preflight';
 import { apply, rosterChanges, type Command } from '../shared/commands';
@@ -1538,6 +1538,7 @@ else {
         if (bad) { fs.rmSync(file, { force: true }); return { ok: false, error: 'Το αντίγραφο δεν γράφτηκε σωστά (' + bad + '). Δοκίμασε άλλο USB.' }; }
         listBackups(dir).slice(USB_KEEP).forEach(b => fs.rmSync(path.join(dir, b.name), { force: true }));
         try { copyImages(DATA, dir); } catch (e) { console.error('eikones', e); }   // οι εικόνες των επικεφαλίδων (μόνο όσες λείπουν)
+        try { copyTemplates(DATA, dir); } catch (e) { console.error('πρότυπα εντύπων', e); }   // τα πρότυπα εντύπων άλλων μονάδων (όσα λείπουν ή άλλαξαν)
         const day = today(); writeMeta({ lastUsb: day, usbDir: chosen });
         store.addAudit({ at: nowHM(), day, text: 'Αντίγραφο ασφαλείας σε ' + dir, files: [], source: 'app', undoable: false }, null);
         const same = path.parse(path.resolve(chosen)).root.toLowerCase() === path.parse(path.resolve(DATA)).root.toLowerCase();
@@ -1554,6 +1555,7 @@ else {
       if (bad) return { ok: false, error: 'Το αρχείο δεν είναι καλό αντίγραφο: ' + bad };
       const d = nowParts(); const name = 'ilh_' + today() + '_' + [d.h, d.mi, d.s].map(n => String(n).padStart(2, '0')).join('') + '_από-αρχείο.db';
       fs.mkdirSync(BACKUPS, { recursive: true }); copyDurable(src, path.join(BACKUPS, name));
+      try { restoreExtras(path.dirname(src), DATA); } catch (e) { console.error('επαναφορά εικόνων και προτύπων', e); }   // εικόνες και πρότυπα εντύπων δίπλα στο αντίγραφο (μόνο όσα λείπουν εδώ)
       return { ok: true, name };
     });
     // Εικόνες επικεφαλίδων: διάλεξε αρχείο → μικραίνει μία φορά → data/eikones/<sha1>.<png|jpg> (eikones.ts)
