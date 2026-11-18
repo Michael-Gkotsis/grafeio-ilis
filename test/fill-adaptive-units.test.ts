@@ -31,7 +31,7 @@ describe('evaluator', () => {
   const data = sheet('Παρουσιολόγιο', [['ΒΑΘΜΟΣ', 'ΚΑΤΑΣΤΑΣΗ'], ['ΛΧΙΑΣ', 'ΠΑΡΩΝ'], ['ΛΧΙΑΣ', 'ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ'], ['λχιας', 'Κανονική Άδεια'], ['ΔΝΕΑΣ', 'ΠΑΡΩΝ'], ['ΛΧΙΑΣ ΕΠΟΠ', 'ΠΑΡΩΝ']]);
   const front = sheet('Εμπρός', [[3, 4, null, null, null, null, null]], {
     '0:2': 'SUM(A1:B1)', '0:3': "COUNTIF('Παρουσιολόγιο'!A:A,\"ΛΧΙΑΣ\")", '0:4': "COUNTIFS('Παρουσιολόγιο'!A:A,\"ΛΧΙΑΣ*\",Παρουσιολόγιο!B:B,\"ΠΑΡΩΝ\")",
-    '0:5': 'C1*2-A1/3+(B1-1)', '0:6': 'IF(A1>1,1,2)'
+    '0:5': 'C1*2-A1/3+(B1-1)', '0:6': 'INDIRECT("A1")'
   });
   const ev = new Evaluator([front, data]);
   it('numbers, ranges, other sheets, whole columns, quoted words, wildcards', () => {

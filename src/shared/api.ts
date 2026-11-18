@@ -11,6 +11,7 @@ import type { HdDoc } from './hd';
 import type { Block, Layout, LayoutForm, LayoutSheet } from './layout';
 import type { BuildOpts, BuiltOut, RepCell, RepKind, Report, RepTpl } from './reports';
 import type { ModelRes, TplReq, TryRes } from './tplMap';
+import type { ListModel, ListReq, ListTryRes } from './listMap';
 import type { FormBinding, FormKind, HkaiMap, ListKind, PlanLine, SourceBinding, StatusKind, TableHit } from './sources';
 
 export type ExportKind = 'froura' | 'hkai' | 'outs' | 'check' | 'frouraPsk' | 'outsPsk';
@@ -152,6 +153,9 @@ export interface Api {
   tplModel(form: FormKind, file?: string, sheet?: string): Promise<ModelRes | Fail>;
   tplTry(form: FormKind, req: TplReq): Promise<TryRes | Fail>;
   tplSave(form: FormKind, req: TplReq): Promise<CmdResult>;
+  // Λίστες άλλης μονάδας (ΦΡΟΥΡΑ σε λίστα, Εξοδούχοι/Αδειούχοι, θαλαμιζόμενοι): μοντέλο και δοκιμή· η αποθήκευση γίνεται με την εντολή adaptTpl
+  listModel(form: FormKind, file?: string, sheet?: string): Promise<ListModel | Fail>;
+  listTry(form: FormKind, req: ListReq): Promise<ListTryRes | Fail>;
   tplRestore(form: FormKind, req: TplReq): Promise<{ ok: true; file: string; applied: number } | Fail | null>;
   openPath(file: string): Promise<void>;
   printFile(file: string, sheet?: string | string[]): Promise<{ ok: true } | Fail>;   // προεπισκόπηση εκτύπωσης χωρίς Excel (sheet: τα φύλλα που τσεκάρονται)

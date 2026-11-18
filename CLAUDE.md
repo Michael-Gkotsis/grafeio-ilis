@@ -48,11 +48,13 @@ Greek. Code comments on main are Greek too: match the file you edit.
 src/shared/     pure rules and types shared by main + renderer (domain.ts types, commands.ts = every user action
                 with undo, rules, dates, ΗΚΑΙ, outs, duty); no fs, Electron, React or htm imports
                 dutyGrid.ts + dutyUnit.ts = monthly duty grid of ANOTHER unit (detection, code vocabulary, profile → unitCodes/unitOut overlay)
+                unitLists.ts + listMap.ts = lists of ANOTHER unit: services as a vertical list, outs/leaves side by side, room lists with VLOOKUP (detection, matching, write plans, screen model)
 src/main/       main.ts (entry, IPC handlers), db.ts (sql.js database), xlsx.ts (own Excel engine), exports.ts
                 (ΦΡΟΥΡΑ/ΗΚΑΙ/Εξοδούχοι forms), hdDocx.ts (Word ΗΔ), print.ts, sources.ts (unit Excel files),
-                worker.ts + offload.ts (Excel work off the main thread), update.ts + updater.ts
+                worker.ts + offload.ts (Excel work off the main thread), update.ts + updater.ts,
+                tplLists.ts (fill + screen model of those lists; fillFroura / fillOuts call it when a saved mapping matches the file)
 src/preload/    preload.ts (IPC bridge), print.ts
-src/renderer/   app.ts (shell, nav, shortcuts), screens/*.ts (one per screen; dutyMap.ts = «Αντιστοίχιση…» dialog), store.ts, mockApi.ts, styles.css
+src/renderer/   app.ts (shell, nav, shortcuts), screens/*.ts (one per screen; dutyMap.ts, listMap.ts = «Αντιστοίχιση…» dialogs), store.ts, mockApi.ts, styles.css
 templates/      the official .xlsx templates (rule 1)
 ```
 - The renderer never imports from `src/main`; it reaches main only through the preload API (`src/shared/api.ts`).

@@ -2,8 +2,8 @@
 // Only types and the safe loader live here (no imports), so settings code can use them without pulling in the engine.
 // The engine itself (fingerprint, matching, re-locating) is in tplProfile.ts.
 export const PROFILE_VERSION = 1;
-export type ProfileKind = 'hkai' | 'hkal' | 'services' | 'roster' | 'weapons' | 'duties';
-export const PROFILE_KINDS: ProfileKind[] = ['hkai', 'hkal', 'services', 'roster', 'weapons', 'duties'];
+export type ProfileKind = 'hkai' | 'hkal' | 'services' | 'roster' | 'weapons' | 'duties' | 'outs' | 'rooms';
+export const PROFILE_KINDS: ProfileKind[] = ['hkai', 'hkal', 'services', 'roster', 'weapons', 'duties', 'outs', 'rooms'];
 export type RegionType = 'list' | 'matrix' | 'grid';
 // how an element was found: sure by the engine, suggested and accepted by the user, or set by the user
 export type Found = 'auto-sure' | 'auto-suggest' | 'user';
@@ -31,6 +31,13 @@ export interface DutyProfile {
   codes: Record<string, DutyMeaning>;
   cols?: Record<string, string>;       // ρόλος στήλης (name, last, first, aa, asm, essos, post, sub) → επικεφαλίδα που διάλεξε ο χρήστης
 }
+// Λίστες της μονάδας σε φύλλο που δεν μοιάζει με τα δικά μας έντυπα (phase 3b), kinds 'services' (κατάσταση υπηρεσιών σε λίστα), 'outs' (εξοδούχοι/αδειούχοι δίπλα δίπλα),
+// 'rooms' (θαλαμιζόμενοι με VLOOKUP σε λίστα δεδομένων). Μόνο ό,τι διάλεξε ο χρήστης· ό,τι βρίσκεται μόνο του από το αρχείο ξαναβρίσκεται κάθε φορά.
+//   sheet   το φύλλο όπου έγινε η αντιστοίχιση (ξαναβρίσκεται και με άλλο όνομα από τις λέξεις του)
+//   posts   (services) «λέξη του αρχείου#Ν» → blk:<υπηρεσία> | post:<θέση> | ignore   (Ν = η Νιοστή φορά που εμφανίζεται η λέξη)
+//   cols    ρόλος στήλης → στήλη (0-based)· για outs με πρόθεμα «o.» (εξοδούχοι) ή «l.» (αδειούχοι)
+//   who     (rooms) φύλλο → ποιοι μπαίνουν: '' όλοι με θάλαμο, αλλιώς το όνομα Ίλης/Λόχου
+export interface ListProfile { sheet: string; posts?: Record<string, string>; cols?: Record<string, number>; who?: Record<string, string>; sheets?: string[] }
 export interface TplProfile {
   v: number;
   id: string;
@@ -44,6 +51,7 @@ export interface TplProfile {
   back?: { num?: 'arabic' | 'greek'; date?: 'hk' | 'slash' | 'slash4'; line?: 'app' | 'person'; accepted?: string[] };   // the back side: format of a line, and the section words the user accepted as a proposal
   ignoreWords?: string[];             // words of the data sheet the user chose to ignore (phraseKey), kept between sessions
   duty?: DutyProfile;                 // kind 'duties': the unit's code vocabulary and the columns the user chose
+  lst?: ListProfile;                  // kinds services / outs / rooms: the unit's own list layouts (see ListProfile)
   ours?: Record<string, string>;      // cells the safe writer filled: 'sheet|r:c' -> the text written (a cell that still holds it may be overwritten)
 }
 
@@ -70,6 +78,13 @@ function cleanDuty(d: { codes: Record<string, unknown>; cols?: unknown }): DutyP
   return { codes, ...(Object.keys(cols).length ? { cols } : {}) };
 }
 
+function cleanLst(x: Record<string, unknown>): ListProfile {
+  const strs = (o: unknown): Record<string, string> => (isObj(o) ? Object.fromEntries(Object.entries(o).filter(([, v]) => typeof v === 'string')) as Record<string, string> : {});
+  const posts = strs(x.posts), who = strs(x.who);
+  const cols = isObj(x.cols) ? Object.fromEntries(Object.entries(x.cols).filter(([, v]) => typeof v === 'number' && Number.isInteger(v) && v >= 0)) as Record<string, number> : {};
+  return { sheet: x.sheet as string, ...(Object.keys(posts).length ? { posts } : {}), ...(Object.keys(cols).length ? { cols } : {}), ...(Object.keys(who).length ? { who } : {}), ...(Array.isArray(x.sheets) ? { sheets: x.sheets.filter(str) } : {}) };
+}
+
 // Anything that may be in an old or damaged state file → valid profiles (absent = []). Profiles of a newer version are dropped
 // (this build cannot read them), broken parts are cut away instead of crashing.
 export function sanitizeProfiles(x: unknown): TplProfile[] {
@@ -87,6 +102,7 @@ export function sanitizeProfiles(x: unknown): TplProfile[] {
       ...(isObj(p.back) ? { back: { ...(p.back.num === 'greek' || p.back.num === 'arabic' ? { num: p.back.num } : {}), ...(p.back.date === 'hk' || p.back.date === 'slash' || p.back.date === 'slash4' ? { date: p.back.date } : {}), ...(p.back.line === 'app' || p.back.line === 'person' ? { line: p.back.line } : {}), ...(Array.isArray(p.back.accepted) ? { accepted: p.back.accepted.filter((x): x is string => typeof x === 'string') } : {}) } } : {}),
       ...(Array.isArray(p.ignoreWords) ? { ignoreWords: p.ignoreWords.filter((x): x is string => typeof x === 'string') } : {}),
       ...(isDuty(p.duty) ? { duty: cleanDuty(p.duty) } : {}),
+      ...(isObj(p.lst) && typeof p.lst.sheet === 'string' ? { lst: cleanLst(p.lst) } : {}),
       ...(isObj(p.ours) ? { ours: Object.fromEntries(Object.entries(p.ours).filter(([, v]) => typeof v === 'string')) as Record<string, string> } : {})
     });
   }
