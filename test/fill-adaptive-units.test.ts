@@ -15,7 +15,13 @@ import { Evaluator, UNSUPPORTED, critMatches } from '../src/shared/sheetEval';
 import { detectBook } from '../src/shared/shape';
 import { colLetter, key as cellKey } from '../src/shared/sheetModel';
 import { genFillMock } from './mockgen';
-import { hkaiClassify } from '../src/shared/rules';
+import { hkaiClassify, postBy } from '../src/shared/rules';
+import { upper } from '../src/shared/text';
+import { hkOrgans } from '../src/shared/hkaiText';
+import { apply, type Command } from '../src/shared/commands';
+import type { AppState } from '../src/shared/domain';
+import type { AssetRow } from '../src/shared/assets';
+import { vehRowOf } from '../src/shared/vehicles';
 
 // ------------------------------------------------------------------ the evaluator
 const sheet = (name: string, rows: (string | number | null)[][], formulas: Record<string, string> = {}) => ({
@@ -326,4 +332,118 @@ describe('ημερομηνία σε δικό της κελί', () => {
     // η μορφή του κελιού μένει του εντύπου (ημερομηνία)
     const wb2 = new ExcelJS.Workbook(); await wb2.xlsx.load(buffer); expect(wb2.getWorksheet(m.sheet)!.getCell(R + 2, 7).numFmt).toBe('d-mmm-yy');
   }, 120000);
+});
+
+// 18/11 (ΗΚΑΛ Λόχου Σκαπανέων): κάτω από τον πίνακα κουτάκια «ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ», «ΑΠΟΣΠΑΣΗ - ΔΙΑΘΕΣΗ»… με ονόματα, ένα ανά γραμμή.
+// Έμεναν τα ονόματα της μέρας που φτιάχτηκε το πρότυπο.
+describe('κουτάκια με ονόματα κάτω από τον πίνακα', () => {
+  const calm = { originSplit: false, rankSplit: false, unknownRow: false, dropRows: false, drop: 0, typo: false, hospitalSplit: false, dupHeader: false, ownCols: 0, seps: false, adik: false, totals: 'formulas' as const, countifs: false };
+  const thin = { style: 'thin' as const };
+  it('τα σημερινά ονόματα στη θέση των παλιών· περισσότερα από τις γραμμές στην τελευταία· άγνωστη κατάσταση σβήνεται· άλλο κείμενο μένει', async () => {
+    const m = await genFillMock(6, calm);
+    const who = hkaiClassify(m.s, m.date).who;
+    const last = (k: string) => who.filter(w => w.col === k).map(w => upper((w.p ?? w.c)!.last));
+    expect(last('eid').length).toBe(2); expect(last('yp').length).toBe(3);
+    const wb = new ExcelJS.Workbook(); await wb.xlsx.load(m.buf); const fr = wb.getWorksheet(m.sheet)!;
+    const R = fr.rowCount + 3;
+    const box = (c: number, head: string, old: string[], n = old.length) => {
+      fr.getCell(R, c).value = head;
+      for (let i = 0; i < n; i++) { const x = fr.getCell(R + 1 + i, c); x.border = { top: thin, bottom: thin, left: thin, right: thin }; if (old[i]) x.value = old[i]; }
+    };
+    box(2, 'ΕΙΔΙΚΗ ΑΔΕΙΑ', ['ΣΤΡ ΠΑΠΑΔΟΠΟΥΛΟΣ Γ.', 'ΣΤΡ (ΠΖ) ΚΩΣΤΟΠΟΥΛΟΣ Α.', '', 'ΔΝΕΑΣ ΜΑΚΡΗΣ Ι.']);
+    fr.getCell(R + 5, 2).value = 'Ο ΔΙΟΙΚΗΤΗΣ'; fr.getCell(R + 5, 2).border = { top: thin };           // κείμενο του εντύπου: τέλος κουτιού
+    box(6, 'Υπηρεσία εντός', ['ΣΤΡ ΠΑΛΙΟΣ Β.']);                                                    // ίδιο όνομα με στήλη του πίνακα, 1 γραμμή
+    box(10, 'ΚΑΡΑΝΤΙΝΑ', ['ΣΤΡ ΑΡΡΩΣΤΟΣ Δ.', '']);                                                  // κατάσταση χωρίς στήλη στον πίνακα
+    box(14, 'ΠΑΡΑΤΗΡΗΣΕΙΣ', ['ΣΤΡ ΜΕΝΕΙ Ε.']);                                                       // δεν είναι κατάσταση: δεν αγγίζεται
+    const tpl = Buffer.from(await wb.xlsx.writeBuffer());
+    const { buffer, report } = await fillAdaptive(tpl, m.s, m.date, m.profile);
+    const f = (await modelOfBuffer(buffer)).find(x => x.name === m.sheet)!;
+    const at = (r: number, c: number) => String(f.rows[r - 1]?.[c - 1] ?? '');
+    // ΕΙΔΙΚΗ ΑΔΕΙΑ: 2 σημερινοί στις 2 πρώτες, οι άλλες άδειες· «Ο ΔΙΟΙΚΗΤΗΣ» μένει
+    const eid = [at(R + 1, 2), at(R + 2, 2)];
+    for (const l of last('eid')) expect(eid.some(x => x.includes(l))).toBe(true);
+    for (const x of eid) expect(x).toBe(upper(x));
+    expect(at(R + 3, 2)).toBe(''); expect(at(R + 4, 2)).toBe(''); expect(at(R + 5, 2)).toBe('Ο ΔΙΟΙΚΗΤΗΣ');
+    expect(buffer.toString('latin1')).not.toContain('ΠΑΠΑΔΟΠΟΥΛΟΣ');
+    // Υπηρεσία εντός: 3 ονόματα σε 1 γραμμή, χωρισμένα με κόμμα
+    const yp = at(R + 1, 6); expect(yp.split(', ').length).toBe(3); for (const l of last('yp')) expect(yp).toContain(l);
+    // ΚΑΡΑΝΤΙΝΑ: σβήστηκε, με προειδοποίηση· ΠΑΡΑΤΗΡΗΣΕΙΣ: ίδιο
+    expect(at(R + 1, 10)).toBe(''); expect(report.warnings.join('\n')).toContain('«ΚΑΡΑΝΤΙΝΑ»');
+    expect(at(R + 1, 14)).toBe('ΣΤΡ ΜΕΝΕΙ Ε.');
+    expect(report.boxes!.map(b => [b.text, b.how, b.slots, b.people])).toEqual([
+      ['ΕΙΔΙΚΗ ΑΔΕΙΑ', 'word', 4, 2], ['Υπηρεσία εντός', 'col', 1, 3], ['ΚΑΡΑΝΤΙΝΑ', 'none', 2, 0]
+    ]);
+  }, 120000);
+});
+
+// 18/11 (ΗΚΑΛ Λόχου Σκαπανέων): η πίσω όψη με «Νυχτοφρουρές»/«24ωρες» και πίνακα οχημάτων με γραμμή ανά είδος («1/4 τόνων»… «ΣΥΝΟΛΟ»),
+// σε άλλο φύλλο από τις ΜΕΤΑΒΟΛΕΣ. Έμεναν κενά/0.
+describe('πίσω όψη: φρουρές και οχήματα ανά είδος', () => {
+  const calm = { originSplit: false, rankSplit: false, unknownRow: false, dropRows: false, drop: 0, typo: false, hospitalSplit: false, dupHeader: false, ownCols: 0, seps: false, adik: false, totals: 'formulas' as const, countifs: false };
+  async function book(m: Awaited<ReturnType<typeof genFillMock>>) {
+    const wb = new ExcelJS.Workbook(); await wb.xlsx.load(m.buf);
+    const mt = wb.addWorksheet('Μεταβολές');
+    ['1. ΕΓΓΡΑΦΕΣ:', '2. ΔΙΑΓΡΑΦΕΣ:', '3. ΑΔΕΙΕΣ:', '4. ΠΟΙΝΕΣ:', '5. ΑΙΤΗΣΕΙΣ:', '6. ΛΟΙΠΑ:'].forEach((t, i) => { mt.getCell(2 + i * 4, 1).value = t; });
+    const b = wb.addWorksheet('Πίσω Όψη');
+    b.getCell(2, 1).value = 'Είδος Φρουράς'; b.getCell(2, 2).value = 'Αξκοι'; b.getCell(2, 3).value = 'Υπξκοι'; b.getCell(2, 4).value = 'Στρατιώτες'; b.getCell(2, 5).value = 'Σύνολο';
+    b.getCell(3, 1).value = 'Νυχτοφρουρές'; b.getCell(4, 1).value = '24ωρες';
+    b.getCell(2, 7).value = 'Είδη Οχημάτων'; b.getCell(2, 8).value = 'Προβλέπονται'; b.getCell(2, 9).value = 'Σε Κίνηση'; b.getCell(2, 10).value = 'Για Συντήρηση'; b.getCell(2, 11).value = 'Λόγω Βλαβών ή Ατυχήματος';
+    ['1/4 τόνων', '3/4 τόνων', '2 1/2 τόνων', 'Ειδικά', 'ΣΥΝΟΛΟ'].forEach((t, i) => { b.getCell(3 + i, 7).value = t; });
+    b.getCell(12, 1).value = 'Αξκοι:'; b.getCell(15, 1).value = 'Υπξκοι:';
+    return Buffer.from(await wb.xlsx.writeBuffer());
+  }
+  function withVehicles(s0: AppState, d: string, reg: boolean): AppState {
+    let k = 0; let s = s0;
+    const go = (c: Command) => { s = apply(s, c, { today: d, newId: () => 'v' + ++k }).state; };
+    const add = (cat: string, type: string, plate: string) => { go({ t: 'saveAsset', asset: { cat, type, no: plate, plate, state: 'ok', km: 1000 }, date: d } as Command); return s.assets!.find(x => x.plate === plate)!.id; };
+    const j = add('troxofora', 'JEEP 1/4', 'ΕΣ 1'); add('troxofora', 'NISSAN 3/4', 'ΕΣ 2'); add('troxofora', 'ΜΑΝ 2 1/2', 'ΕΣ 3');
+    const r = add('troxofora', 'ΜΑΝ 2 1/2', 'ΕΣ 4'); const t = add('erpystr', 'M113 ΕΙΔΙΚΑ', 'ΕΣ 5'); add('erpystr', 'LEOPARD', 'ΕΣ 6');
+    go({ t: 'assetKm', id: j, date: d, km: 1050 } as Command);
+    go({ t: 'assetState', id: r, state: 'repair', date: d } as Command);
+    go({ t: 'assetState', id: t, state: 'immobile', why: 'ΜΠΑΤΑΡΙΕΣ', date: d } as Command);
+    return { ...s, settings: { ...s.settings, hkai: { ...(s.settings.hkai || {}), vehReg: reg } } };
+  }
+  it('φρουρές στη στήλη «Στρατιώτες», Λ/Υ-Δ/Υ κάτω από «Υπξκοι:», κάθε όχημα στη γραμμή του είδους του και ΣΥΝΟΛΟ', async () => {
+    const m = await genFillMock(5, calm); const s = withVehicles(m.s, m.date, true);
+    const { buffer, report } = await fillAdaptive(await book(m), s, m.date, m.profile);
+    const b = (await modelOfBuffer(buffer)).find(x => x.name === 'Πίσω Όψη')!;
+    const at = (r: number, c: number) => b.rows[r - 1]?.[c - 1] ?? null;
+    let night = 0, day24 = 0;
+    for (const k in s.guards[m.date] || {}) { const p = postBy(s, k); if (!p) continue; if (p.kind === 'th' || p.kind === 'sk' || p.kind === 'op') night++; else day24++; }
+    expect(night + day24).toBeGreaterThan(0);
+    expect(at(3, 4)).toBe(night || null); expect(at(4, 4)).toBe(day24 || null);
+    expect(at(3, 3)).toBe(null); expect(at(4, 3)).toBe(null);                       // όχι στη στήλη «Υπξκοι» των φρουρών
+    const og = hkOrgans(s, m.date); expect(og.ly ?? og.dy).toBeDefined();
+    expect(at(16, 1) == null ? null : String(at(16, 1)).slice(0, 5)).toBe(og.ly != null ? 'Λ/Υ: ' : null);
+    expect(at(17, 1) == null ? null : String(at(17, 1)).slice(0, 5)).toBe(og.dy != null ? 'Δ/Υ: ' : null);
+    // Προβλέπονται, Σε κίνηση, Για συντήρηση, Λόγω βλάβης
+    const row = (r: number) => [8, 9, 10, 11].map(c => at(r, c));
+    expect(row(3)).toEqual([1, 1, null, null]);   // 1/4
+    expect(row(4)).toEqual([1, null, null, null]); // 3/4
+    expect(row(5)).toEqual([2, null, 1, null]);   // 2 1/2
+    expect(row(6)).toEqual([1, null, null, 1]);   // Ειδικά
+    expect(row(7)).toEqual([5, 1, 1, 1]);         // ΣΥΝΟΛΟ: όσα μπήκαν σε γραμμή
+    expect(at(3, 7)).toBe('1/4 τόνων');
+    expect(report.warnings.join('\n')).toContain('1 όχημα δεν ταιριάζει σε γραμμή του πίνακα οχημάτων');
+  }, 120000);
+  it('χωρίς «Από το μητρώο οχημάτων» ο πίνακας ανά είδος δεν γράφεται και το λέει', async () => {
+    const m = await genFillMock(5, calm); const s0 = withVehicles(m.s, m.date, false);
+    // νούμερα με το χέρι (Ρυθμίσεις της ΗΚΑΙ): ένα είδος, δεν μοιράζονται σε γραμμές
+    const s: AppState = { ...s0, settings: { ...s0.settings, hkai: { ...s0.settings.hkai, veh: { type: 'ΤΡΟΧΟΦΟΡΑ', prov: 4, kin: 1 } } } };
+    const { buffer, report } = await fillAdaptive(await book(m), s, m.date, m.profile);
+    const b = (await modelOfBuffer(buffer)).find(x => x.name === 'Πίσω Όψη')!;
+    for (let r = 3; r <= 7; r++) for (let c = 8; c <= 11; c++) expect(b.rows[r - 1]?.[c - 1] ?? null).toBe(null);
+    expect(report.warnings.join('\n')).toContain('γεμίζει μόνο με «Από το μητρώο οχημάτων»');
+  }, 120000);
+  it('vehRowOf: τύπος, κατηγορία, δικό πεδίο· σε δύο γραμμές = -1', () => {
+    const L = ['1/4 τόνων', '3/4 τόνων', '2 1/2 τόνων', 'Ειδικά'];
+    const row = (type: string, extra: Record<string, string> = {}) => ({ key: 'x', a: { type, extra }, stored: true }) as unknown as AssetRow;
+    expect(vehRowOf(row('JEEP 1/4'), L, 'Τροχοφόρα')).toBe(0);
+    expect(vehRowOf(row('ΜΑΝ 2 1/2'), L, 'Τροχοφόρα')).toBe(2);
+    expect(vehRowOf(row('ΜΑΝ', { Τόνοι: '3/4' }), L, 'Τροχοφόρα')).toBe(1);
+    expect(vehRowOf(row('M113'), L, 'Ειδικά')).toBe(3);
+    expect(vehRowOf(row('ΜΑΝ 6t'), L, 'Τροχοφόρα')).toBe(null);
+    expect(vehRowOf(row('ΜΑΝ 1/4 3/4'), L, 'Τροχοφόρα')).toBe(-1);
+    expect(vehRowOf(row('ΜΑΝ 11/4'), L, 'Τροχοφόρα')).toBe(null);
+  });
 });

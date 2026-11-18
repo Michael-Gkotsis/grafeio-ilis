@@ -84,8 +84,8 @@ export const drivenBy = (rows: AssetRow[], h: AssetHolder): AssetRow[] => rows.f
 // ---------- ΗΚΑΙ «Κατάσταση οχημάτων» από το μητρώο ----------
 // prov: όσα δεν έχουν διαγραφεί· kin: με κίνηση τη μέρα· maint: προς επισκευή ή με καθυστερημένη συντήρηση· dmg: ακινησία (ένα όχημα
 // μετρά σε ένα μόνο από τα maint/dmg). Καμία εγγραφή οχήματος = undefined (μένει ό,τι έγραψες με το χέρι).
-export function vehHkai(s: Pick<AppState, 'people' | 'cadreList' | 'assets' | 'assetLog' | 'settings'>, d: ISODate): HkVehicle | undefined {
-  const cfg = assetCfgOf(s.settings); const rows = vehicleRows(s); if (!rows.length) return undefined;
+export function vehHkai(s: Pick<AppState, 'people' | 'cadreList' | 'assets' | 'assetLog' | 'settings'>, d: ISODate, only?: (r: AssetRow) => boolean): HkVehicle | undefined {
+  const cfg = assetCfgOf(s.settings); const rows = vehicleRows(s).filter(r => !only || only(r)); if (!rows.length) return only ? { type: '', prov: 0, kin: 0, maint: 0, dmg: 0 } : undefined;
   const h: HkVehicle = { type: '', prov: rows.length, kin: 0, maint: 0, dmg: 0 };
   for (const r of rows) {
     if (movedOn(r.a, s.assetLog, d)) h.kin!++;
@@ -136,4 +136,22 @@ export function vehicleSheets(s: Pick<AppState, 'people' | 'cadreList' | 'assets
   out.push({ name: uniq('ΣΥΝΤΗΡΗΣΕΙΣ'), title: 'ΣΥΝΤΗΡΗΣΕΙΣ ΟΧΗΜΑΤΩΝ ' + dmy(d), head: ['Α/Α', 'ΗΜΕΡΟΜΗΝΙΑ', 'ΟΧΗΜΑ', 'ΧΛΜ', 'ΣΗΜΕΙΩΣΗ'], kind: 'maint', note: 'ΟΙ ΣΥΝΤΗΡΗΣΕΙΣ ΠΟΥ ΕΧΟΥΝ ΚΑΤΑΧΩΡΗΘΕΙ ΣΤΟ ΜΗΤΡΩΟ, ΑΠΟ ΤΗΝ ΠΑΛΙΟΤΕΡΗ ΠΡΟΣ ΤΗΝ ΠΙΟ ΠΡΟΣΦΑΤΗ',
     rows: evs('maint').map((e, j) => [j + 1, dmy(e.date), nameOf(e.aid), e.km != null ? numTxt(e.km) : '', upper(e.text || '')]) });
   return out;
+}
+
+// Πίνακας οχημάτων άλλης μονάδας με δικές της γραμμές ανά είδος («1/4 τόνων», «3/4 τόνων», «2 1/2 τόνων», «Ειδικά»): σε ποια γραμμή
+// πάει ένα όχημα. Ταιριάζει όταν η λέξη της γραμμής (χωρίς «τόνων») είναι ο τύπος του, η κατηγορία του ή τιμή ενός πεδίου του
+// (π.χ. δικό σου πεδίο «Τόνοι»), ή είναι μέσα στον τύπο ως ξεχωριστή λέξη («JEEP 1/4»). Επιστρέφει τον αριθμό της γραμμής ή
+// null (καμία) ή -1 (σε περισσότερες από μία: δεν μετρά πουθενά).
+const vnorm = (t: string) => upper(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+export const vehRowCore = (label: string) => vnorm(label).replace(/\s*(ΤΟΝΩΝ|ΤΟΝΟΙ|ΤΟΝ\.?|TN|T)$/u, '').trim();
+export function vehRowOf(r: AssetRow, labels: string[], catName: string): number | null {
+  const texts = [r.a.type, catName, ...Object.values(r.a.extra || {})].filter((x): x is string => typeof x === 'string' && !!x.trim()).map(vnorm);
+  const hits: number[] = [];
+  labels.forEach((l, i) => {
+    const full = vnorm(l), core = vehRowCore(l); if (!core) return;
+    const word = core.length >= 2 && (/\d/.test(core) || core.length >= 4);
+    const esc = core.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+    if (texts.some(t => t === full || t === core || (word && new RegExp('(^|[^\\p{L}\\d/])' + esc + '($|[^\\p{L}\\d/])', 'u').test(t)))) hits.push(i);
+  });
+  return hits.length === 1 ? hits[0] : hits.length ? -1 : null;
 }

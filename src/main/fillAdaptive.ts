@@ -22,6 +22,7 @@ import type { ISODate } from '../shared/dates';
 import { ABS_KEYS, expectedCells, HkEngine, KOL_KEYS, mapMatrix, pickFront, unplaced, type FrontMap, type RuleCtx } from '../shared/hkRules';
 import { critMatches, Evaluator, UNSUPPORTED } from '../shared/sheetEval';
 import { emptyBack, planExtras, type BackReport } from './backFill';
+import { planBoxes, type BoxInfo } from './frontBoxes';
 import type { Sig } from '../shared/sigs';
 import { HK_COLS } from '../shared/sources';
 
@@ -51,6 +52,7 @@ export interface FillReport {
   warnings: string[];
   ours: Record<string, string>;
   back: BackReport;                       // the back side: sections found, lines placed, lines that continue on another page, what was not written
+  boxes?: BoxInfo[];                      // the name boxes under the table (ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ, ΦΥΛΑΚΙΟ…): what each lists, rows, names
 }
 const emptyReport = (dryRun: boolean): FillReport => ({ dryRun, front: null, written: [], refused: [], kept: 0, unmappedCols: [], unmappedRows: [], unplacedRows: [], unplacedStates: [], totalsSkipped: [], data: null, cross: { checked: 0, matched: 0, unevaluated: 0, mismatches: [] }, warnings: [], ours: {}, back: emptyBack() });
 
@@ -220,6 +222,8 @@ export async function fillAdaptive(tpl: Buffer, s: AppState, date: ISODate, prof
   }
   const wb = await Workbook.open(tpl);
   if (opts.extras !== false) {
+    // τα κουτάκια με ονόματα κάτω από τον πίνακα (έντυπα άλλων μονάδων)
+    const bx = await planBoxes(wb, model, map, cls.who, lex, STATUS_COL); plan.push(...bx.plan); rep.warnings.push(...bx.warnings); rep.boxes = bx.boxes;
     const ex = await planExtras(wb, sheets, sh.name, lex, s, date, profile, { sigs: opts.sigs });
     plan.push(...ex.plan.filter(w => !ex.blocked(w))); rep.warnings.push(...ex.warnings); rep.back = ex.report;
   }
