@@ -1488,7 +1488,9 @@ export class Workbook {
     this.zip.file('[Content_Types].xml', ct);
     this.pics = [];
   }
-  async save(): Promise<Buffer> {
+  // dropCached: σβήνει τις αποθηκευμένες τιμές (<v>) των τύπων σε όλα τα φύλλα. Για έντυπα άλλων μονάδων όπου οι τύποι μετρούν
+  // ό,τι γράψαμε (π.χ. COUNTIF στο Παρουσιολόγιο): αλλιώς το LibreOffice (και κάθε πρόγραμμα που δεν ξαναϋπολογίζει) δείχνει τα παλιά νούμερα
+  async save(o: { dropCached?: boolean } = {}): Promise<Buffer> {
     // φύλλα που δεν άνοιξαν αλλά έχουν τύπους προς φύλλο όπου μπήκαν γραμμές
     if (this.moved.length) for (const e of this.names) {
       if (this.sheets.has(e.path)) continue;
@@ -1544,6 +1546,11 @@ export class Workbook {
       this.zip.file('[Content_Types].xml', ct.replace(/<Override[^>]*calcChain[^>]*\/>/, ''));
       const rp = 'xl/_rels/workbook.xml.rels'; const rels = await this.zip.file(rp)!.async('string');
       this.zip.file(rp, rels.replace(/<Relationship[^>]*calcChain[^>]*\/>/, ''));
+    }
+    if (o.dropCached) for (const e of this.names) {
+      const f = this.zip.file(e.path); if (!f) continue;
+      const x = await f.async('string'); if (!x.includes('<f')) continue;
+      const y = x.replace(/(<f\b[^>]*\/>|<\/f>)\s*<v>[^<]*<\/v>/g, '$1'); if (y !== x) this.zip.file(e.path, y);
     }
     let wbx = this.workbookXml;
     if (/<calcPr\b/.test(wbx)) wbx = wbx.replace(/<calcPr\b([^>]*?)\/?>/, (_m, a: string) => `<calcPr${setAttr(a, 'fullCalcOnLoad', '1')}/>`);
