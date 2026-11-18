@@ -241,7 +241,7 @@ export async function fillAdaptive(tpl: Buffer, s: AppState, date: ISODate, prof
     }
     if (rep.cross.mismatches.length) rep.warnings.push('Έλεγχος με τους τύπους του εντύπου: ' + rep.cross.mismatches.length + ' κελιά δεν βγάζουν τον αριθμό που αναμένεται');
   }
-  return { buffer: opts.dryRun ? tpl : await wb.save(), report: rep };
+  return { buffer: opts.dryRun ? tpl : await wb.save({ dropCached: true }), report: rep };
 }
 
 // ------------------------------------------------------------------ total cells that lost their formulas
@@ -282,6 +282,6 @@ export async function applyFormulaFixes(tpl: Buffer, fixes: FormulaFix[]): Promi
     if (ws.hasFormula(f.ref)) { skipped.push(f); continue; }
     ws.setFormula(f.ref, f.formula); applied.push(f);
   }
-  return { buffer: applied.length ? await wb.save() : tpl, applied, skipped };
+  return { buffer: applied.length ? await wb.save({ dropCached: true }) : tpl, applied, skipped };
 }
 void valueText;

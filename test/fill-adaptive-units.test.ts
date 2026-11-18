@@ -261,3 +261,38 @@ describe('detector gap: separator columns', () => {
     expect(l[0].cols.some(c => c.match.concept === 'person:phone' && c.match.confidence !== 'unknown')).toBe(true);
   });
 });
+
+// 18/11: τύποι του εντύπου μιας μονάδας με αποθηκευμένες (παλιές) τιμές, π.χ. COUNTIF στο Παρουσιολόγιο. Το LibreOffice με τις
+// προεπιλογές του (δεν ξαναϋπολογίζει αρχεία του Excel) έδειχνε τα παλιά νούμερα. Τώρα το αρχείο βγαίνει χωρίς αποθηκευμένες τιμές τύπων.
+async function staleCache(buf: Buffer): Promise<Buffer> {
+  const JSZip = (await import('jszip')).default; const z = await JSZip.loadAsync(buf);
+  for (const p of Object.keys(z.files).filter(p => /^xl\/worksheets\/[^/]+\.xml$/.test(p))) {
+    const x = await z.file(p)!.async('string');
+    z.file(p, x.replace(/(<f\b[^>]*\/>|<\/f>)(?:<v>[^<]*<\/v>)?/g, '$1<v>999</v>'));
+  }
+  return z.generateAsync({ type: 'nodebuffer' });
+}
+async function loDefault(buf: Buffer) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'grafeio-lo-'));
+  try {
+    const f = path.join(dir, 'a.xlsx'); fs.writeFileSync(f, buf);
+    execFileSync(soffice!, ['--headless', '--norestore', '-env:UserInstallation=file://' + path.join(dir, 'prof'), '--convert-to', 'xlsx:Calc MS Excel 2007 XML', '--outdir', path.join(dir, 'out'), f], { timeout: 120000, stdio: 'ignore' });
+    return await modelOfBuffer(fs.readFileSync(path.join(dir, 'out', 'a.xlsx')));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+describe('παλιές αποθηκευμένες τιμές τύπων', () => {
+  const calm = { originSplit: false, rankSplit: false, unknownRow: false, dropRows: false, drop: 0, typo: false, hospitalSplit: false, dupHeader: false, ownCols: 0, seps: false, adik: false, totals: 'formulas' as const };
+  it('το γεμάτο αρχείο δεν κρατά καμία αποθηκευμένη τιμή τύπου· το LibreOffice με τις προεπιλογές του δείχνει τα σωστά νούμερα', async () => {
+    for (const [seed, countifs] of [[1, true], [2, false], [3, true]] as const) {
+      const m = await genFillMock(seed, { ...calm, countifs });
+      const { buffer } = await fillAdaptive(await staleCache(m.buf), m.s, m.date, m.profile);
+      const JSZip = (await import('jszip')).default; const z = await JSZip.loadAsync(buffer);
+      for (const p of Object.keys(z.files).filter(p => /^xl\/worksheets\/[^/]+\.xml$/.test(p))) expect(await z.file(p)!.async('string'), p).not.toMatch(/(<f\b[^>]*\/>|<\/f>)\s*<v>/);
+      if (!soffice) continue;
+      // ό,τι δείχνει το LibreOffice = ό,τι υπολογίζει η εφαρμογή (και η προεπισκόπηση) για κάθε τύπο του εντύπου, όχι το 999
+      const lo = await loDefault(buffer); const sh = lo.find(x => x.name === m.sheet)!; const mine = await modelOfBuffer(buffer); const ev = new Evaluator(mine); const fm = mine.find(x => x.name === m.sheet)!; let n = 0;
+      for (const k of m.formulaCells) { const [r, c] = k.split(':').map(Number); const want = ev.cell(fm, r, c); if (typeof want !== 'number') continue; expect(sh.rows[r]?.[c] ?? 0, 'seed ' + seed + ' ' + colLetter(c) + (r + 1)).toBe(want); n++; }
+      expect(n).toBeGreaterThan(0);
+    }
+  }, 300000);
+});
