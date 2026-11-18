@@ -2,7 +2,7 @@
 import { HK } from './unit';
 import { isUnit } from './mode';
 import { collator, upper } from './text';
-import { addDays, daysBetween, dm, greekHolidays, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
+import { addDays, daysBetween, dm, dmy, greekHolidays, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
 import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, HK_A, HK_COL_KEY, absKeysOf, hkColsOf, isAbsCol, isKolCol, kolKeysOf, isAway, svcAbsent, svcColOf, svcDefault, isEpopOrigin, LEAVE_AWAY_NO_COL, LEAVE_NO_COL, leaveCol, leaveMode, leaveNameKey, live, medNote, medNoteXl, medWarns, notesOf, noDutyOf, originRow, statusLbl, type UserLists } from './ranks';
 import { siAllows, siIsUnarmed, siOf } from './si';
 import { STAT_ROWS, statDefault, statIsUnarmed, statNoOut, statOn, type StatCell } from './stat';
@@ -85,9 +85,12 @@ const limited = (p: Person, lists?: UserLists) => !!p.cid || isEpop(p, lists);
 // Υπηρεσίες του μήνα της μέρας (χωρίς την ίδια τη μέρα): όσες μέρες έχει υπηρεσία, από το ημερολόγιο και από το Excel.
 // withDay: και η ίδια η μέρα (καρτέλα: «σήμερα» μετρά κι αυτή· στην επιλογή και στο όριο η μέρα που διαλέγεις δεν μετρά)
 export function monthDuties(s: AppState, date: ISODate, pid: number, idx?: Map<number, Set<ISODate>>, withDay = false): number {
-  const ds = (idx || dutyIndexOf(s)).get(pid); if (!ds) return 0;
+  const ds = (idx || dutyIndexOf(s)).get(pid);
   const ym = date.slice(0, 7); let n = 0;
-  for (const d of ds) if ((withDay || d !== date) && d.slice(0, 7) === ym) n++;
+  if (ds) for (const d of ds) if ((withDay || d !== date) && d.slice(0, 7) === ym) n++;
+  // στέλεχος: μετρούν μαζί και οι υπηρεσίες του προγράμματος στελεχών (Michael, 17/11: «μετρούν μαζί»), όπως στο cadreDuty.ts monthCount
+  const c = pid < 0 ? cadreOf(s, pid) : undefined;
+  if (c && s.cadreDuties) for (const x of s.cadreDuties) if (x.cid === c.id && (withDay || x.date !== date) && x.date.slice(0, 7) === ym) n++;
   return n;
 }
 // Το όριο του μήνα: «έφτασε το όριο» αν με αυτή τη μέρα το ξεπερνά (ζητά επιβεβαίωση, όπως όλοι οι κανόνες)
@@ -532,7 +535,15 @@ function twoFits(a: Post, b: Post, gap: number): boolean {
   return x.every(p => y.every(q => p.end + gap <= q.start || q.end + gap <= p.start));
 }
 // ⚠ «2η υπηρεσία σήμερα: Μαγειρεία 06:00-08:00» (η άλλη υπηρεσία του ίδιου κύκλου)· null = μία υπηρεσία ή κέντρο
+// στέλεχος με υπηρεσία του προγράμματος στελεχών την ίδια μέρα: ειδοποίηση ⚠ χωρίς αιτία (δεν μπλοκάρει, όπως η 2η υπηρεσία)
+export function rosterSameDay(s: AppState, date: ISODate, pid: number): string | null {
+  const cd = pid < 0 ? cadreOf(s, pid) : undefined; if (!cd) return null;
+  const same = (s.cadreDuties || []).filter(x => x.cid === cd.id && x.date === date); if (!same.length) return null;
+  const svcs = (s.settings.cadreDuty?.groups || []).flatMap(g => g.services || []);
+  return 'Έχει ήδη υπηρεσία ' + same.map(y => svcs.find(v => v.id === y.svc)?.name || y.svc).join(', ') + ' αυτή τη μέρα (πρόγραμμα στελεχών)';
+}
 export function secondDuty(s: AppState, date: ISODate, pid: number, k: string | null): string | null {
+  const rs = rosterSameDay(s, date, pid); if (rs) return rs;
   if (twoMode(s) === 'never') return null;
   const o = postsOn(s, date, pid, k || undefined)[0];
   return o ? '2η υπηρεσία σήμερα: ' + o.label + (o.hours ? ' ' + o.hours.replace(/ · /g, ', ') : '') : null;
@@ -560,6 +571,7 @@ export function ruleBlock(s: AppState, date: ISODate, pid: number, idx?: Map<num
   const r = s.rules;
   const lim = monthBlock(s, date, pid, idx); if (lim) return lim;
   const c = pid < 0 ? cadreOf(s, pid) : undefined;
+  const rb = c && seatBlock(s, c, date); if (rb) return rb;   // στέλεχος: τα ίδια «δεν μπορεί» με το πρόγραμμα στελεχών (cadreDuty.ts)
   if (c && !c.monthMax && !isEpop(c, s.settings.lists)) return null;   // απλά στελέχη με το χέρι: μόνο η κατάσταση· ΕΠΟΠ/ΟΒΑ (και όποιο έχει όριο, #125) κρατούν τους κανόνες τους
   if (isFixed(s, pid, k)) return null;
   const ds = (idx || dutyIndexOf(s)).get(pid);
@@ -569,6 +581,25 @@ export function ruleBlock(s: AppState, date: ISODate, pid: number, idx?: Map<num
   if (r.noConsecHol && isHol(s.settings, date))
     for (let i = 2; i <= 9; i++) for (const d of [addDays(date, -i), addDays(date, i)]) if (ds.has(d) && isHol(s.settings, d)) return 'Έκανε αργία ' + holName(s.settings, d) + ' ' + dm(d);
   return k ? numBlock(s, date, pid, k, ds) : null;
+}
+// Στέλεχος σε θέση στρατιωτών: ό,τι θα έβγαζε το πρόγραμμα στελεχών (cadreDuty.ts eligibility) για τη μέρα, ως ⚠ και όχι ως μπλοκάρισμα
+// (Michael, 17/11: «μετρούν μαζί»). Εδώ και όχι στο cadreDuty.ts, που εξαρτάται από το rules.ts. Η θέση δεν είναι υπηρεσία του
+// προγράμματος: ο «μόνο» περιορισμός και ο «όχι 24ωρες» την αφορούν πάντα. Ανάπαυση: ίδιος κανόνας με το πρόγραμμα (cadreDuty.rest, μέρες πριν και μετά).
+const DOW_LOW = ['κυριακή', 'δευτέρα', 'τρίτη', 'τετάρτη', 'πέμπτη', 'παρασκευή', 'σάββατο'];
+function seatBlock(s: AppState, c: Cadre, date: ISODate): string | null {
+  const p = s.cadreDutyOf?.[c.id] || {}; const until = (u?: { until?: ISODate }) => (u?.until ? ' ως ' + dmy(u.until) : '');
+  const ok = (u?: { until?: ISODate }) => !!u && (!u.until || date <= u.until);
+  const nd = (s.cadreNoDuty || []).find(x => x.cid === c.id && x.from <= date && date <= x.to);
+  if (nd) return 'Δεν θέλει υπηρεσία' + (nd.note ? ' (' + nd.note + ')' : '');
+  if (p.noDow?.includes(weekday(date))) return 'Δεν θέλει ' + DOW_LOW[weekday(date)];
+  if (p.none && ok(p.none)) return 'Ελαφράς: καμία υπηρεσία' + until(p.none);
+  const svcs = (s.settings.cadreDuty?.groups || []).flatMap(g => g.services || []);
+  if (p.only && ok(p.only)) return 'Ελαφράς: μόνο ' + p.only.services.map(id => svcs.find(v => v.id === id)?.short || id).join(', ') + until(p.only);
+  if (p.no24 && ok(p.no24)) return 'Όχι 24ωρες' + (p.no24.why ? ' (' + p.no24.why + ')' : '') + until(p.no24);
+  const mine = (s.cadreDuties || []).filter(x => x.cid === c.id); if (!mine.length) return null;
+  const rest = s.settings.cadreDuty?.rest; const n = typeof rest === 'number' && isFinite(rest) && rest >= 0 ? Math.floor(rest) : 1;
+  for (let k = 1; k <= n; k++) for (const d of [addDays(date, -k), addDays(date, k)]) if (mine.some(x => x.date === d)) return 'Ανάπαυση: έχει υπηρεσία ' + dm(d) + ' (πρόγραμμα στελεχών)';
+  return null;
 }
 // Ξανά στο ίδιο νούμερο μόνο μετά από rules.numRest μέρες (λοχίας, 10/10): για τα νούμερα rules.numRots (Michael, 1/11), από προεπιλογή
 // το 3ο και 4ο (οι βάρδιες 18:00/20:00)
@@ -1463,6 +1494,8 @@ export function rosterCol(s: Pick<AppState, 'cadreDuties' | 'settings'>, cid: st
   for (const x of l) if (x.cid === cid) for (const g of groups) { const v = g.services?.find(y => y.id === x.svc); if (v?.hkCol) return v.hkCol; }
   return '';
 }
+// η στήλη της ΗΚΑΙ που μετρά το στέλεχος από υπηρεσία του προγράμματος τη μέρα d, όπως ακριβώς την κατατάσσει η hkaiClassify ('' = καμία)
+export const cadreRosterCol = (s: Pick<AppState, 'cadreDuties' | 'settings'>, cid: string, d: ISODate): string => { const col = rosterCol(s, cid, d); return col ? hkColOk(col, s.settings.lists) : ''; };
 export const cadreAbsOn = (s: Pick<AppState, 'cadreAbs'>, cid: string, date: ISODate): CadreAbs | undefined => (s.cadreAbs || []).find(x => x.cid === cid && x.from <= date && date <= x.to);
 // Η στήλη της ΗΚΑΙ ενός στρατιώτη (ss: οι καταστάσεις του εκείνη τη στιγμή): πρώτα απουσία, μετά ο κωλυόμενος που αφαιρείται από τους
 // παρόντες (στη στήλη που διάλεξες, αν διάλεξες· Michael 29/10: προαιρετική), μετά ο ΣΤΕΠ (STEP_COL, αν έχει στήλη· Michael 29/10), υπηρεσία, ΕΥ, ποινή· null = καμία. Μία στήλη ανά άτομο.
@@ -1515,7 +1548,7 @@ export interface Hkai { cols: Record<string, Person[]>; cadre: Record<string, Ca
 export interface HkWho { kind: 'soldier' | 'cadre'; p?: Person; c?: Cadre; row: string; col: string | null; attached: boolean; origin: string; rank: string }
 export interface HkClass { who: HkWho[]; rows: string[]; absKeys: string[]; fixed: Record<string, number>; manual: Record<string, Record<string, number>>; noCol: { p: Person; kind: string }[] }
 // μια στήλη στελέχους (υπηρεσία ή απουσία): αν ήταν δική σου στήλη που σβήστηκε, μετρά στην προεπιλογή ώστε να μη χαθεί από την ΗΚΑΙ (Κωλυόμενοι: 'yp', Απόντες: 'ka')
-const hkColOk = (col: string, lists?: UserLists): string => (HK_COL_KEY.test(col) && !hkColsOf(lists).some(x => x.key === col) ? 'yp' : col);
+export const hkColOk = (col: string, lists?: UserLists): string => (HK_COL_KEY.test(col) && !hkColsOf(lists).some(x => x.key === col) ? 'yp' : col);
 export function hkaiClassify(s: AppState, date: ISODate): HkClass {
   const onDuty = dutyColsOn(s, date);
   // στελέχη: από τη λίστα με ονόματα αν υπάρχει, αλλιώς οι αριθμοί των Ρυθμίσεων

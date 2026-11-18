@@ -319,7 +319,7 @@ export function GuardScreen() {
     const epop = [...people.filter(p => isEpop(p, lists)), ...seatPeople(state).filter(p => p.cid)];
     return { noDuty, unarmed, posted, capped, offDay, epop };
   }, [state.statuses, state.caps, state.people, state.cadreList, state.settings, date]);
-  const epopHint = useCallback((p: Person) => monthTxt(state, date, p), [state.guards, state.dutyLog, state.settings, date]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const epopHint = useCallback((p: Person) => monthTxt(state, date, p), [state.guards, state.dutyLog, state.settings, state.cadreList, state.cadreDuties, date]);   // eslint-disable-line react-hooks/exhaustive-deps
   const model = useMemo(() => frouraSheet(state, date), [state, date]);
   // «Γιατί αυτός;» μία φορά ανά αλλαγή, όχι σε κάθε απόδοση (π.χ. όσο γράφεις αιτία στο παράθυρο «παρά τον κανόνα»)
   const why = useMemo(() => whyAll(state, date), [state.guards, state.dutyLog, state.people, state.settings, state.baseline, state.statuses, state.caps, state.rules, date]);

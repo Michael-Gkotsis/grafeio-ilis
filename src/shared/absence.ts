@@ -3,9 +3,9 @@
 // Επιστροφή: η μέρα μετά το «Έως», ή το ίδιο το «Έως» αν η κατάσταση έχει ώρα επιστροφής· χωρίς λήξη = κενό.
 import { addDays, type ISODate } from './dates';
 import { TYPES, type AppState, type Cadre, type Person, type Status } from './domain';
-import { cadreAbsOn, statusesOn } from './rules';
+import { dutyColsOn, hasSvcAway, hkMin, statusesAt, statusesOn, svcAwayOf, SVC_AWAY_LBL } from './rules';
 import { live, isAway, leaveMode, statusLbl } from './ranks';
-import { cadreStatusOf } from './cadre';
+import { cadreStateOn } from './cadre';
 import { upper } from './text';
 
 export interface Absence { absent: boolean; reason: string; ret: ISODate | '' }
@@ -20,16 +20,26 @@ export function reasonOf(st: Pick<Status, 'type' | 'kind' | 'note'>, lists?: App
   if (st.type === 'KOL') return upper(st.note?.trim() || t.long);
   return upper(lbl !== t.label ? lbl : t.long);
 }
+// υπηρεσία εκτός στρατοπέδου (BlockDef.hkCol σε στήλη απόντων): η Δύναμη τον μετρά απόντα, άρα και η στήλη ΑΠΩΝ (ίδιο svcAwayOf με το strengthOf)
+const dmapIdx = new WeakMap<object, { st: AppState['settings']; m: Map<ISODate, ReturnType<typeof dutyColsOn>> }>();
+function svcDutyCols(s: AppState, d: ISODate) {
+  let e = dmapIdx.get(s.guards); if (!e || e.st !== s.settings) { e = { st: s.settings, m: new Map() }; dmapIdx.set(s.guards, e); }
+  let m = e.m.get(d); if (!m) { m = dutyColsOn(s, d); e.m.set(d, m); }
+  return m;
+}
 export function absenceOfPerson(s: AppState, p: Person, d: ISODate): Absence {
   const lists = s.settings.lists;
   const st = statusesOn(live(s), p.id, d).filter(x => isAbsent(x, lists)).sort((a, b) => Number(isAway(b, lists)) - Number(isAway(a, lists)))[0];
-  if (!st) return NONE;
+  if (!st) {
+    if (!hasSvcAway(s.settings)) return NONE;
+    const at = hkMin(s.rules);
+    return svcAwayOf(s, statusesAt(s, p.id, d, at), svcDutyCols(s, d).get(p.id), d, at) ? { absent: true, reason: upper(SVC_AWAY_LBL), ret: '' } : NONE;
+  }
   const timed = !!st.toTime && !st.open;
   return { absent: true, reason: reasonOf(st, lists), ret: st.open ? '' : timed ? st.to : addDays(st.to, 1) };
 }
 export function absenceOfCadre(s: AppState, c: Cadre, d: ISODate): Absence {
-  const a = cadreAbsOn(s, c.id, d); if (!a) return NONE;
-  // μόνο ό,τι τον βγάζει απόντα ή κωλυόμενο στην ΗΚΑΙ· είδος χωρίς στήλη ΗΚΑΙ («Πουθενά») = παρών
-  const st = cadreStatusOf(a, s.settings.lists); if (st.group === 'list') return NONE;
-  return { absent: true, reason: upper(st.label), ret: addDays(a.to, 1) };
+  // μόνο ό,τι τον βγάζει απόντα ή κωλυόμενο στην ΗΚΑΙ· είδος χωρίς στήλη ΗΚΑΙ («Πουθενά») = παρών· και η υπηρεσία του προγράμματος στελεχών με στήλη
+  const st = cadreStateOn(s, c.id, d); if (!st || st.group === 'list') return NONE;
+  return { absent: true, reason: upper(st.label), ret: st.roster ? '' : addDays(st.abs.to, 1) };
 }
