@@ -69,6 +69,18 @@ templates/      the official .xlsx templates (rule 1)
   latest main and typecheck, test and build pass; then report it.
 - WHEN a PR moves, renames or creates a file or folder this file names -> DO update this file in the same PR.
 
+## Subagent model selection
+When spawning subagents (Agent tool), pick the cheapest model that can do the job. Default to Sonnet when unsure.
+- **Haiku**: bulk mechanical work with no judgment: renames, format conversions, simple grep/glob lookups,
+  mechanical refactors.
+- **Sonnet**: scoped research and synthesis: code exploration, "where is X used", tests for a known function.
+- **Opus**: only when the task needs planning, design tradeoffs or non-obvious judgment.
+- This does not change the thread rule: Opus plans, Sonnet 5.5 implements after Michael approves.
+- Guardrails: a Haiku subagent never spawns further subagents (if it needs to, it returns to its parent to re-scope);
+  max spawn depth is 2; a subagent that needs a smarter model returns to its parent with a summary and never
+  escalates itself.
+- Brief a subagent like a colleague: goal, context, expected output shape, length cap.
+
 ## Behavioral Guidelines
 Bias toward caution over speed; use judgment on trivial tasks.
 
