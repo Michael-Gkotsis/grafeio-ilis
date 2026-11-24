@@ -11,6 +11,7 @@ import { buildTemplate, fillReport, placeSheets, previewReport, previewTemplate 
 import type { AppState } from '../shared/domain';
 import { xlLook } from '../shared/xlLook';
 import { forBuild, withBuilt } from '../shared/reports';
+import { modelOfFile, tryFill } from './tplAdapt';
 
 const nodeRequire: NodeRequire = require;
 let state: AppState;
@@ -30,6 +31,9 @@ const FNS: Record<string, (...a: any[]) => Promise<unknown>> = {
   zipHash: b => zipHash(buf(b)),
   valuesHash: b => valuesHash(buf(b)),
   readBook: (file, rows, cols) => readBook(file, rows, cols),
+  // «Αντιστοίχιση…»: το αρχείο έρχεται ήδη .xlsx (η μετατροπή του .xls γίνεται στο main, μία φορά)
+  tplModel: async (file, d, sheet) => (await modelOfFile(file, state, d, sheet)).model,
+  tplTry: async (file, d, req) => { const m = await modelOfFile(file, state, d, req?.sheet); return tryFill(m.sheets, m.buf, state, d, req); },
   writeGroup: (jobs, today, opts) => writeGroup(jobs, state, today, opts),
   // ExcelJS (βαρύ): φορτώνεται μόνο αν χρειαστεί, όπως στο main
   dutyCheck: ym => (nodeRequire(path.join(__dirname, 'excel.js')) as typeof import('./excel')).dutyCheck(state, ym)

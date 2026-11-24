@@ -982,9 +982,13 @@ export function detectHkai(sheet: RawSheet, place = 'Αυλώνας', own: strin
   if (pv) map.cols.prov = pv;
   for (const [k, label] of HK_COLS) { if (at[k] != null) { map.cols[k] = colLetter(at[k]); found++; } else missing.push(label); }
   const cell = (re: RegExp) => { for (let r = 0; r < rows.length; r++) { const row = rows[r] || []; for (let c = 0; c < row.length; c++) if (re.test(headText(row[c]))) return colLetter(c) + (r + 1); } return null; };
-  const t = cell(/ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ/); if (t) { map.title = t; found++; } else missing.push('Τίτλος');
+  // «Ημερήσια αναφορά της ____ της / /» (ονομαστική, όπως στα έντυπα άλλων μονάδων) ή «ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ …»
+  const t = cell(/ΗΜΕΡΗΣΙΑΣ? ΑΝΑΦΟΡΑΣ?(?![Α-Ω])/); if (t) { map.title = t; found++; } else missing.push('Τίτλος');
   const pl = normGreek(place).replace(/[^Α-ΩA-Z]/g, '');
-  const d = pl ? cell(new RegExp('^' + pl + '\\s*,')) : null; if (d) { map.date = d; found++; } else missing.push('Τόπος και ημερομηνία');
+  let d = pl ? cell(new RegExp('^' + pl + '\\s*,')) : null;
+  // η ημερομηνία σε δικό της κελί με μορφή ημερομηνίας στην ίδια γραμμή με τον τίτλο (ΗΚΑΛ: «… ΤΗΣ» | 14/08/2024)
+  if (!d && t) { const tr = Number(/\d+$/.exec(t)![0]) - 1; const row = rows[tr] || []; const c = row.findIndex(v => v instanceof Date); if (c >= 0) d = colLetter(c) + (tr + 1); }
+  if (d) { map.date = d; found++; } else missing.push('Τόπος και ημερομηνία');
   // ό,τι δεν έχει ένα έντυπο που αναγνωρίστηκε δεν γράφεται «στα τυφλά» στη θέση του δείγματος (εκεί μπορεί να είναι άλλη
   // στήλη ή γραμμή): γραμμή 0 (μπαίνει από την εφαρμογή αν έχει άτομα), στήλη χωρίς γράμμα, τίτλος/ημερομηνία κενά
   if (found) {

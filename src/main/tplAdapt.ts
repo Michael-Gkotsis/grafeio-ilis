@@ -139,15 +139,17 @@ export function backIsForeign(sheets: SheetModel[], s: AppState, profile: TplPro
   if (!p) return false;
   return p.form.decision.length > 0 || p.form.sections.some(x => (x.layout === 'below' && x.slots.length > 0) || x.id === 'absences' || x.id === 'reports');
 }
-export async function hkaiAdaptive(tpl: Buffer, s: AppState, d: ISODate, o: { front?: string; cells?: object; sigs?: Sig[] | null }): Promise<AdaptiveOut | null> {
+// force: η παλιά διαδρομή απέτυχε (TemplateError)· γεμίζει η μηχανή ακόμη και χωρίς αποθηκευμένη αντιστοίχιση
+export async function hkaiAdaptive(tpl: Buffer, s: AppState, d: ISODate, o: { front?: string; cells?: object; sigs?: Sig[] | null; force?: boolean }): Promise<AdaptiveOut | null> {
   const kind = kindOfSettings(s.settings);
   const ps = profilesOf(s.settings).filter(p => p.kind === kind);
-  if (o.cells && Object.keys(o.cells).length) return null;
   const sheets = await modelOfBuffer(tpl);
   const hit = ps.length ? matchProfile(sheets, s, ps) : null;
+  // κελιά που διόρθωσες στο «Template…» μετρούν μόνο όταν το έντυπο δεν έχει αντιστοίχιση: η «Αντιστοίχιση…» είναι πιο πλήρης και δεν αγνοείται πια από αυτά
+  if (!hit && o.cells && Object.keys(o.cells).length) return null;
   const foreign = backIsForeign(sheets, s, hit?.profile ?? null);
-  if (!hit && !foreign) return null;
-  if (!foreign && classicFits(sheets, s.settings, o.front).fits) return null;
+  if (!hit && !foreign && !o.force) return null;
+  if (!foreign && !o.force && classicFits(sheets, s.settings, o.front).fits) return null;
   const { buffer, report } = await fillAdaptive(tpl, s, d, hit?.profile ?? null, { ...(o.front ? { sheet: o.front } : {}), ...(o.sigs !== undefined ? { sigs: o.sigs } : {}) });
   if (!report.front) return null;
   const warnings = [...report.warnings];

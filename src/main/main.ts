@@ -1449,8 +1449,9 @@ else {
       return file || formTpl(f);
     };
     const asReq = (r: TplReq): TplReq => ({ choices: { cols: r?.choices?.cols || {}, rows: r?.choices?.rows || {}, words: r?.choices?.words || {} }, creates: Array.isArray(r?.creates) ? r.creates : [], ...(typeof r?.sheet === 'string' ? { sheet: r.sheet } : {}), ...(typeof r?.name === 'string' ? { name: r.name.slice(0, 80) } : {}) });
-    ipcMain.handle('tpl:model', async (_e, f: FormKind, file?: string, sheet?: string) => { try { return (await modelOfFile(tplFile(f, file), store.state, today(), sheet)).model; } catch (e) { return fail(e); } });
-    ipcMain.handle('tpl:try', async (_e, f: FormKind, req: TplReq) => { try { const m = await modelOfFile(tplFile(f, req?.file), store.state, today(), req?.sheet); return await tryFill(m.sheets, m.buf, store.state, today(), asReq(req)); } catch (e) { return fail(e); } });
+    // βαριά δουλειά (ανάγνωση, δοκιμαστική συμπλήρωση) στο νήμα των Excel: το παράθυρο δεν παγώνει σε αργό υπολογιστή· το .xls μετατρέπεται εδώ (ουρά, cache)
+    ipcMain.handle('tpl:model', async (_e, f: FormKind, file?: string, sheet?: string) => { try { const x = await xlsxFile(tplFile(f, file)); const st = store.state, d = today(); return await off('tplModel', [x, d, sheet], async () => (await modelOfFile(x, st, d, sheet)).model, st); } catch (e) { return fail(e); } });
+    ipcMain.handle('tpl:try', async (_e, f: FormKind, req: TplReq) => { try { const x = await xlsxFile(tplFile(f, req?.file)); const st = store.state, d = today(), r = asReq(req); return await off('tplTry', [x, d, r], async () => { const m = await modelOfFile(x, st, d, r.sheet); return tryFill(m.sheets, m.buf, st, d, r); }, st); } catch (e) { return fail(e); } });
     ipcMain.handle('tpl:save', async (_e, f: FormKind, req: TplReq) => {
       try {
         const m = await modelOfFile(tplFile(f, req?.file), store.state, today(), req?.sheet); const r = asReq(req);
