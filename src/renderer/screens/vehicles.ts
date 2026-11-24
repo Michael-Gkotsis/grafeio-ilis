@@ -1,41 +1,57 @@
-// features/vehicles: οθόνη «Οχήματα» (Michael, 17/11, πρόταση λοχία, φάση 5). Ίδιο μητρώο με τον οπλισμό (shared/assets.ts), κατηγορίες
-// kind 'vehicle'. Πάνω 4 μετρήσεις (και φίλτρα), πίνακας αριστερά, καρτέλα με Στοιχεία, Συντηρήσεις, Καύσιμα και Κινήσεις δεξιά.
+// features/vehicles: οθόνη «Οχήματα» (Michael, 17/11, πρόταση λοχία, φάση 5· 24/11: ίδιο σχέδιο με τον Οπλισμό). Ίδιο μητρώο με τον οπλισμό (shared/assets.ts),
+// κατηγορίες kind 'vehicle'. Μία γραμμή πάνω (τίτλος, «?», ένα κύριο κουμπί, «Ενέργειες ▾», «Εκτύπωση ▾»), λωρίδα μετρήσεων (και φίλτρα),
+// φίλτρα, γραμμές 34px και πλαϊνή καρτέλα 420px με Στοιχεία / Καύσιμα-Χιλιόμετρα / Ιστορικό και ↑/↓ για το επόμενο. Τα κοινά κομμάτια είναι στο assets.ts.
 // Κάθε αλλαγή είναι μία εντολή (μία αναίρεση) και γράφει γεγονός στο ιστορικό. Τίποτα δεν μπλοκάρεται.
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { html, cx, Alert, Badge, Button, Dialog, Icon, PageHeader, Tabs, VirtualList, useToast, useViewportHeight } from '../ui';
+import { Fragment, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { html, cx, Alert, Badge, Button, Dialog, Icon, VirtualList, useDirty, useToast, useViewportHeight } from '../ui';
 import { Select } from '../select';
-import { ChoiceField, DateField, PersonPicker } from '../common';
+import { DateField, PersonPicker } from '../common';
 import { useNav, useStore } from '../store';
-import { AssignDialog, same, useDo } from './assets';
-import { assetCfgOf, assetHistory, catOf, defaultCats, holderOut, holderText, registry, EVENT_TXT, STATE_TXT, type AssetRow } from '../../shared/assets';
+import { AccPicker, AssignDialog, HelpPop, MenuBtn, Sec, TypeField, accsOf, same, useArrowNav, useDo, type MenuItem } from './assets';
+import { accsToText, assetCfgOf, assetHistory, catOf, defaultCats, holderOut, holderText, registry, EVENT_TXT, STATE_TXT, type AssetRow } from '../../shared/assets';
 import { addMonths } from '../../shared/assets';
 import { dmy } from '../../shared/dates';
 import { pickPeople } from '../../shared/rules';
 import { HK } from '../../shared/unit';
-import { driverText, kmTxt, numTxt, unitTxt, vehMaint, vehName, vehStats, vehStatus, vehicleRows, vehicleView, movedOn } from '../../shared/vehicles';
-import type { Asset, AssetCat } from '../../shared/domain';
+import { driverText, kmTxt, numTxt, unitTxt, vehMaint, vehName, vehStatus, vehicleRows, vehicleView, movedOn } from '../../shared/vehicles';
+import type { Asset, AssetCat, AssetEvent } from '../../shared/domain';
 type P = any;
 
-const ROW_H = 40; const HEAD_H = 36;
-const GRID = 'minmax(150px,1.5fr) 100px minmax(120px,1.2fr) 100px minmax(130px,1.3fr)'; const MIN_W = 600;
-type VFilter = '' | 'moving' | 'down' | 'due';
+const ROW_H = 34; const HEAD_H = 34;
+const GRID = 'minmax(150px,1.5fr) 100px minmax(120px,1.2fr) 100px minmax(140px,1.3fr)'; const MIN_W = 600;
+type VFilter = '' | 'avail' | 'moving' | 'immobile' | 'repair' | 'due';
+const isDown = (a: Asset) => a.state === 'repair' || a.state === 'immobile';
+
+// Οι μετρήσεις της λωρίδας: Σύνολο · Διαθέσιμα (λειτουργικά) · Σε ακινησία · Προς επισκευή · Συντήρηση σε ≤N μέρες (ή στα χιλιόμετρα, και όσα πέρασαν το όριο)
+export interface VKpis { total: number; avail: number; immobile: number; repair: number; due: number; moving: number }
+export function vehKpis(rows: AssetRow[], log: AssetEvent[] | undefined, today: string, warn: number): VKpis {
+  const o = { total: rows.length, avail: 0, immobile: 0, repair: 0, due: 0, moving: 0 };
+  for (const r of rows) {
+    const a = r.a; if (a.state === 'ok') o.avail++; if (a.state === 'immobile') o.immobile++; if (a.state === 'repair') o.repair++;
+    if (movedOn(a, log, today)) o.moving++;
+    const m = vehMaint(a, r.cat, today, warn).st; if (m === 'soon' || m === 'overdue') o.due++;
+  }
+  return o;
+}
+const passes = (f: VFilter, r: AssetRow, log: AssetEvent[] | undefined, today: string, warn: number): boolean => !f
+  || (f === 'avail' ? r.a.state === 'ok' : f === 'moving' ? movedOn(r.a, log, today) : f === 'immobile' ? r.a.state === 'immobile' : f === 'repair' ? r.a.state === 'repair' : ['soon', 'overdue'].includes(vehMaint(r.a, r.cat, today, warn).st));
 
 export function VehiclesScreen() {
   const { state, today, run } = useStore(); const nav = useNav(); const toast = useToast();
   const cfg = useMemo(() => assetCfgOf(state.settings), [state.settings]);
   const [cat, setCat] = useState(''); const [filter, setFilter] = useState<VFilter>(''); const [q, setQ] = useState(''); const dq = useDeferredValue(q);
-  const [sel, setSel] = useState<string | null>(nav.params.vsel || null);
+  const [sel, setSel] = useState<string | null>(nav.params.vsel || null); const [ptab, setPtab] = useState<'info' | 'fuel' | 'hist'>('info');
   const [dlg, setDlg] = useState<{ t: string; row?: AssetRow } | null>(null); const [xl, setXl] = useState(false);
-  const height = useViewportHeight(420);
+  const height = useViewportHeight(300);
   useEffect(() => { if (nav.params.vsel != null) nav.set({ vsel: null }); }, []);   // μία φορά, από τον σύνδεσμο της καρτέλας ατόμου
   const all = useMemo(() => registry(state), [state.people, state.cadreList, state.assets, state.settings]);
   const vrows = useMemo(() => vehicleRows(state, all), [all]);
-  const stats = useMemo(() => vehStats(vrows, state.assetLog, today, cfg.warnDays), [vrows, state.assetLog, today, cfg.warnDays]);
-  const rows = useMemo(() => vehicleView(state, { cat: cat || undefined, q: dq }, all).filter(r => !filter
-    || (filter === 'moving' ? movedOn(r.a, state.assetLog, today) : filter === 'down' ? r.a.state === 'repair' || r.a.state === 'immobile' : ['soon', 'overdue'].includes(vehMaint(r.a, r.cat, today, cfg.warnDays).st))),
+  const k = useMemo(() => vehKpis(vrows, state.assetLog, today, cfg.warnDays), [vrows, state.assetLog, today, cfg.warnDays]);
+  const rows = useMemo(() => vehicleView(state, { cat: cat || undefined, q: dq }, all).filter(r => passes(filter, r, state.assetLog, today, cfg.warnDays)),
     [all, cat, dq, filter, state.assetLog, today, cfg.warnDays]);
   const vcats = useMemo(() => cfg.cats.filter(c => c.kind === 'vehicle'), [cfg]);
   const cur = sel ? vrows.find(r => r.key === sel) || null : null;
+  const { body, curIn } = useArrowNav(rows, cur?.key, setSel, ROW_H, HEAD_H);
   const exportXl = async (print: boolean) => {
     setXl(true);
     try {
@@ -45,43 +61,56 @@ export function VehiclesScreen() {
       else if (!print) toast({ text: 'Βγήκε ' + r.file.split(/[\\/]/).pop() + ': ένα φύλλο ανά κατηγορία, ΚΑΥΣΙΜΑ και ΣΥΝΤΗΡΗΣΕΙΣ.' });
     } finally { setXl(false); }
   };
-  // παλιές ρυθμίσεις (φάση 4) δεν έχουν κατηγορίες οχημάτων: προσθέτονται οι προεπιλεγμένες
+  // παλιές ρυθμίσεις (φάση 4) δεν έχουν κατηγορίες οχημάτων: προστίθενται οι προεπιλεγμένες
   const addCats = async () => { const have = new Set(cfg.cats.map(c => c.id)); const add = defaultCats(state.settings.lists).filter(c => c.kind === 'vehicle' && !have.has(c.id)); if (await run({ t: 'setSettings', settings: { assets: { ...cfg, cats: [...cfg.cats, ...add] } }, text: 'κατηγορίες οχημάτων' }, false)) toast({ text: 'Προστέθηκαν οι κατηγορίες οχημάτων' }); };
+  const clear = () => { setQ(''); setCat(''); setFilter(''); };
   const renderRow = useCallback((r: AssetRow, i: number, style: P) => {
     const a = r.a; const st = vehStatus(a, r.cat, state.assetLog, today, cfg.warnDays);
-    return html`<div key=${r.key} className=${cx('ptable__row mit__row', i % 2 === 1 && 'is-odd', sel === r.key && 'is-sel')} style=${{ ...style, gridTemplateColumns: GRID }} role="row" tabIndex="0" aria-selected=${sel === r.key}
+    return html`<div key=${r.key} className=${cx('ptable__row op__row', i % 2 === 1 && 'is-odd', sel === r.key && 'is-sel')} style=${{ ...style, gridTemplateColumns: GRID }} role="row" tabIndex="0" aria-selected=${sel === r.key} data-asset-row=${r.key}
         onClick=${() => setSel(r.key)} onKeyDown=${(e: any) => { if (e.key === 'Enter') setSel(r.key); }}>
-      <span className="veh__type" data-tip=${(r.cat?.name || '') + ' · ' + a.type}>${r.cat?.name ? r.cat.name + ' · ' : ''}<b>${a.type || '—'}</b></span><span className="num"><b>${a.plate || a.no}</b></span>
+      <span data-tip=${(r.cat?.name || '') + ' · ' + a.type}>${r.cat?.name ? r.cat.name + ' · ' : ''}<b>${a.type || '—'}</b></span><span className="num"><b>${a.plate || a.no}</b></span>
       <span className=${cx(!a.driver && 'muted')}>${a.driver ? driverText(state, a.driver) : '—'}</span><span className="num">${kmTxt(a.km, r.cat)}</span>
-      <span className="mit__st"><${Badge} tone=${st.tone} data-tip=${st.tip || undefined}>${st.text}<//></span></div>`;
+      <span className="op__st"><${Badge} tone=${st.tone} data-tip=${st.tip || undefined}>${st.text}<//></span></div>`;
   }, [sel, state, cfg, today]);
-  const kpi = (f: VFilter, label: string, n: number, tone?: string, tip?: string) => html`<button type="button" key=${label} className=${cx('kpi kpi--sv', tone && n > 0 && 'kpi--' + tone)} aria-pressed=${filter === f && f !== ''} data-tip=${tip} onClick=${() => setFilter(filter === f ? '' : f)}><span className="kpi__l">${label}</span><span className="kpi__n">${n}</span></button>`;
-  return html`<div className="veh" data-vehicles="">
-    <${PageHeader} title="Οχήματα" sub="Κάθε όχημα με την καρτέλα του: συντηρήσεις, χιλιόμετρα, καύσιμα, παρελκόμενα, οδηγός, ακινησία.">
-      <div className="page-head__acts">
-        <${Button} onClick=${() => setDlg({ t: 'edit' })}>+ Νέο όχημα…<//>
-        <${Button} variant="outline" disabled=${xl} onClick=${() => exportXl(false)} data-tip="Νέο αρχείο «ΚΑΤΑΣΤΑΣΗ ΟΧΗΜΑΤΩΝ»: ένα φύλλο ανά κατηγορία, ΚΑΥΣΙΜΑ και ΣΥΝΤΗΡΗΣΕΙΣ">Excel<//>
-        <${Button} variant="outline" disabled=${xl} onClick=${() => exportXl(true)} data-tip="Προεπισκόπηση εκτύπωσης του ίδιου αρχείου">${Icon.print}Εκτύπωση<//></div><//>
-    <div className="kpis kpis--sv veh__kpis">
-      ${kpi('', 'Σύνολο', stats.total, undefined, 'Όλα τα οχήματα του μητρώου')}${kpi('moving', 'Σε κίνηση σήμερα', stats.moving, 'ok', 'Με χιλιόμετρα ή γέμισμα σήμερα')}
-      ${kpi('down', 'Προς επισκευή / ακινησία', stats.down, 'bad')}${kpi('due', 'Συντήρηση σε ' + cfg.warnDays + ' μέρες', stats.due, 'warn', 'Επόμενη συντήρηση σε ' + cfg.warnDays + ' μέρες ή στα χιλιόμετρα, και όσα έχουν περάσει το όριο')}</div>
-    ${vcats.length === 0 ? html`<div className="ui-card empty">Δεν υπάρχει κατηγορία οχημάτων στο μητρώο. <${Button} onClick=${addCats}>Πρόσθεσε Τροχοφόρα, Ερπυστριοφόρα, Πολιτικού τύπου<//></div>` : html`<div>
-      <div className="toolbar">
-        <div className="filters mit__chips" role="group" aria-label="Κατηγορίες οχημάτων"><button type="button" className="ui-chip ui-chip--sm" aria-pressed=${!cat} onClick=${() => setCat('')}>Όλα</button>${vcats.map(c => html`<button key=${c.id} type="button" className="ui-chip ui-chip--sm" aria-pressed=${cat === c.id} onClick=${() => setCat(c.id)}>${c.name}<span className="cnt">${vrows.filter(r => r.a.cat === c.id).length}</span></button>`)}</div>
-        <input type="search" className="ui-input" aria-label="Αναζήτηση οχημάτων" placeholder="Πινακίδα, τύπος, οδηγός (χωρίς τόνους)" value=${q} onChange=${(e: any) => setQ(e.target.value)} style=${{ maxWidth: '300px' }}/>
-        <span className="toolbar__count">${rows.length} ${rows.length === 1 ? 'όχημα' : 'οχήματα'}</span></div>
-      <div className="veh__grid">
-        <div className="mit__main">
-          ${rows.length === 0 ? html`<div className="ui-card empty">${vrows.length === 0 ? 'Δεν υπάρχει ακόμα όχημα. Πάτα «+ Νέο όχημα…».' : 'Κανένα όχημα δεν ταιριάζει.'}${vrows.length > 0 && html` <${Button} variant="link" onClick=${() => { setQ(''); setCat(''); setFilter(''); }}>Καθάρισε αναζήτηση και φίλτρα<//>`}</div>` :
-            html`<div className="ptable mit__table" role="table" aria-rowcount=${rows.length}>
-              <${VirtualList} className="mit__body" items=${rows} rowHeight=${ROW_H} height=${height} headHeight=${HEAD_H} minWidth=${MIN_W} resetKey=${cat + '|' + filter + '|' + dq}
-                head=${html`<div className="ptable__head mit__head" role="row" style=${{ gridTemplateColumns: GRID }}><span>Είδος</span><span>Πινακίδα</span><span>Οδηγός</span><span data-tip="Στα ερπυστριοφόρα μετρά ώρες κινητήρα («ώρ.»): αλλάζει από Ρυθμίσεις › Μητρώο οπλισμού και υλικού">Χλμ</span><span>Κατάσταση</span></div>`}
+  const tile = (f: VFilter, label: string, n: number, tone?: string, tip?: string) => html`<button type="button" key=${label} className=${cx('op__kpi', tone && n > 0 && 'op__kpi--' + tone)} aria-pressed=${filter === f && f !== ''} data-tip=${tip} onClick=${() => setFilter(filter === f ? '' : f)}><span className="op__kpi-n">${n}</span><span className="op__kpi-l">${label}</span></button>`;
+  const states: [VFilter, string, number][] = [['', 'Όλα', k.total], ['avail', 'Διαθέσιμα', k.avail], ['moving', 'Σε κίνηση σήμερα', k.moving], ['immobile', 'Ακινησία', k.immobile], ['repair', 'Προς επισκευή', k.repair], ['due', 'Συντήρηση σε ≤' + cfg.warnDays + ' μέρες', k.due]];
+  const printItems: MenuItem[] = [
+    { label: 'Εκτύπωση (προεπισκόπηση)', fn: () => exportXl(true), disabled: xl, tip: 'Προεπισκόπηση εκτύπωσης του αρχείου «ΚΑΤΑΣΤΑΣΗ ΟΧΗΜΑΤΩΝ»' },
+    { sep: true },
+    { label: 'Βγάλε το Excel «ΚΑΤΑΣΤΑΣΗ ΟΧΗΜΑΤΩΝ»', fn: () => exportXl(false), disabled: xl, tip: 'Νέο αρχείο: ένα φύλλο ανά κατηγορία, ΚΑΥΣΙΜΑ και ΣΥΝΤΗΡΗΣΕΙΣ' }];
+  const moreItems: MenuItem[] = [
+    { label: 'Κατηγορίες, τύποι, παρελκόμενα…', fn: () => nav.go('templates', { tab: 'assets' }), tip: 'Ρυθμίσεις › Μητρώο οπλισμού και υλικού' },
+    { label: 'Καθάρισε αναζήτηση και φίλτρα', fn: clear }];
+  const sum = vrows.length + (vrows.length === 1 ? ' όχημα · ' : ' οχήματα · ') + k.avail + ' διαθέσιμα · ' + (k.immobile + k.repair) + ' ακινησία / επισκευή';
+  return html`<div className="op" data-vehicles="">
+    <div className="op__top"><h1>Οχήματα</h1>
+      <${HelpPop} title="Οχήματα">
+        <p>Κάθε όχημα της μονάδας με την καρτέλα του: συντηρήσεις, χιλιόμετρα (ώρες κινητήρα στα ερπυστριοφόρα), καύσιμα, παρελκόμενα, οδηγός, ακινησία και επισκευή. Με ↑/↓ πας στο προηγούμενο ή στο επόμενο.</p>
+        <p>Η λωρίδα πάνω δείχνει πόσα είναι διαθέσιμα, σε ακινησία, προς επισκευή ή κοντά σε συντήρηση· πατώντας ένα κουτί φιλτράρεις τον πίνακα. Κατηγορίες, τύποι και παρελκόμενα αλλάζουν από Ρυθμίσεις › Μητρώο οπλισμού και υλικού.</p>
+        <p>Η ενότητα «Κατάσταση οχημάτων» της ${HK()} μπορεί να γεμίζει από εδώ (Ρυθμίσεις ${HK()} › Ενότητες › «Από το μητρώο οχημάτων»): το έντυπο μένει ίδιο.</p><//>
+      <span className="op__sum">${sum}</span>
+      <span className="op__topacts"><${Button} onClick=${() => setDlg({ t: 'edit' })}>+ Νέο όχημα<//><${MenuBtn} label="Ενέργειες" items=${moreItems}/>
+        <span className="op__split"><${Button} variant="outline" disabled=${xl} onClick=${() => exportXl(true)} data-tip="Προεπισκόπηση εκτύπωσης της ΚΑΤΑΣΤΑΣΗΣ ΟΧΗΜΑΤΩΝ">${Icon.print}Εκτύπωση<//><${MenuBtn} caretOnly items=${printItems} label="Επιλογές εκτύπωσης"/></span></span></div>
+    <div className="op__kpis" role="group" aria-label="Μετρήσεις">
+      ${tile('', 'Σύνολο', k.total, undefined, 'Όλα τα οχήματα του μητρώου')}${tile('avail', 'Διαθέσιμα', k.avail, 'ok', 'Λειτουργικά, όχι σε ακινησία ή επισκευή')}
+      ${tile('immobile', 'Σε ακινησία', k.immobile, 'bad')}${tile('repair', 'Προς επισκευή', k.repair, 'bad')}
+      ${tile('due', 'Συντήρηση σε ≤' + cfg.warnDays + ' μέρες', k.due, 'warn', 'Επόμενη συντήρηση σε ' + cfg.warnDays + ' μέρες ή στα χιλιόμετρα, και όσα έχουν περάσει το όριο')}</div>
+    ${vcats.length === 0 ? html`<div className="ui-card empty">Δεν υπάρχει κατηγορία οχημάτων στο μητρώο. <${Button} onClick=${addCats}>Πρόσθεσε Τροχοφόρα, Ερπυστριοφόρα, Πολιτικού τύπου<//></div>` : html`<${Fragment}>
+      <div className="op__tools"><input type="search" className="ui-input op__search" aria-label="Αναζήτηση οχημάτων" placeholder="Πινακίδα, τύπος, οδηγός (χωρίς τόνους)" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
+        <div className="op__chips" role="group" aria-label="Κατηγορίες οχημάτων"><button type="button" className="ui-chip ui-chip--sm" aria-pressed=${!cat} onClick=${() => setCat('')}>Όλα<span className="cnt">${vrows.length}</span></button>${vcats.map(c => html`<button key=${c.id} type="button" className="ui-chip ui-chip--sm" aria-pressed=${cat === c.id} onClick=${() => setCat(cat === c.id ? '' : c.id)}>${c.name}<span className="cnt">${vrows.filter(r => r.a.cat === c.id).length}</span></button>`)}
+          <${MenuBtn} variant="outline" size="sm" pressed=${!!filter} label=${'Κατάσταση' + (filter ? ': ' + (states.find(x => x[0] === filter)?.[1] || '') : '')} items=${states.map(([f, l, n]) => ({ label: html`<span>${l}</span><span className="muted">${n}</span>`, on: filter === f, fn: () => setFilter(filter === f ? '' : f) }))}/></div>
+        <span className="op__count">${rows.length === vrows.length ? rows.length + (rows.length === 1 ? ' όχημα' : ' οχήματα') : rows.length + ' από ' + vrows.length}</span></div>
+      <div className=${cx('op__grid', !cur && 'op__grid--solo')}>
+        <div className="op__main">
+          ${rows.length === 0 ? html`<div className="ui-card empty">${vrows.length === 0 ? 'Δεν υπάρχει ακόμα όχημα. Πάτα «+ Νέο όχημα».' : 'Κανένα όχημα δεν ταιριάζει.'}${vrows.length > 0 && html` <${Button} variant="link" onClick=${clear}>Καθάρισε αναζήτηση και φίλτρα<//>`}</div>` :
+            html`<div className="ptable op__table" role="table" aria-rowcount=${rows.length}>
+              <${VirtualList} className="op__body" scrollRef=${body} items=${rows} rowHeight=${ROW_H} height=${height} headHeight=${HEAD_H} minWidth=${MIN_W} resetKey=${cat + '|' + filter + '|' + dq}
+                head=${html`<div className="ptable__head op__head" role="row" style=${{ gridTemplateColumns: GRID }}><span>Είδος</span><span>Πινακίδα</span><span>Οδηγός</span><span data-tip="Στα ερπυστριοφόρα μετρά ώρες κινητήρα («ώρ.»): αλλάζει από Ρυθμίσεις › Μητρώο οπλισμού και υλικού">Χλμ</span><span>Κατάσταση</span></div>`}
                 renderRow=${renderRow}/>
             </div>`}
-          <p className="note mit__hint">Η ενότητα «Κατάσταση οχημάτων» της ${HK()} μπορεί να γεμίζει από εδώ (Ρυθμίσεις ΗΚΑΙ › Ενότητες › «Από το μητρώο οχημάτων»): το έντυπο μένει ίδιο.</p>
         </div>
-        ${cur ? html`<${VehicleCard} key=${cur.key} row=${cur} cfg=${cfg} today=${today} onDlg=${(t: string) => setDlg({ t, row: cur })} onGone=${() => setSel(null)}/>` : html`<aside className="ui-card mit__card mit__card--empty"><p className="muted">Διάλεξε ένα όχημα για να δεις την καρτέλα του, τα καύσιμα και τις ενέργειες.</p></aside>`}
-      </div></div>`}
+        ${cur && html`<${VehicleCard} key=${cur.key} row=${cur} cfg=${cfg} today=${today} tab=${ptab} setTab=${setPtab} at=${curIn} n=${rows.length} onDlg=${(t: string) => setDlg({ t, row: cur })} onGone=${() => setSel(null)} onClose=${() => setSel(null)}/>`}
+      </div><//>`}
     ${dlg?.t === 'edit' && html`<${VehicleEditDialog} row=${dlg.row} cfg=${cfg} defCat=${cat} onClose=${() => setDlg(null)} onSaved=${(k: string) => setSel(k)}/>`}
     ${dlg?.t === 'fuel' && dlg.row && html`<${FuelDialog} row=${dlg.row} onClose=${() => setDlg(null)}/>`}
     ${dlg?.t === 'km' && dlg.row && html`<${KmDialog} row=${dlg.row} onClose=${() => setDlg(null)}/>`}
@@ -92,42 +121,43 @@ export function VehiclesScreen() {
   </div>`;
 }
 
-// ---------- Καρτέλα οχήματος ----------
-function VehicleCard({ row, cfg, today, onDlg, onGone }: P) {
+// ---------- Πλαϊνή καρτέλα του επιλεγμένου (420px) ----------
+function VehicleCard({ row, cfg, today, tab, setTab, at, n, onDlg, onGone, onClose }: P) {
   const { state } = useStore(); const doIt = useDo(); const a: Asset = row.a; const c: AssetCat | undefined = row.cat;
-  const [tab, setTab] = useState('info');
   const hist = useMemo(() => assetHistory(state.assetLog, row.key), [state.assetLog, row.key]);
-  const fuels = hist.filter(e => e.what === 'fuel'); const maints = hist.filter(e => e.what === 'maint');
-  const m = vehMaint(a, c, today, cfg.warnDays); const u = unitTxt(c);
-  const kv = (k: string, v: any) => (v ? html`<dt>${k}</dt><dd>${v}</dd>` : null);
-  const lastFuel = fuels[0]; const down = a.state === 'repair' || a.state === 'immobile';
+  const fuels = hist.filter(e => e.what === 'fuel'); const reads = hist.filter(e => e.what === 'fuel' || e.what === 'km');
+  const m = vehMaint(a, c, today, cfg.warnDays); const u = unitTxt(c); const accs = accsOf(a);
+  const kv = (k: string, v: any) => (v ? html`<${Fragment} key=${k}><dt>${k}</dt><dd>${v}</dd><//>` : null);
+  const lastFuel = fuels[0]; const down = isDown(a);
   const nextTxt = [a.maint?.next ? dmy(a.maint.next) : '', a.maint?.nextKm != null ? 'στα ' + numTxt(a.maint.nextKm) + (c?.hours ? ' ώρ.' : '') : ''].filter(Boolean).join(' ή ');
-  const litres = fuels.reduce((n: number, e: any) => n + (e.litres || 0), 0);
-  return html`<aside className="ui-card mit__card veh__card" aria-label="Καρτέλα οχήματος" data-asset-card="">
-    <div className="mit__card-head"><div><h3>${vehName(a)}</h3><div className="muted">${c?.name || 'Χωρίς κατηγορία'} · Καρτέλα οχήματος</div></div>
-      <${Button} size="sm" variant="outline" onClick=${() => onDlg('edit')}>Αλλαγή…<//></div>
-    <${Tabs} value=${tab} onChange=${setTab} items=${[{ value: 'info', label: 'Στοιχεία' }, { value: 'maint', label: 'Συντηρήσεις' }, { value: 'fuel', label: 'Καύσιμα' }, { value: 'moves', label: 'Κινήσεις' }]}/>
-    <div className="veh__body">
-    ${tab === 'info' && html`<dl className="kv mit__kv">
-      <dt>Χρεωμένο σε</dt><dd><b>${holderText(state, a.holder)}</b>${holderOut(state, a.holder) ? html` <${Badge} tone="warn">εκτός δύναμης<//>` : ''}</dd>
-      <dt>Οδηγός</dt><dd>${a.driver ? html`<b>${driverText(state, a.driver)}</b>${holderOut(state, a.driver) ? html` <${Badge} tone="warn">εκτός δύναμης<//>` : ''}` : '—'}</dd>
-      <dt>${c?.hours ? 'Ώρες κινητήρα' : 'Χιλιόμετρα'}</dt><dd>${a.km != null ? html`<b>${numTxt(a.km)}</b>${a.kmOn ? html` <small className="muted">στις ${dmy(a.kmOn).slice(0, 5)}</small>` : ''}` : '—'}</dd>
-      ${(a.maint?.last || a.maint?.lastKm != null) && html`<dt>Τελευταία συντήρηση</dt><dd>${[a.maint?.last ? dmy(a.maint.last) : '', a.maint?.lastKm != null ? numTxt(a.maint.lastKm) : ''].filter(Boolean).join(' στα ')}</dd>`}
-      ${nextTxt && html`<dt>Επόμενη συντήρηση</dt><dd><b>${nextTxt}</b>${m.st === 'soon' || m.st === 'overdue' ? html` <${Badge} tone=${m.st === 'overdue' ? 'bad' : 'warn'}>${m.st === 'overdue' ? 'καθυστέρηση' : m.by === 'km' ? 'σε ' + numTxt(m.kmLeft!) + ' ' + u : m.days === 0 ? 'σήμερα' : 'σε ' + m.days + ' μέρες'}<//>` : ''} <small className="muted">όποιο έρθει πρώτο</small></dd>`}
-      ${kv('Ρεζερβουάρ', lastFuel ? 'τελευταίο γέμισμα ' + dmy(lastFuel.date).slice(0, 5) + ' · ' + numTxt(lastFuel.litres || 0) + ' λίτρα' + (lastFuel.km != null ? ' στα ' + numTxt(lastFuel.km) : '') : '')}
-      ${(c?.fields || []).map((f: any) => kv(f.name, a.extra?.[f.id]))}
-      ${kv('Παρελκόμενα', a.acc)}${kv('Παρατηρήσεις', a.note)}
-      <dt>Κατάσταση</dt><dd><b>${STATE_TXT[a.state]}</b>${a.why ? ' · ' + a.why : ''}</dd></dl>`}
-    ${tab === 'maint' && (maints.length ? html`<ul className="mit__hist">${maints.map((e: any) => html`<li key=${e.id}><b>${dmy(e.date)}</b>${e.km != null ? ' στα ' + numTxt(e.km) + ' ' + u : ''}${e.text ? ': ' + e.text : ''}</li>`)}</ul>` : html`<p className="muted">Καμία συντήρηση ακόμα.</p>`)}
-    ${tab === 'fuel' && (fuels.length ? html`<div><p className="note" style=${{ margin: '0 0 6px' }}>${fuels.length} γεμίσματα · ${numTxt(litres)} λίτρα συνολικά</p><ul className="mit__hist">${fuels.map((e: any) => html`<li key=${e.id}><b>${dmy(e.date)}</b> ${numTxt(e.litres || 0)} λίτρα${e.km != null ? ' · στα ' + numTxt(e.km) + ' ' + u : ''}</li>`)}</ul></div>` : html`<p className="muted">Κανένα γέμισμα ακόμα.</p>`)}
-    ${tab === 'moves' && (hist.length ? html`<ul className="mit__hist">${hist.map((e: any) => html`<li key=${e.id}><b>${dmy(e.date)}</b> ${EVENT_TXT[e.what as keyof typeof EVENT_TXT]}${e.text ? ': ' + e.text : ''}</li>`)}</ul>` : html`<p className="muted">Καμία κίνηση ακόμα.</p>`)}
+  const litres = fuels.reduce((x: number, e: any) => x + (e.litres || 0), 0);
+  const more: MenuItem[] = [
+    ...(down ? [{ label: 'Επανήλθε', fn: () => { doIt({ t: 'assetState', ...same(row), state: 'ok', date: today }, vehName(a) + ': επανήλθε'); } }]
+      : [{ label: 'Ακινησία…', fn: () => onDlg('immobile') }, { label: 'Προς επισκευή…', fn: () => onDlg('repair') }]),
+    { label: 'Οδηγός…', fn: () => onDlg('driver') }, { label: 'Χρέωσε σε…', fn: () => onDlg('assign') }, { sep: true },
+    { label: 'Σβήσε το όχημα', fn: async () => { if (await doIt({ t: 'deleteAsset', id: row.key }, 'Σβήστηκε το όχημα ' + vehName(a))) onGone(); }, tip: 'Σβήνει το όχημα και το ιστορικό του (αναιρείται με Ctrl+Z)' }];
+  return html`<aside className="ui-card op__card" aria-label="Καρτέλα οχήματος" data-asset-card="">
+    <div className="op__card-head"><div><h3>${vehName(a) || '—'}</h3><div className="muted">${c?.name || 'Χωρίς κατηγορία'} · <span data-tip="Με τα βέλη ↑/↓ πας στο προηγούμενο ή στο επόμενο">↑/↓ ${at + 1}/${n}</span></div></div>
+      <button type="button" className="op__x" aria-label="Κλείσιμο καρτέλας" data-tip="Κλείσιμο" onClick=${onClose}>${Icon.x}</button></div>
+    <div className="ui-tabs op__ptabs" role="tablist">${[['info', 'Στοιχεία'], ['fuel', 'Καύσιμα / ' + (c?.hours ? 'Ώρες' : 'Χιλιόμετρα') + ' (' + reads.length + ')'], ['hist', 'Ιστορικό (' + hist.length + ')']].map(([k, l]) => html`<button key=${k} type="button" role="tab" aria-selected=${tab === k} onClick=${() => setTab(k)}>${l}</button>`)}</div>
+    <div className="op__pbody">
+      ${tab === 'info' && html`<dl className="kv mit__kv">
+        <dt>Χρεωμένο σε</dt><dd><b>${holderText(state, a.holder)}</b>${holderOut(state, a.holder) ? html` <${Badge} tone="warn">εκτός δύναμης<//>` : ''}</dd>
+        <dt>Οδηγός</dt><dd>${a.driver ? html`<b>${driverText(state, a.driver)}</b>${holderOut(state, a.driver) ? html` <${Badge} tone="warn">εκτός δύναμης<//>` : ''}` : '—'}</dd>
+        <dt>${c?.hours ? 'Ώρες κινητήρα' : 'Χιλιόμετρα'}</dt><dd>${a.km != null ? html`<b>${numTxt(a.km)}</b>${a.kmOn ? html` <small className="muted">στις ${dmy(a.kmOn).slice(0, 5)}</small>` : ''}` : '—'}</dd>
+        ${(a.maint?.last || a.maint?.lastKm != null) && html`<dt>Τελευταία συντήρηση</dt><dd>${[a.maint?.last ? dmy(a.maint.last) : '', a.maint?.lastKm != null ? numTxt(a.maint.lastKm) : ''].filter(Boolean).join(' στα ')}</dd>`}
+        ${nextTxt && html`<dt>Επόμενη συντήρηση</dt><dd><b>${nextTxt}</b>${m.st === 'soon' || m.st === 'overdue' ? html` <${Badge} tone=${m.st === 'overdue' ? 'bad' : 'warn'}>${m.st === 'overdue' ? 'καθυστέρηση' : m.by === 'km' ? 'σε ' + numTxt(m.kmLeft!) + ' ' + u : m.days === 0 ? 'σήμερα' : 'σε ' + m.days + ' μέρες'}<//>` : ''} <small className="muted">όποιο έρθει πρώτο</small></dd>`}
+        ${kv('Ρεζερβουάρ', lastFuel ? 'τελευταίο γέμισμα ' + dmy(lastFuel.date).slice(0, 5) + ' · ' + numTxt(lastFuel.litres || 0) + ' λίτρα' + (lastFuel.km != null ? ' στα ' + numTxt(lastFuel.km) : '') : '')}
+        ${(c?.fields || []).map((f: any) => kv(f.name, a.extra?.[f.id]))}
+        ${kv('Παρελκόμενα', accs.length ? accs.map(x => (x.qty > 1 ? x.name + ' ×' + x.qty : x.name)).join(' · ') : '')}${kv('Παρατηρήσεις', a.note)}
+        <dt>Κατάσταση</dt><dd><b>${STATE_TXT[a.state]}</b>${a.why ? ' · ' + a.why : ''}</dd></dl>`}
+      ${tab === 'fuel' && (reads.length ? html`<div><p className="note" style=${{ margin: '0 0 6px' }}>${fuels.length} γεμίσματα · ${numTxt(litres)} λίτρα συνολικά</p><ul className="mit__hist">${reads.map((e: any) => html`<li key=${e.id}><b>${dmy(e.date)}</b> ${e.what === 'fuel' ? numTxt(e.litres || 0) + ' λίτρα' + (e.km != null ? ' · στα ' + numTxt(e.km) + ' ' + u : '') : 'ένδειξη ' + (e.km != null ? numTxt(e.km) + ' ' + u : '')}</li>`)}</ul></div>` : html`<p className="muted">Κανένα γέμισμα ή ένδειξη ακόμα.</p>`)}
+      ${tab === 'hist' && (hist.length ? html`<ul className="mit__hist">${hist.map((e: any) => html`<li key=${e.id}><b>${dmy(e.date)}</b> ${EVENT_TXT[e.what as keyof typeof EVENT_TXT]}${e.what === 'maint' && e.km != null ? ' στα ' + numTxt(e.km) + ' ' + u : ''}${e.text ? ': ' + e.text : ''}</li>`)}</ul>` : html`<p className="muted">Καμία κίνηση ακόμα.</p>`)}
     </div>
-    <div className="mit__acts">
-      <${Button} size="sm" onClick=${() => onDlg('fuel')}>+ Γέμισμα…<//><${Button} size="sm" variant="outline" onClick=${() => onDlg('km')}>+ Χιλιόμετρα…<//>
-      <${Button} size="sm" variant="outline" onClick=${() => onDlg('maint')}>Έγινε συντήρηση…<//>
-      ${down ? html`<${Button} size="sm" variant="outline" onClick=${() => doIt({ t: 'assetState', ...same(row), state: 'ok', date: today }, vehName(a) + ': επανήλθε')}>Επανήλθε<//>` : html`<${Button} size="sm" variant="outline" onClick=${() => onDlg('immobile')}>Ακινησία…<//><${Button} size="sm" variant="outline" onClick=${() => onDlg('repair')}>Προς επισκευή…<//>`}
-      <${Button} size="sm" variant="outline" onClick=${() => onDlg('assign')}>Χρέωσε σε…<//><${Button} size="sm" variant="outline" onClick=${() => onDlg('driver')}>Οδηγός…<//>
-      <${Button} size="sm" variant="ghost" onClick=${async () => { if (await doIt({ t: 'deleteAsset', id: row.key }, 'Σβήστηκε το όχημα ' + vehName(a))) onGone(); }} data-tip="Σβήνει το όχημα και το ιστορικό του (αναιρείται με Ctrl+Z)">Σβήσε<//>
+    <div className="op__acts">
+      <${Button} size="sm" onClick=${() => onDlg('fuel')}>+ Γέμισμα…<//><${Button} size="sm" variant="outline" onClick=${() => onDlg('km')}>${'+ ' + (c?.hours ? 'Ώρες' : 'Χιλιόμετρα') + '…'}<//>
+      <${Button} size="sm" variant="outline" onClick=${() => onDlg('maint')}>Έγινε συντήρηση…<//><${Button} size="sm" variant="outline" onClick=${() => onDlg('edit')}>Αλλαγή…<//>
+      <${MenuBtn} size="sm" label="Ενέργειες" items=${more}/>
     </div>
   </aside>`;
 }
@@ -198,31 +228,43 @@ function VehicleEditDialog({ row, cfg, defCat, onClose, onSaved }: P) {
   const { today } = useStore(); const doIt = useDo(); const isNew = !row; const a0: Asset | undefined = row?.a;
   const vcats: AssetCat[] = cfg.cats.filter((c: AssetCat) => c.kind === 'vehicle');
   const [f, setF] = useState(() => ({ cat: a0?.cat || (vcats.find(c => c.id === defCat) || vcats[0])?.id || '', type: a0?.type || '', plate: a0?.plate || a0?.no || '', km: a0?.km != null ? String(a0.km) : '', every: String(a0?.maint?.every || ''),
-    last: a0?.maint?.last || '', next: a0?.maint?.next || '', lastKm: a0?.maint?.lastKm != null ? String(a0.maint.lastKm) : '', nextKm: a0?.maint?.nextKm != null ? String(a0.maint.nextKm) : '', acc: a0?.acc || '', note: a0?.note || '', extra: { ...(a0?.extra || {}) } as Record<string, string> }));
+    last: a0?.maint?.last || '', next: a0?.maint?.next || '', lastKm: a0?.maint?.lastKm != null ? String(a0.maint.lastKm) : '', nextKm: a0?.maint?.nextKm != null ? String(a0.maint.nextKm) : '', accs: a0 ? accsOf(a0) : [] as { name: string; qty: number }[], note: a0?.note || '', extra: { ...(a0?.extra || {}) } as Record<string, string> }));
+  const [newT, setNewT] = useState(false); const [accTouched, setAccTouched] = useState(false);
+  const dirty = useDirty({ f, newT });
   const cat: AssetCat | undefined = catOf(cfg, f.cat); const set = (k: string, v: any) => setF(x => ({ ...x, [k]: v }));
   const save = () => {
     const km = numOr(f.km); const every = Math.floor(Number(f.every));
     const maint = { ...(a0?.maint || {}), last: f.last || undefined, next: f.next || undefined, every: every > 0 ? every : undefined, lastKm: numOr(f.lastKm), nextKm: numOr(f.nextKm) };
-    const asset: any = { ...(a0 || {}), id: row?.key, cat: f.cat, type: f.type, no: f.plate, plate: f.plate.trim(), km, maint, acc: f.acc, note: f.note, extra: f.extra, state: a0?.state || 'ok', holder: a0?.holder, driver: a0?.driver };
+    // τα παρελκόμενα γράφονται ως λίστα και το κείμενο acc (που βγάζει το Excel) ακολουθεί· αν δεν τα άγγιξες, μένουν όπως ήταν
+    const acc = accTouched ? { accs: f.accs, acc: accsToText(f.accs) } : {};
+    const asset: any = { ...(a0 || {}), id: row?.key, cat: f.cat, type: f.type, no: f.plate, plate: f.plate.trim(), km, maint, ...acc, note: f.note, extra: f.extra, state: a0?.state || 'ok', holder: a0?.holder, driver: a0?.driver };
     if (km !== a0?.km) { if (km != null) asset.kmOn = today; else delete asset.kmOn; }
     if (!asset.id) delete asset.id;
-    return doIt({ t: 'saveAsset', asset, date: today }, (isNew ? 'Νέο όχημα: ' : 'Αλλαγή: ') + [f.type, f.plate].filter(Boolean).join(' '), undefined, onClose).then((ok: boolean) => { if (ok && !isNew && row) onSaved(row.key); });
+    return doIt({ t: 'saveAsset', asset, date: today, addType: newT && !!f.type.trim() }, (isNew ? 'Νέο όχημα: ' : 'Αλλαγή: ') + [f.type, f.plate].filter(Boolean).join(' '), undefined, onClose).then((ok: boolean) => { if (ok && !isNew && row) onSaved(row.key); });
   };
   const fld = (id: string, label: string, k: string, o: P = {}) => html`<div className="field" style=${o.style}><label className="field__label" htmlFor=${'ve-' + id}>${label}</label><input id=${'ve-' + id} className="ui-input" value=${f[k as keyof typeof f] as string} placeholder=${o.ph || ''} inputMode=${o.num ? 'decimal' : undefined} data-autofocus=${o.focus ? '' : undefined} onChange=${(e: any) => set(k, e.target.value)}/></div>`;
   const u = unitTxt(cat);
-  return html`<${Dialog} title=${isNew ? 'Νέο όχημα' : 'Αλλαγή · ' + nmOf(row)} onClose=${onClose} size="lg"
+  return html`<${Dialog} title=${isNew ? 'Νέο όχημα' : 'Αλλαγή · ' + nmOf(row)} onClose=${onClose} size="lg" dirty=${dirty}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!f.plate.trim() || !f.cat} onClick=${save}>Αποθήκευση<//>`}>
-    <div className="stack">
-      <div className="field-row">
-        <div className="field"><label className="field__label" htmlFor="ve-cat">Κατηγορία</label><${Select} id="ve-cat" className="ui-input" value=${f.cat} onChange=${(e: any) => set('cat', e.target.value)}>${vcats.map(c => html`<option key=${c.id} value=${c.id}>${c.name}</option>`)}<//></div>
-        <${ChoiceField} id="ve-type" label="Τύπος" value=${f.type} options=${cat?.types || []} onChange=${(v: string) => set('type', v)} otherLabel="Άλλος τύπος (γράψε τον)…" placeholder="π.χ. ΜΑΝ 6t"/>
-        ${fld('plate', 'Πινακίδα', 'plate', { ph: 'ΕΣ 12345', focus: true })}${fld('km', cat?.hours ? 'Ώρες κινητήρα' : 'Χιλιόμετρα', 'km', { num: true, style: { maxWidth: '130px' } })}</div>
-      <div className="field-row">${fld('every', 'Συντήρηση κάθε (μήνες)', 'every', { ph: String(cat?.every || ''), style: { maxWidth: '150px' } })}
-        <div className="field"><label className="field__label" htmlFor="ve-last">Τελευταία συντήρηση</label><${DateField} id="ve-last" value=${f.last} onChange=${(e: any) => set('last', e.target.value || '')}/></div>
-        <div className="field"><label className="field__label" htmlFor="ve-next">Επόμενη (ημερομηνία)</label><${DateField} id="ve-next" value=${f.next} onChange=${(e: any) => set('next', e.target.value || '')}/></div>
-        ${fld('lastKm', 'Τελευταία στα ' + u, 'lastKm', { num: true, style: { maxWidth: '130px' } })}${fld('nextKm', 'Επόμενη στα ' + u, 'nextKm', { num: true, style: { maxWidth: '130px' }, ph: cat?.everyKm ? 'κάθε ' + numTxt(cat.everyKm) : '' })}</div>
-      ${(cat?.fields || []).length > 0 && html`<div className="field-row">${cat!.fields.map((x: any) => html`<div className="field" key=${x.id}><label className="field__label" htmlFor=${'ve-x-' + x.id}>${x.name}</label><input id=${'ve-x-' + x.id} className="ui-input" value=${f.extra[x.id] || ''} onChange=${(e: any) => setF(y => ({ ...y, extra: { ...y.extra, [x.id]: e.target.value } }))}/></div>`)}</div>`}
-      ${fld('acc', 'Παρελκόμενα', 'acc', { ph: 'π.χ. τρίγωνο, πυροσβεστήρας, φαρμακείο, γρύλος, ρεζέρβα' })}${fld('note', 'Παρατηρήσεις', 'note')}
-      <p className="note" style=${{ margin: 0 }}>Κάτοχος, οδηγός, ακινησία και επισκευή αλλάζουν από τα κουμπιά της καρτέλας.</p>
+    <div className="op__form" data-asset-form="">
+      <${Sec} t="Βασικά">
+        <div className="field-row">
+          <div className="field"><label className="field__label" htmlFor="ve-cat">Κατηγορία</label><${Select} id="ve-cat" className="ui-input" value=${f.cat} onChange=${(e: any) => { set('cat', e.target.value); setNewT(false); }}>${vcats.map(c => html`<option key=${c.id} value=${c.id}>${c.name}</option>`)}<//></div>
+          <${TypeField} id="ve-type" label="Τύπος" types=${cat?.types || []} value=${f.type} onChange=${(v: string) => set('type', v)} newT=${newT} setNewT=${setNewT} ph="π.χ. ΜΑΝ 6t" newLabel="+ Νέος τύπος…"/>
+          ${fld('plate', 'Πινακίδα', 'plate', { ph: 'ΕΣ 12345', focus: true })}${fld('km', cat?.hours ? 'Ώρες κινητήρα' : 'Χιλιόμετρα', 'km', { num: true, style: { maxWidth: '130px' } })}</div>
+        ${(cat?.fields || []).length > 0 && html`<div className="field-row">${cat!.fields.map((x: any) => html`<div className="field" key=${x.id}><label className="field__label" htmlFor=${'ve-x-' + x.id}>${x.name}</label><input id=${'ve-x-' + x.id} className="ui-input" value=${f.extra[x.id] || ''} onChange=${(e: any) => setF(y => ({ ...y, extra: { ...y.extra, [x.id]: e.target.value } }))}/></div>`)}</div>`}
+      <//>
+      <${Sec} t="Συντήρηση">
+        <div className="field-row">${fld('every', 'Κάθε (μήνες)', 'every', { ph: cat?.every ? cat.every + ' (της κατηγορίας)' : '', style: { maxWidth: '170px' } })}
+          <div className="field"><label className="field__label" htmlFor="ve-last">Τελευταία</label><${DateField} id="ve-last" value=${f.last} onChange=${(e: any) => set('last', e.target.value || '')}/></div>
+          <div className="field"><label className="field__label" htmlFor="ve-next">Επόμενη (ημερομηνία)</label><${DateField} id="ve-next" value=${f.next} onChange=${(e: any) => set('next', e.target.value || '')}/></div></div>
+        <div className="field-row">${fld('lastKm', 'Τελευταία στα ' + u, 'lastKm', { num: true, style: { maxWidth: '150px' } })}${fld('nextKm', 'Επόμενη στα ' + u, 'nextKm', { num: true, style: { maxWidth: '150px' }, ph: cat?.everyKm ? 'κάθε ' + numTxt(cat.everyKm) : '' })}</div>
+      <//>
+      <${Sec} t="Παρελκόμενα">
+        <${AccPicker} cat=${cat} value=${f.accs} onChange=${(l: { name: string; qty: number }[]) => { setAccTouched(true); set('accs', l); }}/>
+      <//>
+      <${Sec} t="Παρατηρήσεις">${fld('note', 'Παρατηρήσεις', 'note')}
+        <p className="note" style=${{ margin: 0 }}>Κάτοχος, οδηγός, ακινησία και επισκευή αλλάζουν από τα κουμπιά της καρτέλας.</p>
+      <//>
     </div><//>`;
 }

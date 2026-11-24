@@ -38,19 +38,21 @@ function StateBadges({ a, today, warn }: { a: Asset; today: string; warn: number
 }
 
 // ---------- Μενού κάτω από κουμπί (Ενέργειες ▾, Εκτύπωση ▾, φίλτρα) ----------
-interface MenuItem { label?: any; fn?: () => void; disabled?: boolean; tip?: string; sep?: boolean; on?: boolean }
-function MenuBtn({ label, items, variant = 'outline', size, tip, caretOnly, pressed, children }: { label?: string; items?: MenuItem[]; variant?: string; size?: string; tip?: string; caretOnly?: boolean; pressed?: boolean; children?: any }) {
+export interface MenuItem { label?: any; fn?: () => void; disabled?: boolean; tip?: string; sep?: boolean; on?: boolean }
+export function MenuBtn({ label, items, variant = 'outline', size, tip, caretOnly, pressed, children }: { label?: string; items?: MenuItem[]; variant?: string; size?: string; tip?: string; caretOnly?: boolean; pressed?: boolean; children?: any }) {
   const [open, setOpen] = useState(false); const ref = useRef<HTMLSpanElement>(null); const close = useCallback(() => setOpen(false), []);
   return html`<${Fragment}><span ref=${ref} className="op__menu"><${Button} variant=${variant} size=${size} aria-haspopup="true" aria-expanded=${open} aria-pressed=${pressed} data-tip=${tip} aria-label=${caretOnly ? label : undefined} onClick=${() => setOpen(o => !o)}>${caretOnly ? '' : label + ' '}▾<//></span>
     ${open && html`<${Pop} anchor=${ref} onClose=${close} label=${label || 'Μενού'}>${children || html`<ul className="wmenu">${(items || []).map((it, i) => (it.sep ? html`<li key=${i} className="op__sep" role="separator"></li>` : html`<li key=${i}><button type="button" className=${cx('wmenu__item', it.on && 'is-on')} disabled=${it.disabled} data-tip=${it.tip} onClick=${() => { close(); it.fn && it.fn(); }}>${it.label}</button></li>`))}</ul>`}<//>`}<//>`;
 }
 
 // Το «?»: η εξήγηση της καρτέλας, μακριά από την οθόνη
-function HelpBtn({ mode }: { mode: Mode }) {
+export function HelpPop({ title, children }: { title: string; children?: any }) {
   const [open, setOpen] = useState(false);
   return html`<${Fragment}><button type="button" className="op__help" aria-label="Βοήθεια" data-tip="Τι δείχνει αυτή η καρτέλα" onClick=${() => setOpen(true)}>${Icon.help}</button>
-    ${open && html`<${Dialog} title=${mode === 'weapon' ? 'Μητρώο όπλων' : 'Υλικό'} onClose=${() => setOpen(false)} footer=${html`<${Button} onClick=${() => setOpen(false)}>Εντάξει<//>`}>
-      <div className="stack">
+    ${open && html`<${Dialog} title=${title} onClose=${() => setOpen(false)} footer=${html`<${Button} onClick=${() => setOpen(false)}>Εντάξει<//>`}><div className="stack">${children}</div><//>`}<//>`;
+}
+function HelpBtn({ mode }: { mode: Mode }) {
+  return html`<${HelpPop} title=${mode === 'weapon' ? 'Μητρώο όπλων' : 'Υλικό'}>
         ${mode === 'weapon' ? html`<${Fragment}>
           <p>Όλα τα όπλα της μονάδας, ένα ανά γραμμή. Ο αριθμός όπλου ενός στρατιώτη ή στελέχους (καρτέλα «Όπλα ανά άτομο») είναι το ίδιο όπλο: φαίνεται εδώ από το Δυναμολόγιο και γίνεται εγγραφή του μητρώου όταν το αλλάξεις (συντήρηση, κατάσταση, παρατηρήσεις…). Ο κάτοχος, ο τύπος και η θέση οπλοβαστού του κύριου όπλου αλλάζουν και από τις δύο πλευρές και μένουν πάντα ίδια.</p>
           <p>Τσέκαρε πολλές γραμμές για μαζική ενέργεια (συντήρηση, χρέωση, επισκευή, εκτύπωση). Με ↑/↓ πας στην προηγούμενη ή την επόμενη γραμμή.</p>
@@ -58,7 +60,28 @@ function HelpBtn({ mode }: { mode: Mode }) {
         : html`<${Fragment}>
           <p>Το υλικό της μονάδας (διόπτρες, ασύρματοι, ιματισμός, λοιπό υλικό) με ποσότητα, σειριακό, κάτοχο και θέση, χωρίς οπλοβαστό. Τα πεδία κάθε κατηγορίας (π.χ. κανάλι ασυρμάτου) φαίνονται στην καρτέλα δεξιά.</p>
           <p>Κατηγορίες, τύποι, παρελκόμενα και πεδία αλλάζουν από Ρυθμίσεις › Μητρώο οπλισμού και υλικού.</p><//>`}
-      </div><//>`}<//>`;
+  <//>`;
+}
+
+// ---------- ↑/↓: προηγούμενη/επόμενη γραμμή (κοινό για Οπλισμό και Οχήματα) ----------
+export function useArrowNav<T extends { key: string }>(rows: T[], curKey: string | undefined, setSel: (k: string) => void, rowH = ROW_H, headH = HEAD_H) {
+  const body = useRef<HTMLDivElement>(null);
+  const curIn = curKey ? rows.findIndex(r => r.key === curKey) : -1;
+  const go = useCallback((i: number) => {
+    const r = rows[i]; if (!r) return; setSel(r.key);
+    const el = body.current; if (el) { const top = i * rowH, vis = el.clientHeight - headH; if (top < el.scrollTop) el.scrollTop = top; else if (top + rowH > el.scrollTop + vis) el.scrollTop = top + rowH - vis; }
+  }, [rows, rowH, headH]);
+  // ↑/↓: όταν δεν γράφεις κάπου και δεν είναι ανοιχτό παράθυρο
+  const goRef = useRef(go); goRef.current = go; const at = useRef(curIn); at.current = curIn;
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if ((e.key !== 'ArrowDown' && e.key !== 'ArrowUp') || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || at.current < 0) return;
+      if (typingText(document.activeElement) || document.querySelector('.ui-overlay, .wpop, .ui-dd__pop')) return;
+      e.preventDefault(); goRef.current(at.current + (e.key === 'ArrowDown' ? 1 : -1));
+    };
+    document.addEventListener('keydown', h); return () => document.removeEventListener('keydown', h);
+  }, []);
+  return { body, go, curIn };
 }
 
 // ---------- Η οθόνη ----------
@@ -73,7 +96,7 @@ export function RegistryView({ mode, tabs }: { mode: Mode; tabs: any }) {
   const [chk, setChk] = useState<Set<string>>(() => new Set());
   const [dlg, setDlg] = useState<{ t: 'edit' | 'maint' | 'repair' | 'writeoff' | 'assign' | 'gone'; row?: AssetRow; rows?: AssetRow[] } | null>(null);
   const [xl, setXl] = useState(false);
-  const height = useViewportHeight(300); const body = useRef<HTMLDivElement>(null);
+  const height = useViewportHeight(300);
   useEffect(() => { if (nav.params.aq != null || nav.params.acat != null) nav.set({ aq: null, acat: null }); }, []);   // μία φορά, από τον σύνδεσμο της καρτέλας ατόμου
   useEffect(() => { setCat(''); setTypes([]); setFilter('all'); setSel(null); setChk(new Set()); }, [mode]);
   const all = useMemo(() => registry(state, { day: today, hm: nowHM() }), [state.people, state.cadreList, state.assets, state.settings, state.guards, state.dutyLog, state.rules, state.dutyFix, today]);   // ΑΠΩΝ στη θέση: υπηρεσία εκτός στρατοπέδου
@@ -88,7 +111,8 @@ export function RegistryView({ mode, tabs }: { mode: Mode; tabs: any }) {
   const ccounts = useMemo(() => { const m = new Map<string, number>(); for (const r of view({ filter })) m.set(r.a.cat, (m.get(r.a.cat) || 0) + 1); return m; }, [view, filter]);
   const total = mine.length; const held = mine.filter(r => r.a.holder && (r.a.holder.k === 'person' || r.a.holder.k === 'cadre')).length; const free = mine.filter(r => !r.a.holder).length;
   const repair = mine.filter(r => r.a.state === 'repair' || r.a.state === 'immobile').length;
-  const cur = sel ? all.find(r => r.key === sel) || null : null; const curIn = cur ? rows.findIndex(r => r.key === cur.key) : -1;
+  const cur = sel ? all.find(r => r.key === sel) || null : null;
+  const { body, go, curIn } = useArrowNav(rows, cur?.key, setSel);
   const checked = useMemo(() => all.filter(r => chk.has(r.key)), [all, chk]);
   const GRID = weapon ? '34px 70px 92px minmax(110px,1.5fr) minmax(100px,1fr) 130px 84px' : '34px 100px minmax(110px,1.4fr) 96px 52px minmax(100px,1.2fr) minmax(90px,1fr) 130px'; const MIN = weapon ? 640 : 708;
   const exportXl = async (print: boolean, only?: string[]) => {
@@ -105,20 +129,6 @@ export function RegistryView({ mode, tabs }: { mode: Mode; tabs: any }) {
   const clear = () => { setQ(''); setFilter('all'); setCat(''); setTypes([]); };
   const toggle = useCallback((k: string) => setChk(s => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; }), []);
   const allOn = rows.length > 0 && rows.every(r => chk.has(r.key));
-  const go = useCallback((i: number) => {
-    const r = rows[i]; if (!r) return; setSel(r.key);
-    const el = body.current; if (el) { const top = i * ROW_H, vis = el.clientHeight - HEAD_H; if (top < el.scrollTop) el.scrollTop = top; else if (top + ROW_H > el.scrollTop + vis) el.scrollTop = top + ROW_H - vis; }
-  }, [rows]);
-  // ↑/↓: προηγούμενη/επόμενη γραμμή, όταν δεν γράφεις κάπου και δεν είναι ανοιχτό παράθυρο
-  const goRef = useRef(go); goRef.current = go; const at = useRef(curIn); at.current = curIn;
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      if ((e.key !== 'ArrowDown' && e.key !== 'ArrowUp') || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || at.current < 0) return;
-      if (typingText(document.activeElement) || document.querySelector('.ui-overlay, .wpop, .ui-dd__pop')) return;
-      e.preventDefault(); goRef.current(at.current + (e.key === 'ArrowDown' ? 1 : -1));
-    };
-    document.addEventListener('keydown', h); return () => document.removeEventListener('keydown', h);
-  }, []);
   const renderRow = useCallback((r: AssetRow, i: number, style: P) => {
     const a = r.a; const out = holderOut(state, a.holder); const on = chk.has(r.key);
     const who = a.holder ? html`<${Fragment}>${holderShort(state, a.holder)}${a.holder.k !== 'person' ? html` <small className="muted">(${a.holder.k === 'cadre' ? 'στέλεχος' : a.holder.k === 'unit' ? 'άλλη μονάδα' : 'φυσ. πρόσωπο'})</small>` : ''}${out ? html` <${Badge} tone="warn">εκτός δύναμης<//>` : ''}<//>` : 'αχρέωτο';
@@ -300,10 +310,28 @@ export function AssignDialog({ row, rows, onClose, onDone }: P) {
 }
 
 // ---------- Νέο / Αλλαγή: φόρμα σε ενότητες ----------
-const NEWT = '\u0001new';
-function Sec({ t, children }: P) { return html`<section className="op__sec"><h4 className="op__sech">${t}</h4>${children}</section>`; }
-function Stepper({ v, on, label }: { v: number; on: (n: number) => void; label: string }) {
+export const NEWT = '\u0001new';
+export function Sec({ t, children }: P) { return html`<section className="op__sec"><h4 className="op__sech">${t}</h4>${children}</section>`; }
+export function Stepper({ v, on, label }: { v: number; on: (n: number) => void; label: string }) {
   return html`<span className="op__step" role="group" aria-label=${'Ποσότητα: ' + label}><button type="button" aria-label="Λιγότερα" disabled=${v <= 1} onClick=${() => on(v - 1)}>−</button><output>${v}</output><button type="button" aria-label="Περισσότερα" disabled=${v >= 999} onClick=${() => on(v + 1)}>+</button></span>`;
+}
+// Τύπος από τη λίστα της κατηγορίας, με «+ Νέος τύπος…» που γράφεται με το χέρι (και μπαίνει στη λίστα με addType)
+export function TypeField({ id, label, types, value, onChange, newT, setNewT, ph, newLabel }: { id: string; label: string; types: string[]; value: string; onChange: (v: string) => void; newT: boolean; setNewT: (b: boolean) => void; ph: string; newLabel: string }) {
+  const known = !value || types.some(t => normGreek(t) === normGreek(value));
+  return html`<div className="field"><label className="field__label" htmlFor=${id}>${label}</label>
+    ${newT ? html`<div className="op__newt"><input id=${id} className="ui-input" aria-label="Νέος τύπος" value=${value} placeholder=${ph} autoFocus onChange=${(e: any) => onChange(e.target.value)}/><${Button} size="sm" variant="ghost" onClick=${() => { setNewT(false); onChange(''); }}>Από τη λίστα<//></div><span className="field__help">Θα μπει και στη λίστα τύπων της κατηγορίας.</span>`
+    : html`<${Select} id=${id} className="ui-input" value=${value} onChange=${(e: any) => { const v = e.target.value; if (v === NEWT) { setNewT(true); onChange(''); } else onChange(v); }}>
+      <option value="">—</option>${!known && html`<option value=${value}>${value}</option>`}${types.map(t => html`<option key=${t} value=${t}>${t}</option>`)}<option value=${NEWT} data-keep>${newLabel}</option><//>`}</div>`;
+}
+// Παρελκόμενα ως checkboxes με ποσότητα, από τη λίστα της κατηγορίας (και ό,τι έχει ήδη το είδος), με «+ Άλλο παρελκόμενο…»
+export function AccPicker({ cat, value, onChange }: { cat?: AssetCat; value: { name: string; qty: number }[]; onChange: (l: { name: string; qty: number }[]) => void }) {
+  const [addAcc, setAddAcc] = useState<string | null>(null);
+  const setAcc = (name: string, qty: number | null) => onChange(qty == null ? value.filter(y => normGreek(y.name) !== normGreek(name)) : value.some(y => normGreek(y.name) === normGreek(name)) ? value.map(y => (normGreek(y.name) === normGreek(name) ? { ...y, qty } : y)) : [...value, { name, qty }]);
+  const accOpts = useMemo(() => { const l = (cat?.accs || []).map(x => ({ name: x.name, def: Math.max(1, x.qty || 1) })); for (const x of value) if (!l.some(y => normGreek(y.name) === normGreek(x.name))) l.push({ name: x.name, def: 1 }); return l; }, [cat, value]);
+  return html`<div className="op__accg">${accOpts.map(o => { const on = value.find(y => normGreek(y.name) === normGreek(o.name));
+      return html`<div key=${o.name} className="op__acc"><label className="check"><input type="checkbox" checked=${!!on} onChange=${(e: any) => setAcc(o.name, e.target.checked ? o.def : null)}/><span>${o.name}</span></label>${on && html`<${Stepper} v=${on.qty} label=${o.name} on=${(n: number) => setAcc(o.name, n)}/>`}</div>`; })}
+      ${addAcc === null ? html`<${Button} size="sm" variant="outline" className="op__addacc" onClick=${() => setAddAcc('')}>+ Άλλο παρελκόμενο…<//>`
+        : html`<div className="op__newt"><input className="ui-input" aria-label="Νέο παρελκόμενο" value=${addAcc} placeholder="π.χ. Σκόπευτρο" autoFocus onChange=${(e: any) => setAddAcc(e.target.value)} onKeyDown=${(e: any) => { if (e.key === 'Enter') { e.preventDefault(); if (addAcc.trim()) setAcc(addAcc.trim(), 1); setAddAcc(null); } }}/><${Button} size="sm" disabled=${!addAcc.trim()} onClick=${() => { setAcc(addAcc.trim(), 1); setAddAcc(null); }}>Πρόσθεσε<//><${Button} size="sm" variant="ghost" onClick=${() => setAddAcc(null)}>Άκυρο<//></div>`}</div>`;
 }
 function AssetEditDialog({ row, all, cfg, defCat, mode, onClose, onSaved }: P) {
   const { state, today } = useStore(); const doIt = useDo(); const isNew = !row;
@@ -313,14 +341,12 @@ function AssetEditDialog({ row, all, cfg, defCat, mode, onClose, onSaved }: P) {
   const first = defCat && cfg.cats.find((c: AssetCat) => c.id === defCat && own(c)) ? defCat : cfg.cats.find((c: AssetCat) => c.kind === kind)?.id || '';
   const [f, setF] = useState(() => ({ cat: a0?.cat || first, type: a0?.type || '', no: a0?.no || '', qty: String(a0?.qty || ''), place: a0?.place || '', rack: a0?.rack || '', wpos: a0?.wpos || '', fileWord: a0?.fileWord || '', warOnly: !!a0?.warOnly,
     every: String(a0?.maint?.every || ''), last: a0?.maint?.last || '', next: a0?.maint?.next || '', accs: a0 ? accsOf(a0) : [] as { name: string; qty: number }[], note: a0?.note || '', extra: { ...(a0?.extra || {}) } as Record<string, string> }));
-  const [newT, setNewT] = useState(false); const [accTouched, setAccTouched] = useState(false); const [addAcc, setAddAcc] = useState<string | null>(null);
+  const [newT, setNewT] = useState(false); const [accTouched, setAccTouched] = useState(false);
   const dirty = useDirty({ f, newT });
   const cat: AssetCat | undefined = cfg.cats.find((c: AssetCat) => c.id === f.cat); const weapon = (cat?.kind || kind) === 'weapon';
   const set = (k: string, v: any) => setF(x => ({ ...x, [k]: v }));
   const dups = f.no.trim() ? sameNo(all, { key: row?.key || '', a: { ...(a0 || {}), cat: f.cat } as Asset }, f.no) : [];
-  const types: string[] = cat?.types || []; const typeKnown = !f.type || types.some(t => normGreek(t) === normGreek(f.type));
-  const setAcc = (name: string, qty: number | null) => { setAccTouched(true); setF(x => ({ ...x, accs: qty == null ? x.accs.filter(y => normGreek(y.name) !== normGreek(name)) : x.accs.some(y => normGreek(y.name) === normGreek(name)) ? x.accs.map(y => (normGreek(y.name) === normGreek(name) ? { ...y, qty } : y)) : [...x.accs, { name, qty }] })); };
-  const accOpts = useMemo(() => { const l = (cat?.accs || []).map(x => ({ name: x.name, def: Math.max(1, x.qty || 1) })); for (const x of f.accs) if (!l.some(y => normGreek(y.name) === normGreek(x.name))) l.push({ name: x.name, def: 1 }); return l; }, [cat, f.accs]);
+  const types: string[] = cat?.types || [];
   const canSave = !!f.cat && (weapon ? !!f.no.trim() : !!f.no.trim() || !!f.type.trim());
   const save = () => {
     const every = Math.floor(Number(f.every)); const maint = { ...(a0?.maint || {}), last: f.last || undefined, next: f.next || undefined, every: every > 0 ? every : undefined };
@@ -338,10 +364,7 @@ function AssetEditDialog({ row, all, cfg, defCat, mode, onClose, onSaved }: P) {
       <${Sec} t="Βασικά">
         <div className="field-row">
           <div className="field"><label className="field__label" htmlFor="ae-cat">Κατηγορία</label><${Select} id="ae-cat" className="ui-input" value=${f.cat} onChange=${(e: any) => { set('cat', e.target.value); setNewT(false); }}>${cfg.cats.filter(own).map((c: AssetCat) => html`<option key=${c.id} value=${c.id}>${c.name}</option>`)}<//></div>
-          <div className="field"><label className="field__label" htmlFor="ae-type">${weapon ? 'Τύπος' : 'Είδος'}</label>
-            ${newT ? html`<div className="op__newt"><input id="ae-type" className="ui-input" aria-label="Νέος τύπος" value=${f.type} placeholder=${weapon ? 'π.χ. G3A3' : 'π.χ. Διόπτρα νυκτός'} autoFocus onChange=${(e: any) => set('type', e.target.value)}/><${Button} size="sm" variant="ghost" onClick=${() => { setNewT(false); set('type', ''); }}>Από τη λίστα<//></div><span className="field__help">Θα μπει και στη λίστα τύπων της κατηγορίας.</span>`
-            : html`<${Select} id="ae-type" className="ui-input" value=${f.type} onChange=${(e: any) => { const v = e.target.value; if (v === NEWT) { setNewT(true); set('type', ''); } else set('type', v); }}>
-              <option value="">—</option>${!typeKnown && html`<option value=${f.type}>${f.type}</option>`}${types.map(t => html`<option key=${t} value=${t}>${t}</option>`)}<option value=${NEWT} data-keep>+ Νέος ${weapon ? 'τύπος' : 'είδος'}…</option><//>`}</div>
+          <${TypeField} id="ae-type" label=${weapon ? 'Τύπος' : 'Είδος'} types=${types} value=${f.type} onChange=${(v: string) => set('type', v)} newT=${newT} setNewT=${setNewT} ph=${weapon ? 'π.χ. G3A3' : 'π.χ. Διόπτρα νυκτός'} newLabel=${'+ Νέος ' + (weapon ? 'τύπος' : 'είδος') + '…'}/>
           ${fld('no', weapon ? 'Αριθμός όπλου *' : 'Σειριακός', 'no', { disabled: linked, ph: weapon ? 'αριθμός όπλου' : 'αν έχει', focus: true })}
           ${!weapon && fld('qty', 'Ποσότητα', 'qty', { ph: '1', style: { maxWidth: '100px' } })}</div>
         ${dups.length > 0 && html`<${Alert} tone="warn">Ο αριθμός υπάρχει ήδη στο μητρώο (${dups.map((x: AssetRow) => holderText(state, x.a.holder)).join(', ')}). Μπορείς να συνεχίσεις.<//>`}
@@ -358,10 +381,7 @@ function AssetEditDialog({ row, all, cfg, defCat, mode, onClose, onSaved }: P) {
           <label className="check op__war"><input type="checkbox" checked=${f.warOnly} onChange=${(e: any) => set('warOnly', e.target.checked)}/><span>Μόνο εμπόλεμη περίοδο</span></label></div>
       <//>
       <${Sec} t="Παρελκόμενα">
-        <div className="op__accg">${accOpts.map(o => { const on = f.accs.find(y => normGreek(y.name) === normGreek(o.name));
-          return html`<div key=${o.name} className="op__acc"><label className="check"><input type="checkbox" checked=${!!on} onChange=${(e: any) => setAcc(o.name, e.target.checked ? o.def : null)}/><span>${o.name}</span></label>${on && html`<${Stepper} v=${on.qty} label=${o.name} on=${(n: number) => setAcc(o.name, n)}/>`}</div>`; })}
-          ${addAcc === null ? html`<${Button} size="sm" variant="outline" className="op__addacc" onClick=${() => setAddAcc('')}>+ Άλλο παρελκόμενο…<//>`
-            : html`<div className="op__newt"><input className="ui-input" aria-label="Νέο παρελκόμενο" value=${addAcc} placeholder="π.χ. Σκόπευτρο" autoFocus onChange=${(e: any) => setAddAcc(e.target.value)} onKeyDown=${(e: any) => { if (e.key === 'Enter') { e.preventDefault(); if (addAcc.trim()) setAcc(addAcc.trim(), 1); setAddAcc(null); } }}/><${Button} size="sm" disabled=${!addAcc.trim()} onClick=${() => { setAcc(addAcc.trim(), 1); setAddAcc(null); }}>Πρόσθεσε<//><${Button} size="sm" variant="ghost" onClick=${() => setAddAcc(null)}>Άκυρο<//></div>`}</div>
+        <${AccPicker} cat=${cat} value=${f.accs} onChange=${(l: { name: string; qty: number }[]) => { setAccTouched(true); set('accs', l); }}/>
       <//>
       <${Sec} t="Παρατηρήσεις">${fld('note', 'Παρατηρήσεις', 'note')}<//>
     </div><//>`;
