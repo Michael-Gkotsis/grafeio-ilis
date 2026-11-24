@@ -18,7 +18,7 @@ import { insertCadre, isManualOrder } from './cadre';
 import { clearRange, setNoDuty } from './cadrePlan';
 import { assetCfgOf, newAssetCatId, catOf, cleanAsset, doMaint, heldWarn, holderText, primaryWeapons, registry, sameHolder, STATE_TXT } from './assets';
 import { doVehMaint, driverText, kmTxt, numTxt, vehName, withKm } from './vehicles';
-import { cleanPerson, dutyCfgOf, serviceOf } from './cadreDuty';
+import { cleanPerson, dutyCfgOf, serviceOf, syncLinked } from './cadreDuty';
 import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
 import { normPos, normRack, normWeapon, weaponKey, WT_CAT } from './weapons';
@@ -472,7 +472,7 @@ function stampMoves(prev: AppState, next: AppState, c: Command, today: ISODate):
 }
 export function apply(s: AppState, c: Command, ctx: Ctx): Result {
   const r = run(s, c, ctx);
-  const state = syncAssets(s, fitDeprivations(noPending(stampMoves(s, r.state, c, ctx.today))), ctx);
+  const state = syncAssets(s, syncLinked(s, fitDeprivations(noPending(stampMoves(s, r.state, c, ctx.today))), () => ctx.newId()), ctx);
   return state === r.state ? r : { ...r, state, files: r.files.includes('Ποινές') ? r.files : [...r.files, 'Ποινές'] };
 }
 // Μητρώο ↔ Δυναμολόγιο (sweep 17/11): όταν αλλάζει ο αριθμός όπλου ενός ατόμου/στελέχους (Οπλισμός, Excel, καρτέλα), η αληθινή εγγραφή του παλιού

@@ -90,7 +90,7 @@ export function monthDuties(s: AppState, date: ISODate, pid: number, idx?: Map<n
   if (ds) for (const d of ds) if ((withDay || d !== date) && d.slice(0, 7) === ym) n++;
   // στέλεχος: μετρούν μαζί και οι υπηρεσίες του προγράμματος στελεχών (Michael, 17/11: «μετρούν μαζί»), όπως στο cadreDuty.ts monthCount
   const c = pid < 0 ? cadreOf(s, pid) : undefined;
-  if (c && s.cadreDuties) for (const x of s.cadreDuties) if (x.cid === c.id && (withDay || x.date !== date) && x.date.slice(0, 7) === ym) n++;
+  if (c && s.cadreDuties) for (const x of s.cadreDuties) if (x.cid === c.id && !x.via && (withDay || x.date !== date) && x.date.slice(0, 7) === ym) n++;
   return n;
 }
 // Το όριο του μήνα ενός στελέχους σε θέση στρατιωτών (Michael, 24/11): ΕΝΑ όριο από τα δύο που υπήρχαν χωριστά. Πρώτα το δικό του
@@ -615,7 +615,7 @@ function twoFits(a: Post, b: Post, gap: number): boolean {
 // στέλεχος με υπηρεσία του προγράμματος στελεχών την ίδια μέρα: ειδοποίηση ⚠ χωρίς αιτία (δεν μπλοκάρει, όπως η 2η υπηρεσία)
 export function rosterSameDay(s: AppState, date: ISODate, pid: number): string | null {
   const cd = pid < 0 ? cadreOf(s, pid) : undefined; if (!cd) return null;
-  const same = (s.cadreDuties || []).filter(x => x.cid === cd.id && x.date === date); if (!same.length) return null;
+  const same = (s.cadreDuties || []).filter(x => x.cid === cd.id && x.date === date && !x.via); if (!same.length) return null;   // via = η ίδια θέση, ήδη στις θέσεις
   const svcs = (s.settings.cadreDuty?.groups || []).flatMap(g => g.services || []);
   return 'Έχει ήδη υπηρεσία ' + same.map(y => svcs.find(v => v.id === y.svc)?.name || y.svc).join(', ') + ' αυτή τη μέρα (πρόγραμμα στελεχών)';
 }

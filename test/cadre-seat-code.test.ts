@@ -33,7 +33,7 @@ const cellOn = (s: AppState, cid: string, date = D) => { const i = monthIndex(s,
 describe('θέση «μόνο για στελέχη» στο πρόγραμμα των στελεχών', () => {
   it('φαίνεται ως η πρώτη υπηρεσία της ομάδας (ΑΥΔΜ), όχι «Σ», και μετρά στον μήνα', () => {
     const { s: s0, k, cid } = setup(); const s = put(s0, cid, k);
-    const x = cellOn(s, cid); expect(x.seat).toHaveLength(1); expect(x.seat[0].svc?.short).toBe('ΑΥΔΜ');
+    const x = cellOn(s, cid); expect(x.seat).toHaveLength(0); expect(x.roster).toHaveLength(1); expect(x.roster[0].svc?.id).toBe('a');   // από 24/11 αμφίδρομη σχέση: η θέση είναι η υπηρεσία στο πρόγραμμα (cadre-seat-link.test.ts)
     expect(cellCode(x)).toBe('ΑΥΔΜ');
     expect(monthCount(s, cid, YM).done).toBe(1);
   });
@@ -54,7 +54,7 @@ describe('θέση «μόνο για στελέχη» στο πρόγραμμα 
     const { s: s0, k, cid } = setup(); const s = put(s0, cid, k); expect(cellCode(cellOn(s, cid))).toBe('ΑΥΔΜ');
     const id = blocksOf(s.settings).find(b => b.name === 'ΑΥΔΜ')!.id;
     const t = run(s, { t: 'editBlock', phase: s.settings.phase, id, name: 'ΑΥΔΜ', hrs: {}, who: 'cadre', cadreGroup: 'g', cadreAs: 'b' });
-    expect(cellCode(cellOn(t, cid))).toBe('ΒΑΥΔΜ'); expect(dutyIndex(t).get(cid)!.get(D)!.seat[0].svc?.id).toBe('b');
+    expect(cellCode(cellOn(t, cid))).toBe('ΒΑΥΔΜ'); expect(dutyIndex(t).get(cid)!.get(D)!.roster[0].svc).toBe('b');
   });
   it('το Excel του προγράμματος στελεχών γράφει ΑΥΔΜ στη μέρα της θέσης', () => {
     const { s: s0, k, cid } = setup(); const s = put(s0, cid, k);
