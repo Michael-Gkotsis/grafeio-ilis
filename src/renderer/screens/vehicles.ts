@@ -142,7 +142,7 @@ function FuelDialog({ row, onClose }: P) {
   return html`<${Dialog} title=${'Γέμισμα · ' + nmOf(row)} onClose=${onClose}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!l || !date} onClick=${() => doIt({ t: 'assetFuel', ...same(row), date, litres: l, km: k }, 'Γέμισμα ' + nmOf(row) + ': ' + numTxt(l!) + ' λίτρα', back ? 'τα ' + u + ' είναι λιγότερα από τα προηγούμενα (' + numTxt(a.km!) + ').' : undefined, onClose)}>Αποθήκευση<//>`}>
     <div className="stack"><div className="field-row">
-      <div className="field"><label className="field__label" htmlFor="vf-d">Ημερομηνία</label><${DateField} id="vf-d" value=${date} onChange=${setDate}/></div>
+      <div className="field"><label className="field__label" htmlFor="vf-d">Ημερομηνία</label><${DateField} id="vf-d" value=${date} onChange=${(e: any) => e.target.value && setDate(e.target.value)}/></div>
       <div className="field"><label className="field__label" htmlFor="vf-l">Λίτρα</label><input id="vf-l" className="ui-input" inputMode="decimal" value=${litres} onChange=${(e: any) => setLitres(e.target.value)} data-autofocus="" style=${{ maxWidth: '110px' }}/></div>
       <div className="field"><label className="field__label" htmlFor="vf-k">${row.cat?.hours ? 'Ώρες κινητήρα' : 'Χιλιόμετρα'}</label><input id="vf-k" className="ui-input" inputMode="decimal" value=${km} onChange=${(e: any) => setKm(e.target.value)} style=${{ maxWidth: '130px' }}/></div></div>
       ${back && html`<${Alert} tone="warn">Τα ${u} είναι λιγότερα από τα προηγούμενα (${numTxt(a.km!)}). Μπορείς να συνεχίσεις.<//>`}
@@ -155,7 +155,7 @@ function KmDialog({ row, onClose }: P) {
   return html`<${Dialog} title=${(row.cat?.hours ? 'Ώρες κινητήρα · ' : 'Χιλιόμετρα · ') + nmOf(row)} onClose=${onClose}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${k == null || !date} onClick=${() => doIt({ t: 'assetKm', ...same(row), date, km: k }, nmOf(row) + ': ' + numTxt(k!) + ' ' + u, back ? 'τα ' + u + ' είναι λιγότερα από τα προηγούμενα.' : undefined, onClose)}>Αποθήκευση<//>`}>
     <div className="stack"><div className="field-row">
-      <div className="field"><label className="field__label" htmlFor="vk-d">Ημερομηνία</label><${DateField} id="vk-d" value=${date} onChange=${setDate}/></div>
+      <div className="field"><label className="field__label" htmlFor="vk-d">Ημερομηνία</label><${DateField} id="vk-d" value=${date} onChange=${(e: any) => e.target.value && setDate(e.target.value)}/></div>
       <div className="field"><label className="field__label" htmlFor="vk-k">Ένδειξη (τώρα ${a.km != null ? numTxt(a.km) : '—'})</label><input id="vk-k" className="ui-input" inputMode="decimal" value=${km} onChange=${(e: any) => setKm(e.target.value)} data-autofocus="" style=${{ maxWidth: '150px' }}/></div></div>
       ${back && html`<${Alert} tone="warn">Τα ${u} είναι λιγότερα από τα προηγούμενα. Μπορείς να συνεχίσεις.<//>`}</div><//>`;
 }
@@ -166,7 +166,7 @@ function VMaintDialog({ row, onClose }: P) {
   return html`<${Dialog} title=${'Έγινε συντήρηση · ' + nmOf(row)} onClose=${onClose}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!date} onClick=${() => doIt({ t: 'assetMaint', ...same(row), date, km: k, note }, 'Συντήρηση ' + nmOf(row) + ' ' + dmy(date), undefined, onClose)}>Αποθήκευση<//>`}>
     <div className="stack"><div className="field-row">
-      <div className="field"><label className="field__label" htmlFor="vm-d">Ημερομηνία συντήρησης</label><${DateField} id="vm-d" value=${date} onChange=${setDate}/></div>
+      <div className="field"><label className="field__label" htmlFor="vm-d">Ημερομηνία συντήρησης</label><${DateField} id="vm-d" value=${date} onChange=${(e: any) => e.target.value && setDate(e.target.value)}/></div>
       <div className="field"><label className="field__label" htmlFor="vm-k">${c?.hours ? 'Ώρες κινητήρα' : 'Χιλιόμετρα'} (προαιρετικά)</label><input id="vm-k" className="ui-input" inputMode="decimal" value=${km} onChange=${(e: any) => setKm(e.target.value)} style=${{ maxWidth: '150px' }}/></div></div>
       <div className="field"><label className="field__label" htmlFor="vm-n">Σημείωση (προαιρετικά)</label><input id="vm-n" className="ui-input" value=${note} onChange=${(e: any) => setNote(e.target.value)} placeholder="π.χ. λάδια και φίλτρα, ΕΜΑ"/></div>
       <p className="note" style=${{ margin: 0 }}>${nd || nk != null ? 'Επόμενη συντήρηση: ' + [nd && dmy(nd) + ' (κάθε ' + every + ' μήνες)', nk != null && 'στα ' + numTxt(nk) + ' ' + u].filter(Boolean).join(' ή ') + ' · όποιο έρθει πρώτο.' : 'Δεν έχει οριστεί «κάθε Ν μήνες» ή «κάθε Ν ' + u + '» (στην «Αλλαγή…» ή στην κατηγορία): θα γραφτεί μόνο η τελευταία συντήρηση.'}</p></div><//>`;
@@ -176,7 +176,7 @@ function VStateDialog({ row, mode, onClose }: P) {
   const imm = mode === 'immobile';
   return html`<${Dialog} title=${(imm ? 'Ακινησία · ' : 'Προς επισκευή · ') + nmOf(row)} onClose=${onClose}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${() => doIt({ t: 'assetState', ...same(row), state: imm ? 'immobile' : 'repair', why, date }, nmOf(row) + ': ' + (imm ? 'ακινησία' : 'προς επισκευή'), undefined, onClose)}>Αποθήκευση<//>`}>
-    <div className="stack"><div className="field"><label className="field__label" htmlFor="vs-d">Ημερομηνία</label><${DateField} id="vs-d" value=${date} onChange=${setDate}/></div>
+    <div className="stack"><div className="field"><label className="field__label" htmlFor="vs-d">Ημερομηνία</label><${DateField} id="vs-d" value=${date} onChange=${(e: any) => e.target.value && setDate(e.target.value)}/></div>
       <div className="field"><label className="field__label" htmlFor="vs-w">Λόγος (προαιρετικά)</label><input id="vs-w" className="ui-input" value=${why} onChange=${(e: any) => setWhy(e.target.value)} placeholder=${imm ? 'π.χ. μπαταρίες, έλλειψη ανταλλακτικού' : 'π.χ. κιβώτιο ταχυτήτων'} data-autofocus=""/></div></div><//>`;
 }
 function DriverDialog({ row, onClose }: P) {
@@ -192,7 +192,7 @@ function DriverDialog({ row, onClose }: P) {
       ${kind !== 'none' && html`<div className="field"><label className="field__label" htmlFor="vd-p">${kind === 'soldier' ? 'Οπλίτης' : 'Στέλεχος'}</label>
         <${PersonPicker} key=${kind} id="vd-p" people=${people} placeholder=${kind === 'soldier' ? 'Επώνυμο, όνομα ή ΑΣΜ…' : 'Επώνυμο του στελέχους…'} onChange=${(id: number) => { const p = people.find((x: any) => x.id === id); if (p) setWho({ d: p.cid ? { k: 'cadre', cid: p.cid } : { k: 'person', pid: p.id }, label: (p.rank || '') + ' ' + p.last + ' ' + p.first }); }}/>
         ${who && html`<div style=${{ marginTop: '6px' }}>Διάλεξες: <b>${who.label}</b></div>`}</div>`}
-      <div className="field"><label className="field__label" htmlFor="vd-d">Ημερομηνία</label><${DateField} id="vd-d" value=${date} onChange=${setDate}/></div></div><//>`;
+      <div className="field"><label className="field__label" htmlFor="vd-d">Ημερομηνία</label><${DateField} id="vd-d" value=${date} onChange=${(e: any) => e.target.value && setDate(e.target.value)}/></div></div><//>`;
 }
 function VehicleEditDialog({ row, cfg, defCat, onClose, onSaved }: P) {
   const { today } = useStore(); const doIt = useDo(); const isNew = !row; const a0: Asset | undefined = row?.a;
@@ -218,8 +218,8 @@ function VehicleEditDialog({ row, cfg, defCat, onClose, onSaved }: P) {
         <${ChoiceField} id="ve-type" label="Τύπος" value=${f.type} options=${cat?.types || []} onChange=${(v: string) => set('type', v)} otherLabel="Άλλος τύπος (γράψε τον)…" placeholder="π.χ. ΜΑΝ 6t"/>
         ${fld('plate', 'Πινακίδα', 'plate', { ph: 'ΕΣ 12345', focus: true })}${fld('km', cat?.hours ? 'Ώρες κινητήρα' : 'Χιλιόμετρα', 'km', { num: true, style: { maxWidth: '130px' } })}</div>
       <div className="field-row">${fld('every', 'Συντήρηση κάθε (μήνες)', 'every', { ph: String(cat?.every || ''), style: { maxWidth: '150px' } })}
-        <div className="field"><label className="field__label" htmlFor="ve-last">Τελευταία συντήρηση</label><${DateField} id="ve-last" value=${f.last} onChange=${(v: string) => set('last', v)}/></div>
-        <div className="field"><label className="field__label" htmlFor="ve-next">Επόμενη (ημερομηνία)</label><${DateField} id="ve-next" value=${f.next} onChange=${(v: string) => set('next', v)}/></div>
+        <div className="field"><label className="field__label" htmlFor="ve-last">Τελευταία συντήρηση</label><${DateField} id="ve-last" value=${f.last} onChange=${(e: any) => set('last', e.target.value || '')}/></div>
+        <div className="field"><label className="field__label" htmlFor="ve-next">Επόμενη (ημερομηνία)</label><${DateField} id="ve-next" value=${f.next} onChange=${(e: any) => set('next', e.target.value || '')}/></div>
         ${fld('lastKm', 'Τελευταία στα ' + u, 'lastKm', { num: true, style: { maxWidth: '130px' } })}${fld('nextKm', 'Επόμενη στα ' + u, 'nextKm', { num: true, style: { maxWidth: '130px' }, ph: cat?.everyKm ? 'κάθε ' + numTxt(cat.everyKm) : '' })}</div>
       ${(cat?.fields || []).length > 0 && html`<div className="field-row">${cat!.fields.map((x: any) => html`<div className="field" key=${x.id}><label className="field__label" htmlFor=${'ve-x-' + x.id}>${x.name}</label><input id=${'ve-x-' + x.id} className="ui-input" value=${f.extra[x.id] || ''} onChange=${(e: any) => setF(y => ({ ...y, extra: { ...y.extra, [x.id]: e.target.value } }))}/></div>`)}</div>`}
       ${fld('acc', 'Παρελκόμενα', 'acc', { ph: 'π.χ. τρίγωνο, πυροσβεστήρας, φαρμακείο, γρύλος, ρεζέρβα' })}${fld('note', 'Παρατηρήσεις', 'note')}

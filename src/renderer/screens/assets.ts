@@ -158,7 +158,7 @@ function MaintDialog({ row, cfg, onClose }: P) {
   const every = a.maint?.every ?? row.cat?.every; const next = every && date ? addMonths(date, every) : '';
   return html`<${Dialog} title=${'Έγινε συντήρηση · ' + [a.type, a.no].filter(Boolean).join(' ')} onClose=${onClose}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!date} onClick=${() => doIt({ t: 'assetMaint', ...same(row), date, note }, 'Συντήρηση ' + [a.type, a.no].filter(Boolean).join(' ') + ' ' + dmy(date), undefined, onClose)}>Αποθήκευση<//>`}>
-    <div className="stack"><div className="field"><label className="field__label" htmlFor="am-d">Ημερομηνία συντήρησης</label><${DateField} id="am-d" value=${date} onChange=${setDate}/></div>
+    <div className="stack"><div className="field"><label className="field__label" htmlFor="am-d">Ημερομηνία συντήρησης</label><${DateField} id="am-d" value=${date} onChange=${(e: any) => e.target.value && setDate(e.target.value)}/></div>
       <div className="field"><label className="field__label" htmlFor="am-n">Σημείωση (προαιρετικά)</label><input id="am-n" className="ui-input" value=${note} onChange=${(e: any) => setNote(e.target.value)} placeholder="π.χ. ΕΜΑ Ταξιαρχίας"/></div>
       <p className="note" style=${{ margin: 0 }}>${next ? 'Επόμενη συντήρηση: ' + dmy(next) + ' (κάθε ' + every + ' μήνες).' : 'Δεν έχει οριστεί «κάθε Ν μήνες» (στην «Αλλαγή…» ή στην κατηγορία): θα γραφτεί μόνο η τελευταία συντήρηση.'}</p></div><//>`;
 }
@@ -170,7 +170,7 @@ function StateDialog({ row, mode, onClose }: P) {
   const go = () => mode === 'gone' ? doIt({ t: 'assetGone', ...same(row), why, date }, 'Διαγράφηκε από το μητρώο: ' + nm, undefined, onClose)
     : doIt({ t: 'assetState', ...same(row), state: back ? 'ok' : mode === 'repair' ? 'repair' : 'writeoff', why, date }, nm + ': ' + (back ? 'λειτουργικό' : mode === 'repair' ? 'προς επισκευή' : 'προς διαγραφή'), undefined, onClose);
   return html`<${Dialog} title=${title} onClose=${onClose} footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${go}>Αποθήκευση<//>`}>
-    <div className="stack"><div className="field"><label className="field__label" htmlFor="as-d">Ημερομηνία</label><${DateField} id="as-d" value=${date} onChange=${setDate}/></div>
+    <div className="stack"><div className="field"><label className="field__label" htmlFor="as-d">Ημερομηνία</label><${DateField} id="as-d" value=${date} onChange=${(e: any) => e.target.value && setDate(e.target.value)}/></div>
       <div className="field"><label className="field__label" htmlFor="as-w">${back ? 'Σημείωση (προαιρετικά)' : 'Λόγος (προαιρετικά)'}</label><input id="as-w" className="ui-input" value=${why} onChange=${(e: any) => setWhy(e.target.value)} placeholder=${mode === 'repair' ? 'π.χ. σκανδάλη' : 'π.χ. φθορά, καταστροφή'} data-autofocus=""/></div>
       ${mode === 'gone' && html`<p className="note" style=${{ margin: 0 }}>Το είδος φεύγει από τον πίνακα και από το Excel. Το ιστορικό του μένει και αναιρείται με Ctrl+Z.</p>`}</div><//>`;
 }
@@ -194,7 +194,7 @@ export function AssignDialog({ row, onClose }: P) {
         <${PersonPicker} key=${kind} id="ag-p" people=${people} placeholder=${kind === 'soldier' ? 'Επώνυμο, όνομα ή ΑΣΜ…' : 'Επώνυμο του στελέχους…'} onChange=${(id: number) => { const p = people.find((x: any) => x.id === id); if (p) setWho({ h: p.cid ? { k: 'cadre', cid: p.cid } : { k: 'person', pid: p.id }, label: (p.rank || '') + ' ' + p.last + ' ' + p.first }); }}/>
         ${who && html`<div style=${{ marginTop: '6px' }}>Διάλεξες: <b>${who.label}</b></div>`}</div>`}
       ${(kind === 'unit' || kind === 'ext') && html`<div className="field"><label className="field__label" htmlFor="ag-n">${kind === 'unit' ? 'Όνομα μονάδας' : 'Όνομα'}</label><input id="ag-n" className="ui-input" value=${name} onChange=${(e: any) => setName(e.target.value)} placeholder=${kind === 'unit' ? 'π.χ. 50 ΕΜΑ' : ''} data-autofocus=""/></div>`}
-      <div className="field"><label className="field__label" htmlFor="ag-d">Ημερομηνία</label><${DateField} id="ag-d" value=${date} onChange=${setDate}/></div>
+      <div className="field"><label className="field__label" htmlFor="ag-d">Ημερομηνία</label><${DateField} id="ag-d" value=${date} onChange=${(e: any) => e.target.value && setDate(e.target.value)}/></div>
       ${note && html`<p className="note" style=${{ margin: 0 }}>${note}</p>`}</div><//>`;
 }
 function AssetEditDialog({ row, all, cfg, defCat, onClose, onSaved }: P) {
@@ -226,8 +226,8 @@ function AssetEditDialog({ row, all, cfg, defCat, onClose, onSaved }: P) {
       <div className="field-row">${weapon && fld('rack', 'Οπλοβαστός', 'rack', { disabled: linked, ph: 'Ε', style: { maxWidth: '110px' } })}${weapon && fld('wpos', 'Θέση οπλοβαστού', 'wpos', { disabled: linked, ph: '23', style: { maxWidth: '130px' } })}
         ${fld('place', 'Θέση (κιβώτιο, αποθήκη…)', 'place', { ph: 'π.χ. ΚΙΒΩΤΙΟ 53' })}${fld('fileWord', 'Λέξη θέσης στο αρχείο μονάδας', 'fileWord', { ph: 'π.χ. Α.Ο' })}</div>
       <div className="field-row">${fld('every', 'Συντήρηση κάθε (μήνες)', 'every', { ph: String(cat?.every || ''), style: { maxWidth: '150px' } })}
-        <div className="field"><label className="field__label" htmlFor="ae-last">Τελευταία συντήρηση</label><${DateField} id="ae-last" value=${f.last} onChange=${(v: string) => set('last', v)}/></div>
-        <div className="field"><label className="field__label" htmlFor="ae-next">Επόμενη συντήρηση</label><${DateField} id="ae-next" value=${f.next} onChange=${(v: string) => set('next', v)}/></div>
+        <div className="field"><label className="field__label" htmlFor="ae-last">Τελευταία συντήρηση</label><${DateField} id="ae-last" value=${f.last} onChange=${(e: any) => set('last', e.target.value || '')}/></div>
+        <div className="field"><label className="field__label" htmlFor="ae-next">Επόμενη συντήρηση</label><${DateField} id="ae-next" value=${f.next} onChange=${(e: any) => set('next', e.target.value || '')}/></div>
         <label className="check" style=${{ alignSelf: 'end', paddingBottom: '8px' }}><input type="checkbox" checked=${f.warOnly} onChange=${(e: any) => set('warOnly', e.target.checked)}/><span>Μόνο εμπόλεμη περίοδο</span></label></div>
       ${(cat?.fields || []).length > 0 && html`<div className="field-row">${cat!.fields.map(x => html`<div className="field" key=${x.id}><label className="field__label" htmlFor=${'ae-x-' + x.id}>${x.name}</label><input id=${'ae-x-' + x.id} className="ui-input" value=${f.extra[x.id] || ''} onChange=${(e: any) => setF(y => ({ ...y, extra: { ...y.extra, [x.id]: e.target.value } }))}/></div>`)}</div>`}
       ${fld('acc', 'Παρελκόμενα', 'acc', { ph: 'π.χ. 2 γεμιστήρες, λόγχη, ιμάντας' })}${fld('note', 'Παρατηρήσεις', 'note')}
