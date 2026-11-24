@@ -76,12 +76,14 @@ const MAILS = [F('email', 'E-mail', 'E-MAIL', 28, 'left'), F('relEmail', 'E-mail
 const UNITF = [F('sub', 'Λόχος / Ίλη του στρατιώτη', 'ΛΟΧΟΣ / ΙΛΗ', 14, 'left'), F('inOn', 'Ημερομηνία εισαγωγής στη δύναμη', 'ΗΜ. ΕΙΣΑΓΩΓΗΣ', 13), F('disch', 'Απόλυση περίπου (μήνας)', 'ΑΠΟΛΥΣΗ', 16)];
 // Στελέχη (Michael, 17/11): υπηρεσία της μέρας από το πρόγραμμα στελεχών, υπόλοιπο άδειας (μέρες, όλα τα είδη) και απαλλαγές της χρονιάς
 const CADREF = [F('cduty', 'Υπηρεσία της μέρας (πρόγραμμα στελεχών)', 'ΥΠΗΡΕΣΙΑ', 16, 'left'), F('cleave', 'Υπόλοιπο άδειας (μέρες)', 'ΥΠΟΛΟΙΠΟ ΑΔΕΙΑΣ', 12), F('capal', 'Υπόλοιπο απαλλαγών', 'ΑΠΑΛΛΑΓΕΣ', 11)];
+// Ειδικότητα (Michael, 24/11): στήλη στους στρατιώτες (στα στελέχη υπάρχει ήδη ως cspec), πάντα με κεφαλαία
+const EID = F('eid', 'Ειδικότητα', 'ΕΙΔΙΚΟΤΗΤΑ', 18, 'left');
 const PERS = [F('iban', 'IBAN', 'IBAN', 29), F('amka', 'ΑΜΚΑ', 'ΑΜΚΑ', 13), F('afm', 'ΑΦΜ', 'ΑΦΜ', 11), F('religion', 'Θρήσκευμα', 'ΘΡΗΣΚΕΥΜΑ', 24, 'left')];
 // τα στοιχεία του στρατιώτη στα είδη με μία γραμμή ανά κατάσταση, θέση ή όπλο
 const SOLDIER = [
   F('name', 'Επώνυμο Όνομα (του πατρώνυμο, μόνο σε συνονόματους)', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 28, 'left'), F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 34, 'left'),
   F('last', 'Επώνυμο', 'ΕΠΩΝΥΜΟ', 18, 'left'), F('first', 'Όνομα', 'ΟΝΟΜΑ', 14, 'left'), F('father', 'Πατρώνυμο', 'ΠΑΤΡΩΝΥΜΟ', 14, 'left'),
-  F('asm', 'ΑΣΜ', 'ΑΣΜ', 13), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13), F('room', 'Θάλαμος', 'ΘΑΛ.', 6), F('unit', 'Ουλαμός', 'ΟΥΛΑΜΟΣ', 10), F('si', 'Σ.Ι.', 'Σ.Ι.', 8), ...MAILS, ...PERS, ...UNITF];
+  F('asm', 'ΑΣΜ', 'ΑΣΜ', 13), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13), F('room', 'Θάλαμος', 'ΘΑΛ.', 6), F('unit', 'Ουλαμός', 'ΟΥΛΑΜΟΣ', 10), F('si', 'Σ.Ι.', 'Σ.Ι.', 8), ...MAILS, ...PERS, EID, ...UNITF];
 // Καταστάσεις της μέρας σε στήλη, κάθε είδος χωριστά (Michael, 22/10: «να διαλέξω ιατρικές καταστάσεις, άδεια κτλπ»),
 // με τη μορφή που διαλέγεις (ColOpts.sf: ΕΑ, ΕΥ, ΑΔΕΙΑ…)
 const STATUS = [F('smed', 'Ιατρικό τη μέρα (ΕΑ, ΕΥ…)', 'ΙΑΤΡΙΚΟ', 12), F('sabs', 'Άδεια τη μέρα (ΚΑ, τιμητική…)', 'ΑΔΕΙΑ', 12), F('spun', 'Ποινή τη μέρα', 'ΠΟΙΝΗ', 14),
@@ -93,7 +95,7 @@ export const FIELDS: Record<RepKind, FieldDef[]> = {
     F('name', 'Επώνυμο Όνομα (του πατρώνυμο, μόνο σε συνονόματους)', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 28, 'left'), F('who', 'Βαθμός και ονοματεπώνυμο', 'ΒΑΘΜΟΣ - ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 34, 'left'),
     F('last', 'Επώνυμο', 'ΕΠΩΝΥΜΟ', 18, 'left'), F('first', 'Όνομα', 'ΟΝΟΜΑ', 14, 'left'), F('father', 'Πατρώνυμο', 'ΠΑΤΡΩΝΥΜΟ', 14, 'left'),
     F('asm', 'ΑΣΜ', 'ΑΣΜ', 13), F('phone', 'Τηλέφωνο', 'ΤΗΛΕΦΩΝΟ', 13), F('room', 'Θάλαμος', 'ΘΑΛ.', 6), F('unit', 'Ουλαμός', 'ΟΥΛΑΜΟΣ', 10),
-    F('si', 'Σ.Ι.', 'Σ.Ι.', 8), F('dcode', 'Κωδικός μέρας (Κ.Α, ΑΝ.ΑΔ, Ε.Υ, ΣΤΕΠ, ΑΟΠΛΟΣ…)', 'ΚΩΔΙΚΟΣ ΜΕΡΑΣ', 12), ...ABS, ...MAILS, ...PERS,
+    F('si', 'Σ.Ι.', 'Σ.Ι.', 8), F('dcode', 'Κωδικός μέρας (Κ.Α, ΑΝ.ΑΔ, Ε.Υ, ΣΤΕΠ, ΑΟΠΛΟΣ…)', 'ΚΩΔΙΚΟΣ ΜΕΡΑΣ', 12), ...ABS, ...MAILS, ...PERS, EID,
     F('post', 'Πόστο', 'ΠΟΣΤΟ', 14), F('role', 'Ρόλος', 'ΡΟΛΟΣ', 14), F('essos', 'ΕΣΣΟ', 'ΕΣΣΟ', 10), ...UNITF, F('dn', 'Δικαίωμα ΔΝ', 'ΔΝ', 6),
     F('weapon', 'Αριθμός όπλου', 'ΑΡ. ΟΠΛΟΥ', 12), F('wtype', 'Τύπος όπλου', 'ΤΥΠΟΣ ΟΠΛΟΥ', 12), F('rack', 'Οπλοβαστός', 'ΟΠΛΟΒΑΣΤΟΣ', 11), F('wpos', 'Θέση όπλου', 'ΘΕΣΗ ΟΠΛΟΥ', 11),
     F('status', 'Κατάσταση την ημέρα (όλες: ΚΑ, ΕΑ, ποινή…)', 'ΚΑΤΑΣΤΑΣΗ', 16), ...STATUS, F('duty', 'Υπηρεσία την ημέρα', 'ΥΠΗΡΕΣΙΑ', 16), F('notes', 'Σημειώσεις', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', 20, 'left'),
@@ -229,6 +231,7 @@ export interface RepPick {
   gap?: number;                               // τυχαίοι: όχι όσοι βγήκαν σε αυτό το έντυπο τις τελευταίες gap μέρες (από το Ιστορικό)
   si?: string[]; rooms?: number[];            // μόνο αυτά τα Σ.Ι. / αυτοί οι θάλαμοι (κενό = όλα)
   religions?: string[];                       // μόνο αυτά τα θρησκεύματα (Michael, 18/11)· κενό = όλα
+  eids?: string[];                            // μόνο αυτές οι ειδικότητες (Michael, 24/11, στρατιώτες και στελέχη)· κενό = όλες
   mode: 'all' | 'first' | 'random'; n?: number;
   even?: boolean;                             // τυχαία: ισομερώς από κάθε θάλαμο
   fair?: boolean;                             // τυχαία: πρώτα όσοι βγήκαν λιγότερες φορές σε αυτό το έντυπο (μνήμη ανά ΕΣΣΟ)
@@ -453,7 +456,7 @@ export const blankBuild = (): BuildOpts => ({ title: 'ΚΑΤΑΣΤΑΣΗ', cols:
 const k = (s: string) => normGreek(s).replace(/[\s.\-_:/\\()]/g, '');
 const GUESS: [string, RegExp][] = [
   ['aa', /^(ΑΑ|ΑΡ|ΑΡΙΘ|ΑΡΙΘΜΟΣ|ΑΥΞΩΝΑΡΙΘΜΟΣ|ΑΥΞΑΡ|NO|Νο)$/], ['who', /^ΒΑΘΜΟΣ(ΚΑΙ)?ΟΝΟΜΑΤΕΠΩΝΥΜΟ$|^ΒΑΘΜΟΣ(ΚΑΙ)?ΕΠΩΝΥΜΟ(ΚΑΙ)?ΟΝΟΜΑ$/],
-  ['rank', /^ΒΑΘΜΟΣ$|^ΒΑΘ$|^ΒΘΜ$/], ['origin', /^ΠΡΟΕΛΕΥΣΗ$|^ΠΡΟΕΛ$/], ['cspec', /^ΕΙΔΙΚΟΤΗΤΑ$/], ['spec', /^ΟΣ$|^ΕΙΔΙΚΟΤΗΤΑ$|^ΟΠΛΟΣΩΜΑ$/],
+  ['rank', /^ΒΑΘΜΟΣ$|^ΒΑΘ$|^ΒΘΜ$/], ['origin', /^ΠΡΟΕΛΕΥΣΗ$|^ΠΡΟΕΛ$/], ['cspec', /^ΕΙΔΙΚΟΤΗΤΑ$/], ['spec', /^ΟΣ$|^ΕΙΔΙΚΟΤΗΤΑ$|^ΟΠΛΟΣΩΜΑ$/], ['eid', /^ΕΙΔΙΚΟΤΗΤΑ$/],
   ['name', /^ΟΝΟΜΑΤΕΠΩΝΥΜΟ$|^(ΕΠΩΝΥΜΟ|ΕΠΙΘΕΤΟ)(ΚΑΙ)?ΟΝΟΜΑ$/], ['last', /^ΕΠΩΝΥΜΟ$|^ΕΠΙΘΕΤΟ$/], ['first', /^ΟΝΟΜΑ$/],
   ['father', /^ΠΑΤΡΩΝΥΜΟ$|^ΟΝΠΑΤΡΟΣ$|^ΟΝΟΜΑΠΑΤΡΟΣ$/], ['asm', /^ΑΣΜ$|ΜΗΤΡΩΟΥ$/], ['am', /^ΑΜ$/], ['iban', /^ΙΒΑΝ$/], ['amka', /^ΑΜΚΑ$/], ['afm', /^ΑΦΜ$|^ΑFΜ$/], ['religion', /^ΘΡΗΣΚΕΥΜΑ$|^ΘΡΗΣΚ$/], ['phone', /ΤΗΛΕΦΩΝΟ|^ΤΗΛ$|ΚΙΝΗΤΟ/],
   ['room', /^ΘΑΛΑΜΟΣ$|^ΘΑΛ$/], ['unit', /^ΟΥΛΑΜΟΣ$|^ΟΥΛ$/], ['si', /^ΣΙ$/], ['dcode', /^ΚΩΔΙΚΟΣΜΕΡΑΣ$|^ΚΑΤΑΣΤΑΣΗΗΜΕΡΑΣ$/], ['absent', /^ΑΠΩΝ$|^ΑΠΟΝ$/], ['areason', /^ΑΙΤΙΑΑΠΟΥΣΙΑΣ$|^ΑΙΤΙΑ$/], ['aret', /^ΗΜΝΙΑΕΠΙΣΤΡΟΦΗΣ$|^ΗΜΕΡΟΜΗΝΙΑΕΠΙΣΤΡΟΦΗΣ$|^ΕΠΙΣΤΡΟΦΗ$/], ['email', /^ΕΜΑΙ[LΛ]$|^ΗΛΕΚΤΡΟΝΙΚΟΤΑΧΥΔΡΟΜΕΙΟ$/], ['relEmail', /^ΕΜΑΙ[LΛ].*(ΣΥΓΓ|ΠΡΟΣΩΠ)/], ['blood', /ΟΜΑΔΑΑΙΜΑΤΟΣ$|^ΑΙΜΑΤΟΣ$/], ['post', /^ΠΟΣΤΟ$/], ['role', /^ΡΟΛΟΣ$|^ΘΕΣΗ$/], ['essos', /^ΕΣΣΟ$/],
@@ -624,7 +627,7 @@ export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: num
       case 'last': return c.last; case 'first': return c.first; case 'am': return c.am || ''; case 'phone': return c.phone || ''; case 'role': return c.role || '';
       case 'iban': return c.iban || ''; case 'amka': return c.amka || ''; case 'afm': return c.afm || ''; case 'religion': return upper(c.religion);
       case 'status': return cadreStateOn(s, c.id, d)?.label || '';
-      case 'cspec': return c.eid || '';
+      case 'cspec': case 'eid': return c.eid || '';
       case 'cduty': return (s.cadreDuties || []).filter(x => x.cid === c.id && x.date === d).map(x => upper(serviceOf(dutyCfgOf(s.settings), x.svc)?.svc.name || '')).filter(Boolean).join(', ');
       case 'cleave': return quotaBalances(s, c.id, +d.slice(0, 4)).reduce((a, b) => a + b.left, 0);
       case 'capal': return apalLeft(s, c, +d.slice(0, 4), d);
@@ -639,7 +642,7 @@ export function fieldValue(s: AppState, kind: RepKind, x: Row, f: string, i: num
     case 'who': return [rankTxt(p), p.spec ? '(' + p.spec + ')' : '', fullName(p)].filter(Boolean).join(' ');
     case 'last': return p.last; case 'first': return p.first; case 'father': return p.father; case 'asm': return p.asm; case 'phone': return p.phone;
     case 'room': return p.room; case 'unit': { const u = unitOf(p, s.settings); return u === '—' ? '' : u; }
-    case 'dcode': return dayCode(s, p, d); case 'absent': case 'areason': case 'aret': return absField(absenceOfPerson(s, p, d), f); case 'email': return p.email || ''; case 'relEmail': return p.relEmail || ''; case 'blood': return p.blood || ''; case 'iban': return p.iban || ''; case 'amka': return p.amka || ''; case 'afm': return p.afm || ''; case 'religion': return upper(p.religion);
+    case 'dcode': return dayCode(s, p, d); case 'absent': case 'areason': case 'aret': return absField(absenceOfPerson(s, p, d), f); case 'email': return p.email || ''; case 'relEmail': return p.relEmail || ''; case 'blood': return p.blood || ''; case 'iban': return p.iban || ''; case 'amka': return p.amka || ''; case 'afm': return p.afm || ''; case 'religion': return upper(p.religion); case 'eid': return upper(p.eid);
     case 'si': return p.si; case 'post': return p.post || ''; case 'role': return p.role || ''; case 'essos': return p.essos; case 'dn': return p.dn ? 'ΝΑΙ' : '';
     case 'sub': return upper(p.sub || ''); case 'inOn': return p.inOn ? dmy(p.inOn) : ''; case 'disch': { const x = personDischarge(p); return x ? upper(dischargeLabel(x)) : ''; }
     case 'weapon': return p.weapon || ''; case 'wtype': return p.wtype || ''; case 'rack': return p.rack || ''; case 'wpos': return p.wpos || '';
@@ -692,7 +695,7 @@ export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'> & Pick<
   }
   // Υπηρεσίες: οι θέσεις της μέρας με τη σειρά της ΦΡΟΥΡΑΣ (και όσες έχουν κάποιον αλλά δεν είναι πια στο έντυπο)
   if (r.kind === 'duty') {
-    const filtered = !!(pk.view || pk.si?.length || pk.rooms?.length || pk.religions?.length);
+    const filtered = !!(pk.view || pk.si?.length || pk.rooms?.length || pk.religions?.length || pk.eids?.length);
     const ok = filtered ? soldiersOf(s, pk, d) : null; const pm = seatMap(s);   // και στελέχη σε θέση (Michael, 26/10)
     const blocks = pk.blocks?.length ? new Set(pk.blocks) : null;
     const g = s.guards[d] || {}; const posts = postsOf(s.settings); const have = new Set(posts.map(x => x.k));
@@ -706,7 +709,7 @@ export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'> & Pick<
   }
   // Κινήσεις όπλων της μέρας (έξοδοι της μέρας, είσοδοι της μέρας, όσα είναι ακόμα έξω), με τη σειρά που βγήκαν
   if (r.kind === 'wmove') {
-    const ok = soldiersOf(s, pk, d); const pm = seatMap(s); const all = !(pk.view || pk.si?.length || pk.rooms?.length || pk.religions?.length);   // στελέχη (ένοπλη υπηρεσία) μόνο χωρίς φίλτρο στρατιωτών
+    const ok = soldiersOf(s, pk, d); const pm = seatMap(s); const all = !(pk.view || pk.si?.length || pk.rooms?.length || pk.religions?.length || pk.eids?.length);   // στελέχη (ένοπλη υπηρεσία) μόνο χωρίς φίλτρο στρατιωτών
     const out: MoveRow[] = [];
     for (const m of movesAll(s, d)) {
       if (pk.open && m.inDay && m.inDay <= d) continue;
@@ -722,7 +725,9 @@ export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'> & Pick<
   }
   if (r.kind === 'cadre') {
     const list = orderedCadre(s.cadreList || []).filter(c => c.active);
-    return pk.from === 'present' ? list.filter(c => !cadreStateOn(s, c.id, d)) : list;
+    const es = pk.eids?.length ? new Set(pk.eids.map(itemKey)) : null;   // ειδικότητα στελεχών (Michael, 24/11)
+    const l2 = es ? list.filter(c => !!c.eid && es.has(itemKey(c.eid))) : list;
+    return pk.from === 'present' ? l2.filter(c => !cadreStateOn(s, c.id, d)) : l2;
   }
   const view = pk.view ? (s.settings.views || []).find(v => v.id === pk.view) : undefined;
   let list: Person[] = pk.from === 'inactive' ? s.people.filter(p => !p.active) : activePeople(s);
@@ -733,6 +738,7 @@ export function candidates(s: AppState, r: Pick<Report, 'kind' | 'pick'> & Pick<
   if (pk.never?.length) { const nv = new Set(pk.never); list = list.filter(p => !nv.has(p.id)); }
   if (pk.si?.length) { const si = new Set(pk.si.map(norm)); list = list.filter(p => si.has(norm(p.si))); }
   if (pk.rooms?.length) { const rs = new Set(pk.rooms); list = list.filter(p => p.room != null && rs.has(p.room)); }
+  if (pk.eids?.length) { const el = new Set(pk.eids.map(itemKey)); list = list.filter(p => !!p.eid && el.has(itemKey(p.eid))); }
   if (pk.religions?.length) { const rl = new Set(pk.religions.map(itemKey)); list = list.filter(p => !!p.religion && rl.has(itemKey(p.religion))); }
   return [...list].sort((a, b) => collator.compare(a.last, b.last) || collator.compare(a.first, b.first));
 }
@@ -900,7 +906,7 @@ export function pickText(r: Pick<Report, 'kind' | 'pick'> & Pick<Partial<Report>
     const lead = pk.mode === 'random' ? (pk.n || 0) + ' τυχαίες' : pk.mode === 'first' ? 'Οι πρώτες ' + (pk.n || 0) : 'Όλες';
     return lead + ' (' + cats + ') ' + (pk.when === 'new' ? 'που ξεκινούν τη μέρα' : pk.when === 'from' ? 'από τη μέρα και μετά' : 'που ισχύουν τη μέρα');
   }
-  const rest = [pk.view && 'λίστα «' + ((s.settings.views || []).find(v => v.id === pk.view)?.name || '') + '»', pk.si?.length && 'Σ.Ι. ' + pk.si.join(', '), pk.rooms?.length && (pk.rooms.length === 1 ? 'θάλαμος ' : 'θάλαμοι ') + pk.rooms.join(', '), pk.religions?.length && 'θρήσκευμα ' + pk.religions.join(', ')].filter(Boolean).join(', ');
+  const rest = [pk.view && 'λίστα «' + ((s.settings.views || []).find(v => v.id === pk.view)?.name || '') + '»', pk.si?.length && 'Σ.Ι. ' + pk.si.join(', '), pk.rooms?.length && (pk.rooms.length === 1 ? 'θάλαμος ' : 'θάλαμοι ') + pk.rooms.join(', '), pk.religions?.length && 'θρήσκευμα ' + pk.religions.join(', '), pk.eids?.length && 'ειδικότητα ' + pk.eids.join(', ')].filter(Boolean).join(', ');
   const tail = rest ? ' (' + rest + ')' : '';
   if (r.kind === 'duty') {
     const bl = pk.blocks?.length ? pk.blocks.map(id => everyBlock(s.settings).find(b => b.id === id)?.name).filter(Boolean).join(', ') : '';
@@ -920,7 +926,7 @@ export function pickText(r: Pick<Report, 'kind' | 'pick'> & Pick<Partial<Report>
   const word = (c: RepCond, yes: boolean) => { const x = REP_CONDS.find(k => k.id === c)!; return (yes ? x.yes : x.no).toLowerCase(); };
   const man = manualKind(r.kind);
   const gtxt = gs ? gs.map(g => [...g.need.filter(c => !pres || c !== 'present').map(c => word(c, true)), ...g.not.map(c => word(c, false))]).map(w => (w.length === 1 ? w[0] : w.length ? '(' + w.join(' και ') + ')' : 'όλοι')).join(' ή ') : '';
-  const extra = [view && 'λίστα «' + view + '»', gtxt, ...need.filter(c => c !== 'present').map(c => word(c, true)), pk.si?.length && 'Σ.Ι. ' + pk.si.join(', '), pk.rooms?.length && (pk.rooms.length === 1 ? 'θάλαμος ' : 'θάλαμοι ') + pk.rooms.join(', '), pk.religions?.length && 'θρήσκευμα ' + pk.religions.join(', '), ...not.map(c => word(c, false)), !cadre && pk.stNew && 'μόνο όσα δηλώθηκαν τη μέρα',
+  const extra = [view && 'λίστα «' + view + '»', gtxt, ...need.filter(c => c !== 'present').map(c => word(c, true)), pk.si?.length && 'Σ.Ι. ' + pk.si.join(', '), pk.rooms?.length && (pk.rooms.length === 1 ? 'θάλαμος ' : 'θάλαμοι ') + pk.rooms.join(', '), pk.religions?.length && 'θρήσκευμα ' + pk.religions.join(', '), pk.eids?.length && 'ειδικότητα ' + pk.eids.join(', '), ...not.map(c => word(c, false)), !cadre && pk.stNew && 'μόνο όσα δηλώθηκαν τη μέρα',
     pk.mode === 'random' && pk.gap ? 'όχι όσοι βγήκαν τις τελευταίες ' + (pk.gap === 1 ? 'μία μέρα' : pk.gap + ' μέρες') : '',
     man && pk.always?.length ? pk.always.length + ' πάντα μέσα' : '', man && pk.never?.length ? pk.never.length + ' ποτέ' : ''].filter(Boolean).join(', ');
   const head = pk.mode === 'random' ? (pk.n || 0) + ' τυχαίοι από ' + from + (pk.even ? ', ισομερώς ανά θάλαμο' : '') + (pk.fair ? ', πρώτα όσοι βγήκαν λιγότερο' : '') : pk.mode === 'first' ? 'Οι πρώτοι ' + (pk.n || 0) + ' από ' + from : (from === 'όλους' || from === 'όλα τα στελέχη' ? 'Όλοι οι ' + who : 'Όλοι από ' + from);
