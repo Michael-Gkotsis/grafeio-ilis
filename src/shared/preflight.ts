@@ -30,7 +30,7 @@ export function frouraChecks(s: AppState, date: ISODate): Check[] {
   const g = s.guards[date] || {}; const posts = postsOf(s.settings);
   const empty = posts.filter(x => !g[x.k]);
   if (empty.length === posts.length) out.push({ level: 'warn', text: 'Δεν έχει οριστεί καμία υπηρεσία για ' + dm(date) + '. Θα βγει κενό έντυπο.', go: 'guard' });
-  else if (empty.length) out.push({ level: 'warn', text: empty.length + ' κενές θέσεις (θα γραφτεί «ΚΕΝΗ»): ' + empty.map(x => x.label).join(', '), go: 'guard' });
+  else if (empty.length) out.push({ level: 'warn', text: empty.length + ' κενές θέσεις (θα μείνουν κενές στο Excel): ' + empty.map(x => x.label).join(', '), go: 'guard' });
   const seen = new Map<number, string>();
   // η ίδια μέρα χωρίς αναθέσεις, μία φορά: αλλιώς το ευρετήριο υπηρεσιών ξαναχτίζεται για κάθε θέση
   const without: AppState = { ...s, guards: { ...s.guards, [date]: {} } };
