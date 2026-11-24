@@ -7,7 +7,7 @@ import { MONTHS, addDays, dm, dmy, weekday, type ISODate } from './dates';
 import { KIND_NAME, type AppState, type Cadre, type CadreDuty, type CadreDutyCfg, type CadreDutyGroup, type CadreDutyPerson, type CadreService, type Settings } from './domain';
 import { hkRowsOf, rankTxt } from './ranks';
 import { cadreStatusOn, orderedCadre } from './cadre';
-import { dutyStats, isHol, postBy, type DutyStat } from './rules';
+import { cadreOnlyOf, dutyStats, isHol, postBy, setCadreFiller, type CadreOnly, type CadreSeatFill, type DutyStat } from './rules';
 import { daysOfMonth, monthIndex, monthOf, planDays, shiftMonth, type MonthIndex, type PlanCell, type PlanDay } from './cadrePlan';
 import { upper } from './text';
 
@@ -314,10 +314,21 @@ export function dutySheet(s: AppState, ym: string): DutySheet {
 // Σειρά επιλογής: λιγότερες υπηρεσίες τον μήνα (και θέσεις στρατιωτών) → σε ΣΚ/αργία: λιγότερες ΣΚ/αργίες 3 μηνών και όχι όποιος έκανε
 // ΣΚ/αργία την προηγούμενη εβδομάδα → περισσότερος καιρός από την τελευταία υπηρεσία → σειρά ιεραρχίας. Σε ΣΚ/αργία (sweep 17/11) διαλέγει ανάμεσα σε
 // όσους είναι ως +1 υπηρεσία από τον λιγότερο φορτωμένο, με πρώτο κριτήριο τα ΣΚ/αργίες 3 μηνών. Ντετερμινιστικό· ευρετήρια μία φορά ανά εκτέλεση.
-export interface AutoFillResult { add: Omit<CadreDuty, 'id'>[]; empty: { date: ISODate; svc: string }[]; extra: { cid: string; date: ISODate }[] }
-export function autoFill(s: AppState, ym: string, opts: { fairHol?: boolean } = {}): AutoFillResult {
+// Θέσεις μόνο για στελέχη (Michael, 24/11, BlockDef.who = 'cadre'): μπαίνουν στην ίδια συμπλήρωση με τις υπηρεσίες της ομάδας τους, ίδια δικαιοσύνη, όρια και
+// ανάπαυση, μαζί (χωρίς διπλή υπηρεσία την ίδια μέρα). Γράφονται στο guards όπως οι θέσεις που διαλέγεις με το χέρι: seats = [μέρα, θέση, στέλεχος]
+export interface SeatFill { date: ISODate; k: string; cid: string }
+export interface AutoFillResult { add: Omit<CadreDuty, 'id'>[]; empty: { date: ISODate; svc: string }[]; extra: { cid: string; date: ISODate }[]; seats?: SeatFill[]; seatEmpty?: { date: ISODate; k: string }[]; seatExtra?: SeatFill[] }
+// η υπηρεσία του προγράμματος στελεχών που μετρά η θέση: cadreAs, αλλιώς η πρώτη της ομάδας· χωρίς μέρες και χωρίς όριο ατόμων (τα κρίνει η ίδια η θέση)
+export function seatService(cfg: CadreDutyCfg, co: CadreOnly): CadreService {
+  const g = cfg.groups.find(x => x.id === co.group); const v = g?.services.find(x => x.id === co.as) || g?.services[0];
+  return v ? { ...v, perDay: 1e6, days: undefined } : { id: '_seat', name: co.label, short: co.label, perDay: 1e6, h24: true, hkCol: '' };
+}
+export function autoFill(s: AppState, ym: string, opts: { fairHol?: boolean; only?: ISODate; seatsOnly?: boolean } = {}): AutoFillResult {
   const cfg = dutyCfgOf(s.settings); const fairHol = opts.fairHol ?? cfg.fairHol;
   const add: AutoFillResult['add'] = [], empty: AutoFillResult['empty'] = [], extra: AutoFillResult['extra'] = [];
+  const seats: SeatFill[] = [], seatEmpty: { date: ISODate; k: string }[] = [], seatExtra: SeatFill[] = [];
+  const co = cadreOnlyOf(s.settings); const seatsBy = new Map<string, { k: string; svc: CadreService }[]>();
+  for (const [k, v] of co) { const l = seatsBy.get(v.group); const x = { k, svc: seatService(cfg, v) }; if (l) l.push(x); else seatsBy.set(v.group, [x]); }
   const people = orderedCadre(s.cadreList || []).filter(c => c.active);
   const ord = new Map(people.map((c, i) => [c.id, i]));
   const idx = dutyIndex(s); const by = duByDay(s, ym); const index = monthIndex(s, ym); const N = index.days.length;
@@ -353,44 +364,68 @@ export function autoFill(s: AppState, ym: string, opts: { fairHol?: boolean } = 
     if (a.last !== b.last) return a.last < b.last ? -1 : 1;
     return ord.get(a.c.id)! - ord.get(b.c.id)!;
   };
-  for (let i = 1; i <= N; i++) {
+  for (let i = opts.only ? +opts.only.slice(8) : 1; i <= (opts.only ? +opts.only.slice(8) : N); i++) {
     const d = pad(i); const h = fairHol && hol(d); const dow = weekday(d);
     if (i > 1) { const pd = pad(i - 1); for (const x of st.values()) if (busy(x.c.id, pd)) x.last = pd; }
     cur = d;
+    // ο καλύτερος υποψήφιος μιας υπηρεσίας (ή θέσης) αυτή τη μέρα: undefined = κανείς· extra = μπήκε ως «+1 αν χρειαστεί»
+    const pick = (v: CadreService, mem: Cadre[]): { best: St | undefined; isExtra: boolean } => {
+      const ok: St[] = [];
+      for (const c of mem) {
+        if (v.offOnly && !isOff(s, c)) continue;
+        const x = stOf(c); const p = x.p;
+        if (p.noDow?.includes(dow) || (p.none && live(p.none, d)) || (p.only && live(p.only, d) && !p.only.services.includes(v.id)) || (p.no24 && live(p.no24, d) && v.h24)) continue;
+        if (index.noDuty.get(c.id)?.[i - 1]) continue;
+        if (index.cells.get(c.id)?.[i - 1]) { const sa = cadreStatusOn(s, c.id, d); if (sa && sa.col !== 'yp') continue; }
+        if (busy(c.id, d)) continue;
+        let rest = false;
+        for (let k = 1; k <= cfg.rest && !rest; k++) if (busy(c.id, addDays(d, -k)) || busy(c.id, addDays(d, k))) rest = true;
+        if (rest) continue;
+        ok.push(x);
+      }
+      let best: St | undefined, isExtra = false;
+      // ΣΚ/αργία (sweep 17/11): με «λιγότερες υπηρεσίες πρώτα» η σειρά κλείδωνε σε κύκλο και 2 από τους 7 έκαναν και τα 8 ΣΚ του Φεβρουαρίου.
+      // Τώρα μπαίνουν στη ζυγαριά όσοι είναι ως +1 από τον λιγότερο φορτωμένο, και από αυτούς νικά όποιος έχει λιγότερα ΣΚ/αργίες
+      const pool = (cap: (x: St) => number) => { const l = ok.filter(x => x.done < cap(x)); if (!h || !l.length) return l; const m = Math.min(...l.map(x => x.done)); return l.filter(x => x.done <= m + 1); };
+      const holCmp = (a: St, b: St) => { const x = hol3Of(a), y = hol3Of(b); return x !== y ? x - y : cmp(a, b, h, d); };
+      for (const x of pool(x => x.lim)) if (!best || (h ? holCmp(x, best) : cmp(x, best, h, d)) < 0) best = x;
+      if (!best) { isExtra = true; for (const x of pool(x => x.lim + x.extra)) if (!best || (h ? holCmp(x, best) : cmp(x, best, h, d)) < 0) best = x; }
+      return { best, isExtra };
+    };
+    const take = (best: St) => {
+      best.done++; if (hol(d)) best.hol++;
+      let ps = picked.get(best.c.id); if (!ps) { ps = new Set(); picked.set(best.c.id, ps); } ps.add(d);
+    };
     for (const g of cfg.groups) {
       const mem = members.get(g.id) || [];
-      for (const v of g.services) {
+      if (!opts.seatsOnly) for (const v of g.services) {
         if (!runsOn(v, d)) continue;
         const missing = v.perDay - (by.get(d + '|' + v.id)?.length || 0);
         for (let slot = 0; slot < missing; slot++) {
-          const ok: St[] = [];
-          for (const c of mem) {
-            if (v.offOnly && !isOff(s, c)) continue;
-            const x = stOf(c); const p = x.p;
-            if (p.noDow?.includes(dow) || (p.none && live(p.none, d)) || (p.only && live(p.only, d) && !p.only.services.includes(v.id)) || (p.no24 && live(p.no24, d) && v.h24)) continue;
-            if (index.noDuty.get(c.id)?.[i - 1]) continue;
-            if (index.cells.get(c.id)?.[i - 1]) { const sa = cadreStatusOn(s, c.id, d); if (sa && sa.col !== 'yp') continue; }
-            if (busy(c.id, d)) continue;
-            let rest = false;
-            for (let k = 1; k <= cfg.rest && !rest; k++) if (busy(c.id, addDays(d, -k)) || busy(c.id, addDays(d, k))) rest = true;
-            if (rest) continue;
-            ok.push(x);
-          }
-          let best: St | undefined, isExtra = false;
-          // ΣΚ/αργία (sweep 17/11): με «λιγότερες υπηρεσίες πρώτα» η σειρά κλείδωνε σε κύκλο και 2 από τους 7 έκαναν και τα 8 ΣΚ του Φεβρουαρίου.
-          // Τώρα μπαίνουν στη ζυγαριά όσοι είναι ως +1 από τον λιγότερο φορτωμένο, και από αυτούς νικά όποιος έχει λιγότερα ΣΚ/αργίες
-          const pool = (cap: (x: St) => number) => { const l = ok.filter(x => x.done < cap(x)); if (!h || !l.length) return l; const m = Math.min(...l.map(x => x.done)); return l.filter(x => x.done <= m + 1); };
-          const holCmp = (a: St, b: St) => { const x = hol3Of(a), y = hol3Of(b); return x !== y ? x - y : cmp(a, b, h, d); };
-          for (const x of pool(x => x.lim)) if (!best || (h ? holCmp(x, best) : cmp(x, best, h, d)) < 0) best = x;
-          if (!best) { isExtra = true; for (const x of pool(x => x.lim + x.extra)) if (!best || (h ? holCmp(x, best) : cmp(x, best, h, d)) < 0) best = x; }
+          const { best, isExtra } = pick(v, mem);
           if (!best) { empty.push({ date: d, svc: v.id }); continue; }
           add.push({ date: d, svc: v.id, cid: best.c.id, auto: true });
           if (isExtra) extra.push({ cid: best.c.id, date: d });
-          best.done++; if (hol(d)) best.hol++;
-          let ps = picked.get(best.c.id); if (!ps) { ps = new Set(); picked.set(best.c.id, ps); } ps.add(d);
+          take(best);
         }
       }
+      for (const sp of seatsBy.get(g.id) || []) {
+        if (s.guards[d]?.[sp.k]) continue;
+        const { best, isExtra } = pick(sp.svc, mem);
+        if (!best) { seatEmpty.push({ date: d, k: sp.k }); continue; }
+        seats.push({ date: d, k: sp.k, cid: best.c.id });
+        if (isExtra) seatExtra.push({ date: d, k: sp.k, cid: best.c.id });
+        take(best);
+      }
     }
+    // θέση με ομάδα που δεν υπάρχει πια: μένει κενή
+    for (const [k, v] of co) if (!cfg.groups.some(x => x.id === v.group) && !s.guards[d]?.[k]) seatEmpty.push({ date: d, k });
   }
-  return { add, empty, extra };
+  return { add, empty, extra, ...(co.size ? { seats, seatEmpty, seatExtra } : {}) };
 }
+// Η συμπλήρωση των θέσεων στελεχών μιας μέρας για την αυτόματη συμπλήρωση υπηρεσιών (rules.ts fillDay): μόνο οι κενές θέσεις μόνο-για-στελέχη
+function fillSeats(s: AppState, date: ISODate): CadreSeatFill {
+  const r = autoFill(s, monthOf(date), { only: date, seatsOnly: true });
+  return { put: (r.seats || []).map(x => ({ k: x.k, cid: x.cid })), empty: (r.seatEmpty || []).map(x => ({ k: x.k, group: cadreOnlyOf(s.settings).get(x.k)?.group || '' })), extra: (r.seatExtra || []).map(x => ({ k: x.k, cid: x.cid })) };
+}
+setCadreFiller(fillSeats);

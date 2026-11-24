@@ -11,6 +11,7 @@ import { rankTxt } from '../../shared/ranks';
 import { colShort } from '../../shared/cadre';
 import { HK } from '../../shared/unit';
 import { MONTHS, dm, dmy, type ISODate } from '../../shared/dates';
+import { postBy } from '../../shared/rules';
 import { monthIndex, monthLabel, planFilters, rangeTxt, shiftMonth } from '../../shared/cadrePlan';
 import {
   DOW_INI, DOW_ORDER, autoFill, carryText, catOf, cellCode, dutyCfgOf, dutySections, eligibility, limitText, monthCheck, monthLimit, nameOf, personCells, personOf, runsOn, serviceOf, threeOf, duByDay,
@@ -83,9 +84,18 @@ function FillDialog({ fill, ym, onClose, onApply }: { fill: AutoFillResult; ym: 
   const { state } = useStore(); const cfg = dutyCfgOf(state.settings); const pm = new Map(state.cadreList.map(c => [c.id, c]));
   const emptyBy = new Map<string, ISODate[]>(); for (const e of fill.empty) { const l = emptyBy.get(e.svc); if (l) l.push(e.date); else emptyBy.set(e.svc, [e.date]); }
   const cnt = new Map<string, number>(); for (const x of fill.add) cnt.set(x.cid, (cnt.get(x.cid) || 0) + 1);
+  // θέσεις «Μόνο στελέχη» του εντύπου (Michael, 24/11): μπαίνουν μαζί και μετρούν μαζί
+  const seats = fill.seats || []; for (const x of seats) cnt.set(x.cid, (cnt.get(x.cid) || 0) + 1);
+  const total = fill.add.length + seats.length; const seatEmpty = fill.seatEmpty || [];
+  const seatTxt = (k: string) => postBy(state, k)?.label || k;
+  const seatBy = new Map<string, ISODate[]>(); for (const e of seatEmpty) { const l = seatBy.get(e.k); if (l) l.push(e.date); else seatBy.set(e.k, [e.date]); }
   return html`<${Dialog} title=${'Αυτόματη συμπλήρωση · ' + monthLabel(ym)} onClose=${onClose}
-    footer=${html`<${Why} text=${!fill.add.length && 'Δεν υπάρχει τίποτα να μπει'}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!fill.add.length} why="Δεν υπάρχει τίποτα να μπει" onClick=${onApply}>Εφαρμογή<//>`}>
-    <p style=${{ margin: '0 0 8px' }}><b>${fill.add.length}</b> ${fill.add.length === 1 ? 'υπηρεσία θα μπει' : 'υπηρεσίες θα μπουν'} σε ${cnt.size} ${cnt.size === 1 ? 'στέλεχος' : 'στελέχη'}. Ό,τι υπάρχει ήδη μένει όπως είναι. Αναιρείται με ένα κλικ.</p>
+    footer=${html`<${Why} text=${!total && 'Δεν υπάρχει τίποτα να μπει'}/><${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${!total} why="Δεν υπάρχει τίποτα να μπει" onClick=${onApply}>Εφαρμογή<//>`}>
+    <p style=${{ margin: '0 0 8px' }}><b>${total}</b> ${total === 1 ? 'υπηρεσία θα μπει' : 'υπηρεσίες θα μπουν'} σε ${cnt.size} ${cnt.size === 1 ? 'στέλεχος' : 'στελέχη'}. Ό,τι υπάρχει ήδη μένει όπως είναι. Αναιρείται με ένα κλικ.</p>
+    ${seats.length > 0 && html`<p className="note" style=${{ margin: '0 0 8px' }}>Από αυτές ${seats.length} στις υπηρεσίες «Μόνο στελέχη» του εντύπου (${[...new Set(seats.map(x => seatTxt(x.k)))].join(', ')}).</p>`}
+    ${(fill.seatExtra || []).length > 0 && html`<${Alert} tone="warn"><span><b>«+1» στις θέσεις του εντύπου:</b> ${(fill.seatExtra || []).map(e => nameOf(pm.get(e.cid)) + ' ' + dm(e.date)).join(', ')}</span><//>`}
+    ${seatEmpty.length > 0 && html`<${Alert} tone="warn"><span><b>Θα μείνουν κενές ${seatEmpty.length} θέσεις του εντύπου:</b>
+      ${[...seatBy].map(([k, ds]) => html`<span key=${k} style=${{ display: 'block' }}>${seatTxt(k)}: ${ds.map(d => dm(d)).join(', ')}</span>`)}</span><//>`}
     ${fill.extra.length > 0 && html`<${Alert} tone="warn"><span><b>«+1» (πάνω από το όριο, μέσα στο έξτρα):</b> ${fill.extra.map(e => nameOf(pm.get(e.cid)) + ' ' + dm(e.date)).join(', ')}</span><//>`}
     ${fill.empty.length > 0 ? html`<${Alert} tone="warn"><span><b>Θα μείνουν κενές ${fill.empty.length}:</b> δεν υπάρχει κανείς που να μπορεί (άδεια, περιορισμός, ανάπαυση ή όριο).
       ${[...emptyBy].map(([id, ds]) => html`<span key=${id} style=${{ display: 'block' }}>${serviceOf(cfg, id)?.svc.name || id}: ${ds.map(d => dm(d)).join(', ')}</span>`)}</span><//>`
@@ -208,8 +218,8 @@ export function CadreDutyView({ onInfo }: { onInfo: (c: Cadre) => void }) {
   // αυτόματη συμπλήρωση μήνα: πρώτα προεπισκόπηση, μετά μία εντολή (ένα undo)
   const autoIds = useMemo(() => (state.cadreDuties || []).filter(x => x.auto && x.date.startsWith(ym)).map(x => x.id), [state.cadreDuties, ym]);
   const applyFill = async () => {
-    const f = fill; setFill(null); if (!f || !f.add.length) return;
-    if (await run({ t: 'setCadreDuties', add: f.add, del: [], text: 'αυτόματη συμπλήρωση ' + monthLabel(ym).toLowerCase() + ' (' + f.add.length + ')' }, false)) toast({ text: 'Μπήκαν ' + f.add.length + ' υπηρεσίες' + (f.empty.length ? ', έμειναν ' + f.empty.length + ' κενές' : ''), actions: [undoMark()] });
+    const f = fill; setFill(null); const sn = f?.seats?.length || 0; if (!f || !(f.add.length + sn)) return;
+    if (await run({ t: 'setCadreDuties', add: f.add, del: [], ...(sn ? { seats: f.seats } : {}), text: 'αυτόματη συμπλήρωση ' + monthLabel(ym).toLowerCase() + ' (' + (f.add.length + sn) + ')' }, false)) toast({ text: 'Μπήκαν ' + (f.add.length + sn) + ' υπηρεσίες' + (f.empty.length + (f.seatEmpty?.length || 0) ? ', έμειναν ' + (f.empty.length + (f.seatEmpty?.length || 0)) + ' κενές' : ''), actions: [undoMark()] });
   };
   const clearAuto = async () => {
     const ids = clr; setClr(null); if (!ids?.length) return;

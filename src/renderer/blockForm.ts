@@ -1,11 +1,12 @@
 // Η φόρμα μιας υπηρεσίας (Michael, 4/11): ίδια για «Νέα υπηρεσία» και «Επεξεργασία». Όνομα · Νούμερα · Άτομα σε κάθε νούμερο ·
 // Ώρες · Ένοπλη και Όπλο · Ενεργή · Κωδικοί. Το σχήμα (νούμερα × άτομα) βγαίνει από την reshapeBlock, όπως θα αποθηκευτεί.
 import { useMemo, useState } from 'react';
-import { html, Alert } from './ui';
+import { html, Alert, Segmented } from './ui';
 import { Select } from './select';
 import { useStore } from './store';
 import { HoursField, RangeField, shiftForm, shiftOf, shiftWhy, GoLink, type HoursMode, type ShiftForm } from './common';
 import { codeErrors } from '../shared/codes';
+import { dutyCfgOf, personOf } from '../shared/cadreDuty';
 import { normTime } from '../shared/hours';
 import { HK_A, OWN_COL_TAG, SVC_KOL_COLS, hkColsOf, svcColOk, svcDefault } from '../shared/ranks';
 import { MAX_NUMS, MAX_PER, blockGroups, blockShape, blocksOf, dutyStartOf, everyBlock, reshapeBlock, withBlocks, type BlockDef, type Phase, type ShiftDef } from '../shared/domain';
@@ -14,7 +15,7 @@ type P = any;
 const GR = [...'αβγδεζηθικ'];
 // Κουτιά του template ΦΡΟΥΡΑ ανά είδος: πέρα από αυτά ο πίνακας μεγαλώνει προς τα κάτω (exports.ts extendFroura)
 export const TPL_BOXES: Record<string, number> = { th: 4, op: 4, mg: 5, sk: 2, tae: 1 };
-export interface BlockF { name: string; nums: number; per: number; armed: boolean; weapon: 'own' | 'post'; hkCol: string; active: boolean; mode: HoursMode; sh: ShiftForm; hrs: string[]; codes: Record<string, string> }
+export interface BlockF { name: string; nums: number; per: number; armed: boolean; weapon: 'own' | 'post'; hkCol: string; who: 'soldiers' | 'cadre'; cadreGroup: string; cadreAs: string; active: boolean; mode: HoursMode; sh: ShiftForm; hrs: string[]; codes: Record<string, string> }
 const real = (h?: string) => (h && h !== 'ημέρα' ? h : '');
 const clamp = (v: number, max: number) => Math.max(1, Math.min(max, Math.floor(v) || 1));
 const isSk = (b?: BlockDef) => !!b && b.kind === 'sk' && !b.custom;
@@ -23,9 +24,9 @@ export function useBlockForm(b: BlockDef | undefined, phase: Phase) {
   const { state } = useStore(); const st = state.settings; const start = dutyStartOf(st);
   const rotB = !!b && b.posts.some(p => p.rot != null);
   const [f, setF] = useState<BlockF>(() => {
-    if (!b) return { name: '', nums: 1, per: 1, armed: false, weapon: 'own', hkCol: '', active: true, mode: 'day', sh: shiftForm(), hrs: [''], codes: {} };
+    if (!b) return { name: '', nums: 1, per: 1, armed: false, weapon: 'own', hkCol: '', who: 'soldiers', cadreGroup: '', cadreAs: '', active: true, mode: 'day', sh: shiftForm(), hrs: [''], codes: {} };
     const sh = blockShape(b); const hrs = blockGroups(b.posts).map(g => (g[0].rot == null ? real(g[0].hrs) : ''));
-    return { name: b.name, nums: sh.nums, per: sh.per, armed: b.armed, weapon: b.armWeapon === 'post' ? 'post' : 'own', hkCol: svcColOk(b.hkCol, st.lists) && svcColOk(b.hkCol, st.lists) !== svcDefault(b.kind) ? b.hkCol! : '', active: !b.hidden, mode: rotB || b.shift ? 'shift' : hrs.some(Boolean) ? 'fixed' : 'day', sh: shiftForm(b), hrs, codes: Object.fromEntries(b.posts.map(x => [x.k, x.code || ''])) };
+    return { name: b.name, nums: sh.nums, per: sh.per, armed: b.armed, weapon: b.armWeapon === 'post' ? 'post' : 'own', hkCol: svcColOk(b.hkCol, st.lists) && svcColOk(b.hkCol, st.lists) !== svcDefault(b.kind) ? b.hkCol! : '', who: b.who === 'cadre' ? 'cadre' : 'soldiers', cadreGroup: b.cadreGroup || '', cadreAs: b.cadreAs || '', active: !b.hidden, mode: rotB || b.shift ? 'shift' : hrs.some(Boolean) ? 'fixed' : 'day', sh: shiftForm(b), hrs, codes: Object.fromEntries(b.posts.map(x => [x.k, x.code || ''])) };
   });
   const set = (patch: Partial<BlockF>) => setF(x => ({ ...x, ...patch }));
   const used = useMemo(() => new Set(everyBlock(st).flatMap(x => x.posts.map(p => p.k))), [st]);
@@ -46,18 +47,31 @@ export function useBlockForm(b: BlockDef | undefined, phase: Phase) {
   const nums = Array.from({ length: f.nums }, (_, i) => (sk ? first + i + 'η' : i + 1 + 'ος'));
   const labels = nums.map(x => x + (f.per > 1 ? ' (' + GR.slice(0, f.per).join(' + ') + ')' : ''));
   const shiftOut = (): ShiftDef | null => (f.mode !== 'shift' ? null : rotB && !f.sh.own && f.sh.every === 120 && !normTime(f.sh.from) && !normTime(f.sh.to) ? null : shiftOf(f.sh));
-  const why = !f.name.trim() ? 'Λείπει: Όνομα' : errs[0] || (f.mode === 'shift' ? shiftWhy(f.sh) : '');
+  const why = !f.name.trim() ? 'Λείπει: Όνομα' : f.who === 'cadre' && !f.cadreGroup ? 'Λείπει: Ομάδα στελεχών' : errs[0] || (f.mode === 'shift' ? shiftWhy(f.sh) : '');
   // οι ώρες ανά νούμερο: όσα νούμερα δεν έχουν δικές τους παίρνουν του 1ου
   const hrsNum = f.mode === 'day' ? Array.from({ length: MAX_NUMS }, () => '') : f.mode === 'fixed' ? Array.from({ length: f.nums }, (_, i) => f.hrs[i] ?? f.hrs[0] ?? '') : undefined;
+  const cadreCmd = f.who === 'cadre' ? { who: 'cadre' as const, cadreGroup: f.cadreGroup, ...(f.cadreAs ? { cadreAs: f.cadreAs } : {}) } : { who: 'soldiers' as const };
   const cmd = () => (b
-    ? { t: 'editBlock' as const, phase, id: b.id, name: f.name, nums: f.nums, per: f.per, hrs: {}, ...(hrsNum ? { hrsNum } : {}), codes: f.codes, shift: shiftOut(), armed: f.armed, armWeapon: f.weapon, hkCol: f.hkCol, hidden: !f.active }
-    : { t: 'addBlock' as const, phase, name: f.name, kind: 'other' as const, armed: f.armed, n: f.nums, per: f.per, hrs: f.mode === 'fixed' ? f.hrs[0] || '' : '', off: !f.active, shift: f.mode === 'shift' ? shiftOf(f.sh) : null, armWeapon: f.weapon, ...(f.hkCol ? { hkCol: f.hkCol } : {}) });
+    ? { t: 'editBlock' as const, phase, id: b.id, name: f.name, nums: f.nums, per: f.per, hrs: {}, ...(hrsNum ? { hrsNum } : {}), codes: f.codes, shift: shiftOut(), armed: f.armed, armWeapon: f.weapon, hkCol: f.hkCol, hidden: !f.active, ...cadreCmd }
+    : { t: 'addBlock' as const, phase, name: f.name, kind: 'other' as const, armed: f.armed, n: f.nums, per: f.per, hrs: f.mode === 'fixed' ? f.hrs[0] || '' : '', off: !f.active, shift: f.mode === 'shift' ? shiftOf(f.sh) : null, armWeapon: f.weapon, ...(f.hkCol ? { hkCol: f.hkCol } : {}), ...(f.who === 'cadre' ? cadreCmd : {}) });
   return { b, phase, f, set, posts, shown, errs, others, labels, nums, rotB, start, why, cmd };
 }
 
 export function BlockForm({ form, id }: { form: ReturnType<typeof useBlockForm>; id: string }) {
   const { b, f, set, shown, errs, others, labels, nums, rotB, start } = form;
   const own = hkColsOf(useStore().state.settings.lists);   // δικές σου στήλες ΗΚΑΙ (Ρυθμίσεις › Μονάδα και έντυπα)
+  const { state } = useStore(); const cfg = dutyCfgOf(state.settings); const grp = cfg.groups.find(x => x.id === f.cadreGroup);
+  const members = (id: string) => state.cadreList.filter(c => c.active && personOf(state, c.id).group === id).length;
+  // «Ποιοι την κάνουν» (Michael, 24/11): με «Μόνο στελέχη» η υπηρεσία γεμίζει μόνη της με στελέχη της ομάδας (Υπηρεσίες στελεχών) και τυπώνεται στη ΦΡΟΥΡΑ
+  const who = html`<div className="field" style=${{ marginBottom: "12px" }}><span className="field__label">Ποιοι την κάνουν</span>
+    <${Segmented} label="Ποιοι την κάνουν" value=${f.who} onChange=${(v: 'soldiers' | 'cadre') => set(v === 'cadre' ? { who: v, cadreGroup: f.cadreGroup || (cfg.groups.length === 1 ? cfg.groups[0].id : '') } : { who: v })} items=${[{ value: 'soldiers', label: 'Στρατιώτες' }, { value: 'cadre', label: 'Μόνο στελέχη' }]}/>
+    ${f.who === 'cadre' && html`<div className="field-row" style=${{ alignItems: 'flex-end', marginTop: '8px' }}>
+      <div className="field" style=${{ flex: '1 1 220px' }}><label className="field__label" htmlFor=${id + '-g'}>Ομάδα στελεχών</label><${Select} id=${id + '-g'} className="ui-input" value=${f.cadreGroup} onChange=${(e: any) => set({ cadreGroup: e.target.value, cadreAs: '' })}>
+        <option value="">Διάλεξε ομάδα…</option>${cfg.groups.map(g => html`<option key=${g.id} value=${g.id}>${g.name + ' (' + members(g.id) + ')'}</option>`)}<//></div>
+      <div className="field" style=${{ flex: '1 1 220px' }}><label className="field__label" htmlFor=${id + '-a'}>Μετρά ως υπηρεσία</label><${Select} id=${id + '-a'} className="ui-input" value=${f.cadreAs} onChange=${(e: any) => set({ cadreAs: e.target.value })}>
+        ${(grp?.services || []).map((v, i) => html`<option key=${v.id} value=${i === 0 && !f.cadreAs ? '' : v.id}>${v.name + (v.h24 ? ' (24ωρη, ανάπαυση μετά)' : '')}</option>`)}<//></div></div>
+      <span className="field__help">Η «Αυτόματη συμπλήρωση» βάζει εδώ μόνο στελέχη της ομάδας, με τα όρια, την ανάπαυση, τις άδειες και τους περιορισμούς τους από τις «Υπηρεσίες στελεχών». Μετρά μαζί με το πρόγραμμά τους.</span>
+      ${cfg.groups.length === 0 && html`<${Alert} tone="warn"><span>Δεν υπάρχουν ομάδες στελεχών. Φτιάξε μία στις <${GoLink} view="templates" params=${{ tab: 'cadreDuty' }}>Ρυθμίσεις › Υπηρεσίες στελεχών<//>.</span><//>`}`}</div>`;
   const ly = b?.kind === 'ly';
   const total = f.nums * f.per; const boxes = b && !b.custom ? TPL_BOXES[b.kind] : undefined;
   const th = b ? b.name.toUpperCase() : '';
@@ -77,6 +91,7 @@ export function BlockForm({ form, id }: { form: ReturnType<typeof useBlockForm>;
       ${b && total < b.posts.filter((p: P) => !p.hidden).length ? html`<small>Όσες θέσεις φύγουν κρατούν το ιστορικό τους και δεν μπαίνουν πια στις Θέσεις.</small>` : null}</div>
     ${boxes != null && f.nums > boxes && html`<${Alert} tone="info"><span>Το έντυπο έχει κουτιά για <b>${boxes}</b> ${boxes === 1 ? 'νούμερο' : 'νούμερα'}. Ο πίνακας «${th}» στο Excel μεγαλώνει προς τα κάτω: το <b>${boxes + 1}ο</b>${f.nums > boxes + 1 ? ' και τα επόμενα μπαίνουν' : ' μπαίνει'} στον ίδιο πίνακα, με την ίδια διάταξη και αρίθμηση.</span><//>`}
     ${b && !b.custom && f.nums < (boxes || 0) && html`<${Alert} tone="info"><span>Με λιγότερα νούμερα τα τελευταία κουτιά του εντύπου μένουν κενά.</span><//>`}
+    ${who}
     <${HoursField} id=${id} mode=${f.mode} setMode=${(mode: HoursMode) => set({ mode })} sh=${f.sh} setSh=${(sh: ShiftForm) => set({ sh })} labels=${labels} rot=${rotB} start=${start}
       fixed=${b ? html`<div className="settings-grid">${nums.map((x: string, i: number) => html`<div key=${i} className="field"><label className="field__help" htmlFor=${id + '-h' + i}>${labels[i]}</label><${RangeField} id=${id + '-h' + i} placeholder="π.χ. 07:30-08:00" value=${f.hrs[i] ?? f.hrs[0] ?? ''} onChange=${(e: any) => set({ hrs: Array.from({ length: Math.max(f.hrs.length, i + 1) }, (_, j) => (j === i ? e.target.value : f.hrs[j] ?? f.hrs[0] ?? '')) })}/></div>`)}</div>`
         : html`<${RangeField} id=${id + '-h'} aria-label="Ώρες" placeholder="π.χ. 08:00-20:00" value=${f.hrs[0] || ''} onChange=${(e: any) => set({ hrs: [e.target.value] })}/>`}/>

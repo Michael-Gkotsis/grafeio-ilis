@@ -202,6 +202,22 @@ export const postBy = (s: AppState, k: string): Post | undefined => {
   if (!m) { m = new Map(allPosts(s.settings).map(p => [p.k, p])); postKeyIdx.set(s.settings, m); }
   return m.get(k);
 };
+// Υπηρεσίες μόνο για στελέχη (Michael, 24/11): οι θέσεις των υπηρεσιών με BlockDef.who = 'cadre', του εντύπου που ισχύει. Γεμίζουν μόνο με στελέχη της ομάδας
+// τους (cadreDuty.ts), ποτέ με την αυτόματη συμπλήρωση στρατιωτών· αποθηκεύονται όπως οι θέσεις που διαλέγεις με το χέρι (αρνητικός αριθμός θέσης στο guards)
+export interface CadreOnly { group: string; as?: string; label: string }
+const coIdx = new WeakMap<Settings, Map<string, CadreOnly>>();
+const NO_CO = new Map<string, CadreOnly>();
+export function cadreOnlyOf(st: Settings): Map<string, CadreOnly> {
+  let m = coIdx.get(st); if (m) return m;
+  const bl = blocksOf(st) || [];
+  if (!bl.some(b => b.who === 'cadre' && !b.hidden)) m = NO_CO;
+  else { m = new Map(); for (const p of postsOf(st)) { const b = bl.find(x => x.id === p.block); if (b?.who === 'cadre') m.set(p.k, { group: b.cadreGroup || '', ...(b.cadreAs ? { as: b.cadreAs } : {}), label: p.label }); } }
+  coIdx.set(st, m); return m;
+}
+// Η συμπλήρωση των θέσεων στελεχών μιας μέρας γράφεται στο cadreDuty.ts (εξαρτάται από το rules.ts): εκεί δηλώνεται εδώ, ώστε να μη γίνει κυκλική εισαγωγή
+export interface CadreSeatFill { put: { k: string; cid: string }[]; empty: { k: string; group: string }[]; extra: { k: string; cid: string }[] }
+let cadreFiller: ((s: AppState, date: ISODate) => CadreSeatFill) | null = null;
+export const setCadreFiller = (f: (s: AppState, date: ISODate) => CadreSeatFill) => { cadreFiller = f; };
 
 // --------------------------- αργίες ---------------------------
 // Οι επίσημες αργίες βγαίνουν για κάθε χρονιά (σταθερές και από το Πάσχα, dates.ts), μαζί με όσες πρόσθεσες
@@ -630,6 +646,7 @@ export const seatlessOn = (s: AppState, date: ISODate, pid: number) => (s.dutyLo
 // Κ-13, Κ-14: ανάπαυση μετά από υπηρεσία, όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες
 export function ruleBlock(s: AppState, date: ISODate, pid: number, idx?: Map<number, Set<ISODate>>, k?: string | null): string | null {
   const r = s.rules;
+  if (pid > 0 && k && cadreOnlyOf(s.settings).has(k)) return 'Υπηρεσία μόνο για στελέχη';   // Michael, 24/11: με το χέρι μόνο με αιτία
   const lim = monthBlock(s, date, pid, idx); if (lim) return lim;
   const c = pid < 0 ? cadreOf(s, pid) : undefined;
   const rb = c && seatBlock(s, c, date); if (rb) return rb;   // στέλεχος: τα ίδια «δεν μπορεί» με το πρόγραμμα στελεχών (cadreDuty.ts)
@@ -886,10 +903,10 @@ export function fairCompare(h: boolean, kind: string, date: ISODate) {
 }
 // rooms (Michael, 13/11): μόνο για αυτή τη συμπλήρωση, παίρνει μόνο όσους είναι σε αυτούς τους θαλάμους (κενό = όλοι).
 // Η σειρά δικαιοσύνης μετριέται όπως πάντα σε όλη τη δύναμη· οι μόνιμοι Λ/Υ-Δ/Υ μπαίνουν όπως πάντα.
-export function fillDay(s: AppState, date: ISODate, rooms?: readonly number[] | null): { guards: Guards; n: number; empty: string[]; warn: string[] } {
+export function fillDay(s: AppState, date: ISODate, rooms?: readonly number[] | null): { guards: Guards; n: number; empty: string[]; warn: string[]; cadreList?: Cadre[] } {
   autoFill++; try { return fillDay0(s, date, rooms); } finally { autoFill--; limitGate = null; limitOff = false; }
 }
-function fillDay0(s: AppState, date: ISODate, rooms?: readonly number[] | null): { guards: Guards; n: number; empty: string[]; warn: string[] } {
+function fillDay0(s: AppState, date: ISODate, rooms?: readonly number[] | null): { guards: Guards; n: number; empty: string[]; warn: string[]; cadreList?: Cadre[] } {
   const g: Record<string, number> = { ...(s.guards[date] || {}) };
   // ένα δικό της αντίγραφο του ημερολογίου, όπου αλλάζει μόνο η μέρα (όχι νέο αντίγραφο όλου του έτους σε κάθε θέση)
   const wg: Guards = { ...s.guards, [date]: { ...g } };
@@ -912,7 +929,8 @@ function fillDay0(s: AppState, date: ISODate, rooms?: readonly number[] | null):
   const mark = (id: number) => { if (!own.has(id)) { own.add(id); idx.set(id, new Set(idx.get(id) || [])); } idx.get(id)!.add(date); };
   const unmark = (id: number) => { if (own.has(id)) idx.get(id)!.delete(date); };
   let n = 0; const skNone = new Set<string>();
-  const posts = postsOf(s.settings);
+  // θέσεις μόνο για στελέχη: οι στρατιώτες δεν τις αγγίζουν (γεμίζουν παρακάτω από το πρόγραμμα στελεχών)
+  const co = cadreOnlyOf(s.settings); const posts = co.size ? postsOf(s.settings).filter(x => !co.has(x.k)) : postsOf(s.settings);
   // 1. οι μόνιμοι Λ/Υ και Δ/Υ μπαίνουν πάντα στην κενή θέση (Michael, 18/10), και παρά τους κανόνες (ανάπαυση, ΣΚ, μέρες
   // χωρίς υπηρεσία, «Τι κάνει»), με προειδοποίηση. Όχι μόνο όταν τον κρατά κατάσταση (άδεια, ΕΥ…) ή είναι ήδη σε άλλη θέση:
   // τότε η θέση γεμίζει με τη σειρά, όπως όλες, και η προειδοποίηση λέει γιατί.
@@ -959,16 +977,31 @@ function fillDay0(s: AppState, date: ISODate, rooms?: readonly number[] | null):
   if (nHol) holWarn.push(dm(date) + ': ' + (nHol === 1 ? 'μπήκε 1 που είχε' : 'μπήκαν ' + nHol + ' που είχαν') + ' κάνει αργία πρόσφατα (δεν έφταναν οι υπόλοιποι)');
   // μονάδα: 2η υπηρεσία όποιου έχει ήδη σήμερα, μόνο για θέσεις που έμειναν κενές (όλοι πήραν πρώτα μία)
   if (twoMode(s) !== 'never') { secondOn = true; try { n += secondPass(s, date, g, mine, order, people, fair, idx, fixed, strict, mark); } finally { secondOn = false; } }
+  // θέσεις μόνο για στελέχη (Michael, 24/11): ίδιοι κανόνες και ίδια δικαιοσύνη με το πρόγραμμα στελεχών· όποιος δεν είχε ακόμα αριθμό θέσης τον παίρνει εδώ
+  const coWarn: string[] = []; const coEmpty: string[] = []; let cadreList: Cadre[] | undefined;
+  if (co.size && !rooms?.length) {
+    const r = cadreFiller ? cadreFiller({ ...s, guards: { ...s.guards, [date]: g } }, date) : { put: [], empty: [...co].filter(([k]) => !g[k]).map(([k, v]) => ({ k, group: v.group })), extra: [] };
+    let cl = s.cadreList || [];
+    for (const x of r.put) {
+      let c = cl.find(y => y.id === x.cid); if (!c) continue;
+      if (c.pid == null) { const np = nextCadrePid(cl); const c0 = c; c = { ...c0, pid: np }; cl = cl.map(y => (y === c0 ? c! : y)); cadreList = cl; }
+      g[x.k] = c.pid!; n++;
+    }
+    const nm = (cid: string) => { const c = cl.find(y => y.id === cid); return c ? [c.last, c.first].filter(Boolean).join(' ') : '?'; };
+    for (const x of r.extra) coWarn.push(dm(date) + ': ' + co.get(x.k)!.label + ': ' + nm(x.cid) + ' μπήκε πάνω από το όριο (μέσα στο έξτρα «αν χρειαστεί»)');
+    for (const x of r.empty) { coEmpty.push(x.k); coWarn.push(dm(date) + ': ' + co.get(x.k)!.label + ': κανένα στέλεχος ' + (x.group ? 'της ομάδας δεν μπορεί' : 'δεν έχει οριστεί ομάδα')); }
+  }
   // κενές θέσεις και «χωρίς άλλη επιλογή» όπως έμειναν μετά την επιδιόρθωση
   const fin: AppState = { ...s, guards: { ...s.guards, [date]: g } };
-  const pm = pm0; const empty: string[] = []; const warn: string[] = [...fixedWarn, ...holWarn, ...limWarn];
+  const pm = pm0; const empty: string[] = []; const warn: string[] = [...fixedWarn, ...holWarn, ...limWarn, ...coWarn];
   for (const x of order) {
     const pid = g[x.k];
     if (!pid) { empty.push(x.k); if (skNone.has(x.k)) warn.push(x.label + ': ' + STRICT_SK); continue; }
     if (!mine.has(x.k)) continue;
     const lr = lastResort(live(s), date, pid, x, s.settings.lists) || statusWarn(s, date, pid) || secondDuty(fin, date, pid, x.k); if (lr) warn.push(shortName(pm.get(pid)!) + ' (' + x.label + '): ' + lr);
   }
-  return { guards: { ...s.guards, [date]: g }, n, empty, warn };
+  empty.push(...coEmpty);
+  return { guards: { ...s.guards, [date]: g }, n, empty, warn, ...(cadreList ? { cadreList } : {}) };
 }
 // Επιδιόρθωση μετά την πρώτη σειρά (που κρατά τη σειρά δικαιοσύνης και τα «Αυστηρά Άοπλοι»). Η πρώτη σειρά διαλέγει μία
 // θέση τη φορά και μπορεί να αφήσει θέση κενή, ή να βάλει κάποιον «μόνο αν δεν υπάρχει άλλος», ενώ υπάρχει πλήρης έγκυρη
