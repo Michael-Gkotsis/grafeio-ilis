@@ -7,6 +7,7 @@ import { html, Alert, Badge, Button, Dialog, Tabs, useToast } from '../ui';
 import { Select } from '../select';
 import { useStore } from '../store';
 import { profilesOf, type ListAdd } from '../../shared/tplStore';
+import { STATE_TARGETS } from '../../shared/unitLists';
 import { NEW_SVC, listProfileFrom, type ListColView, type ListModel, type ListReq, type ListTryRes, type SvcBlockView } from '../../shared/listMap';
 type P = any;
 
@@ -57,7 +58,7 @@ function AddCard({ t, model, onAdd, onSkip }: P) {
   const blocks: SvcBlockView[] = model.svc.blocks; const first = blocks.find(b => !b.labelKey.startsWith('st:') && !(b.value || '').startsWith('st:')) ?? blocks[0];
   const [after, setAfter] = useState(''); const [like, setLike] = useState(first?.labelKey || '');
   return html`<div className="tm__mini" style=${{ display: 'grid', gap: '8px' }}>
-    <div><b>${t.label}</b> <${Badge} tone="info">ενεργή · ${t.nums} ${t.nums === 1 ? 'νούμερο' : 'νούμερα'}${t.per > 1 ? ' × ' + t.per + ' άτομα' : ''}<//></div>
+    <div><b>${t.label}</b> ${t.value.startsWith('st:') ? html`<${Badge} tone="info">λίστα ατόμων: γραμμές όσοι είναι σε αυτή την κατάσταση τη μέρα<//>` : html`<${Badge} tone="info">ενεργή · ${t.nums} ${t.nums === 1 ? 'νούμερο' : 'νούμερα'}${t.per > 1 ? ' × ' + t.per + ' άτομα' : ''}<//>`}</div>
     <div className="tm__acts" style=${{ alignItems: 'center' }}>
       <label className="muted" htmlFor=${'af-' + t.value}><small>Να μπει</small></label>
       <${Select} id=${'af-' + t.value} className="ui-input" value=${after} onChange=${(ev: P) => setAfter(ev.target.value)}>
@@ -67,14 +68,23 @@ function AddCard({ t, model, onAdd, onSkip }: P) {
     <div className="tm__acts"><${Button} size="sm" disabled=${!like} onClick=${() => onAdd({ value: t.value, after, like })}>Πρόσθεσέ τη<//><${Button} size="sm" variant="ghost" onClick=${() => onSkip(t.value)}>Όχι στο έντυπο<//></div>
   </div>`;
 }
+export function missingStates(model: ListModel, e: Edits): { value: string; label: string }[] {
+  const svc = model.svc; if (!svc) return [];
+  const used = new Set(svc.blocks.map(b => nowOf(b, e).value).filter(Boolean)); const added = new Set(addsOf(model, e).map(a => a.value));
+  return STATE_TARGETS.filter(t => !used.has(t.value) && !added.has(t.value)).map(t => ({ value: t.value, label: t.label }));
+}
 function AddsPanel({ model, e, addSvc, dropAdd, skipSvc }: P) {
-  const missing = missingOf(model, e); const adds = addsOf(model, e); const blocks: SvcBlockView[] = model.svc.blocks;
-  const nameOf = (v: string) => model.svc.targets.find((t: P) => t.value === v)?.label || v; const blockOf = (k: string) => blocks.find(b => b.labelKey === k)?.label || '';
-  if (!missing.length && !adds.length) return null;
+  const [pickSt, setPickSt] = useState('');
+  const missing = missingOf(model, e); const adds = addsOf(model, e); const blocks: SvcBlockView[] = model.svc.blocks; const sts = missingStates(model, e);
+  const nameOf = (v: string) => model.svc.targets.find((t: P) => t.value === v)?.label || STATE_TARGETS.find(t => t.value === v)?.label || v; const blockOf = (k: string) => blocks.find(b => b.labelKey === k)?.label || '';
+  if (!missing.length && !adds.length && !sts.length) return null;
   return html`<section className="ui-card"><div className="ui-card__head"><h2>Υπηρεσίες της εφαρμογής που λείπουν από το έντυπο</h2></div><div className="ui-card__body" style=${{ display: 'grid', gap: '10px' }}>
     <p className="tm__help">Το αρχείο της μονάδας σου δεν έχει μπλοκ για αυτές. Διάλεξε πού μπαίνουν και ποιο μπλοκ μιμούνται (πλαίσια, χρώματα, γράμματα): προστίθενται γραμμές στο έντυπο που βγαίνει, το αρχείο σου δεν αλλάζει ποτέ.</p>
     ${adds.map((a: ListAdd) => html`<div key=${a.value} className="tm__acts" style=${{ alignItems: 'center' }}><${Badge} tone="ok">Θα μπει<//><span><b>${nameOf(a.value)}</b> ${a.after === '' ? 'στο τέλος' : a.after === '^' ? 'στην αρχή' : 'μετά το μπλοκ ' + blockOf(a.after)}, με τη μορφή του «${blockOf(a.like)}»</span><${Button} size="sm" variant="ghost" onClick=${() => dropAdd(a.value)}>Βγάλ' την<//></div>`)}
     ${missing.map((t: P) => html`<${AddCard} key=${t.value} t=${t} model=${model} onAdd=${addSvc} onSkip=${skipSvc}/>`)}
+    ${sts.length > 0 && html`<div className="tm__acts" style=${{ alignItems: 'center' }}><label className="muted" htmlFor="add-state"><small>Λίστα κατάστασης που λείπει από το έντυπο (νοσοκομείο, ΕΥ, αποσπασμένοι…)</small></label>
+      <${Select} id="add-state" className="ui-input" style=${{ maxWidth: '320px' }} value=${pickSt} onChange=${(ev: P) => setPickSt(ev.target.value)}><option value="">Διάλεξε κατάσταση…</option>${sts.map(t => html`<option key=${t.value} value=${t.value}>${t.label}</option>`)}<//></div>`}
+    ${pickSt && html`<${AddCard} key=${pickSt} t=${{ value: pickSt, label: nameOf(pickSt), nums: 0, per: 1 }} model=${model} onAdd=${(a: ListAdd) => { addSvc(a); setPickSt(''); }} onSkip=${() => setPickSt('')}/>`}
   </div></section>`;
 }
 function PostsStep({ model, e, setPost, setCreate, setShow, addSvc, dropAdd, skipSvc }: P) {

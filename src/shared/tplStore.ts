@@ -38,7 +38,7 @@ export interface DutyProfile {
 //   cols    ρόλος στήλης → στήλη (0-based)· για outs με πρόθεμα «o.» (εξοδούχοι) ή «l.» (αδειούχοι)
 //   who     (rooms) φύλλο → ποιοι μπαίνουν: '' όλοι με θάλαμο, αλλιώς το όνομα Ίλης/Λόχου
 //   show    (services) «λέξη του αρχείου#Ν» → keep (το μπλοκ φαίνεται στο έντυπο αλλά δεν γεμίζει) | remove (το μπλοκ δεν υπάρχει στο έντυπο που βγαίνει)· όσα λείπουν γεμίζουν κανονικά
-//   add     (services) υπηρεσίες της εφαρμογής που λείπουν από το αρχείο της μονάδας και μπαίνουν στο έντυπο που βγαίνει: value «blk:<υπηρεσία>», after = λέξη#Ν του μπλοκ μετά το οποίο μπαίνουν ('' = στο τέλος), like = λέξη#Ν του μπλοκ που μιμείται η μορφή τους
+//   add     (services) υπηρεσίες της εφαρμογής που λείπουν από το αρχείο της μονάδας και μπαίνουν στο έντυπο που βγαίνει: value «blk:<υπηρεσία>» ή «st:<κατάσταση>» (λίστα ατόμων), after = λέξη#Ν του μπλοκ μετά το οποίο μπαίνουν ('' = στο τέλος), like = λέξη#Ν του μπλοκ που μιμείται η μορφή τους
 export interface ListAdd { value: string; after: string; like: string }
 export interface ListProfile { sheet: string; posts?: Record<string, string>; cols?: Record<string, number>; who?: Record<string, string>; sheets?: string[]; show?: Record<string, 'keep' | 'remove'>; add?: ListAdd[] }
 // Δυναμολόγιο ΑΛΛΗΣ μονάδας (phase 4), kind 'roster'. Μόνο ό,τι διάλεξε ο χρήστης· ό,τι βρίσκεται μόνο του ξαναβρίσκεται κάθε φορά.
@@ -128,7 +128,7 @@ function cleanLst(x: Record<string, unknown>): ListProfile {
   const posts = strs(x.posts), who = strs(x.who);
   const cols = isObj(x.cols) ? Object.fromEntries(Object.entries(x.cols).filter(([, v]) => typeof v === 'number' && Number.isInteger(v) && v >= 0)) as Record<string, number> : {};
   const show = isObj(x.show) ? Object.fromEntries(Object.entries(x.show).filter(([, v]) => v === 'keep' || v === 'remove')) as Record<string, 'keep' | 'remove'> : {};
-  const add: ListAdd[] = Array.isArray(x.add) ? x.add.filter((a): a is Record<string, unknown> => isObj(a) && typeof a.value === 'string' && /^blk:./.test(a.value) && typeof a.after === 'string' && typeof a.like === 'string' && a.like !== '').map(a => ({ value: a.value as string, after: a.after as string, like: a.like as string })) : [];
+  const add: ListAdd[] = Array.isArray(x.add) ? x.add.filter((a): a is Record<string, unknown> => isObj(a) && typeof a.value === 'string' && /^(blk|st):./.test(a.value) && typeof a.after === 'string' && typeof a.like === 'string' && a.like !== '').map(a => ({ value: a.value as string, after: a.after as string, like: a.like as string })) : [];
   return { sheet: x.sheet as string, ...(Object.keys(posts).length ? { posts } : {}), ...(Object.keys(cols).length ? { cols } : {}), ...(Object.keys(who).length ? { who } : {}), ...(Array.isArray(x.sheets) ? { sheets: x.sheets.filter(str) } : {}),
     ...(Object.keys(show).length ? { show } : {}), ...(add.length ? { add } : {}) };
 }

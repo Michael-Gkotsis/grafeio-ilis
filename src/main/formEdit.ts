@@ -11,7 +11,7 @@ import { svcKeyOf, type SvcBlock, type SvcSheet } from '../shared/unitLists';
 import { normGreek } from '../shared/text';
 
 // Υπηρεσία της εφαρμογής που μπαίνει στο έντυπο: nums νούμερα × per άτομα το καθένα· after / like = κλειδιά «λέξη#Ν» (after: '' στο τέλος, '^' στην αρχή)
-export interface AddSvc { value: string; label: string; nums: number; per: number; hours: string[]; after: string; like: string }
+export interface AddSvc { value: string; label: string; nums: number; per: number; hours: string[]; after: string; like: string; state?: boolean }   // state: λίστα ατόμων σε κατάσταση (nums = γραμμές), χωρίς νούμερα/βάρδιες/ώρες
 export interface RestructureIn { remove: string[]; add: AddSvc[] }
 export interface Restructured {
   ok: true; data: Buffer; sheets: SheetModel[]; sheet: SheetModel; det: SvcSheet;
@@ -56,7 +56,7 @@ export async function restructureSvc(tpl: Buffer, sheet: SheetModel, det: SvcShe
   const anyGap = det.blocks.some((_, i) => gapOf(i));
   const ins: Ins[] = [];
   o.add.forEach((a, order) => {
-    const like = idx.get(a.like) ?? 0; const k = Math.max(1, a.nums * (a.per > 1 && det.cols.shift.c != null ? a.per : 1));
+    const like = idx.get(a.like) ?? 0; const k = Math.max(1, a.nums * (!a.state && a.per > 1 && det.cols.shift.c != null ? a.per : 1));
     if (a.after === '^') ins.push({ add: a, at: ex[0].top, k, like, pos: -1, order });
     else { const ai = a.after === '' ? n - 1 : idx.get(a.after); if (ai == null) { warnings.push('Η υπηρεσία «' + a.label + '» δεν μπήκε: δεν βρέθηκε το μπλοκ μετά το οποίο ζητήθηκε.'); return; }
       ins.push({ add: a, at: ex[ai].last + 1, k, like, pos: ai + 0.5, order }); }
@@ -98,10 +98,19 @@ export async function restructureSvc(tpl: Buffer, sheet: SheetModel, det: SvcShe
       if (m.c1 === L) { if (x.k > 1) ws.addMerge(L1 + newTop1 + ':' + colName(m.c2 + 1) + (newTop1 + x.k - 1)); continue; }
       if (off + len < x.k && x.add.per > 1) ws.addMerge(colName(m.c1 + 1) + (newTop1 + off) + ':' + colName(m.c2 + 1) + (newTop1 + off + len));
     }
+    // λίστα κατάστασης: οι άδειες γραμμές της φαίνονται στην ανίχνευση μόνο μέσα από τη συγχωνευμένη λέξη, άρα η λέξη καλύπτει όλες τις γραμμές της
+    if (x.add.state && x.k > 1) {
+      const covered = ws.merges().some(m => m.c1 === L + 1 && m.r1 === newTop1 && m.r2 >= newTop1 + x.k - 1);
+      if (!covered) {
+        const c2 = ws.merges().find(m => m.r1 === newTop1 && m.r2 === newTop1 && m.c1 === L + 1)?.c2 ?? L + 1;
+        for (const m of ws.merges().filter(y => y.r1 >= newTop1 && y.r2 <= newTop1 + x.k - 1 && y.c1 <= c2 && y.c2 >= L + 1)) ws.removeMerge(m);
+        ws.addMerge(L1 + newTop1 + ':' + colName(c2) + (newTop1 + x.k - 1));
+      }
+    }
     // οι τιμές: λέξη, νούμερα, βάρδιες, ώρες
     ws.set(L1 + newTop1, x.add.label);
     const numC = det.cols.num.c, shC = det.cols.shift.c, hrC = det.cols.hours.c; const per = det.cols.shift.c != null ? Math.max(1, x.add.per) : 1;
-    for (let gi = 0; gi < x.add.nums; gi++) {
+    for (let gi = 0; gi < (x.add.state ? 0 : x.add.nums); gi++) {
       const r = newTop1 + gi * per;
       if (numC != null) ws.set(colName(numC + 1) + r, (gi + 1) + 'ο');
       if (shC != null && per > 1) for (let j = 0; j < per; j++) ws.set(colName(shC + 1) + (r + j), SHIFTS[j % SHIFTS.length]);

@@ -11,7 +11,7 @@ import { outsAndStay } from '../shared/outsStay';
 import { formatOf, frontTexts } from '../shared/backForm';
 import { sigsCustom, sigsFor, sigsSaved, type Sig } from '../shared/sigs';
 import { profilesOf, type ProfileKind, type TplProfile } from '../shared/tplStore';
-import { detectOuts, detectRooms, detectSvc, matchSvc, oursKey, outsRowsOf, planOuts, planRooms, planSvc, planTitle, svcKeyOf, svcTargets, type OutsSheet, type RoomPlan, type SvcMatch, type SvcPlan, type SvcSheet, type SvcTarget } from '../shared/unitLists';
+import { STATE_FILE_WORD, STATE_TARGETS, stateWho, detectOuts, detectRooms, detectSvc, matchSvc, oursKey, outsRowsOf, planOuts, planRooms, planSvc, planTitle, svcKeyOf, svcTargets, type OutsSheet, type RoomPlan, type SvcMatch, type SvcPlan, type SvcSheet, type SvcTarget } from '../shared/unitLists';
 import type { SheetModel } from '../shared/sheetModel';
 import type { AppState, Post } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
@@ -65,11 +65,17 @@ const reportOf = (rep: WriteReport) => rep.refused.map(x => ({ ref: x.sheet + '!
 // ------------------------------------------------------------------ δομή του εντύπου: μπλοκ που βγαίνουν, υπηρεσίες που μπαίνουν (formEdit.ts)
 export const addOf = (t: SvcTarget, a: { after: string; like: string }): AddSvc => ({ value: t.value, label: t.label, nums: t.groups.length, per: Math.max(1, ...t.groups.map(gp => gp.length)), hours: t.groups.map(gp => (gp[0]?.hours || '').trim()), after: a.after, like: a.like });
 interface Shaped { tpl: Buffer; sheets: SheetModel[]; sh: SheetModel; det: SvcSheet; lst: ListProfile; ours: Record<string, string> }
-async function shapeSvc(tpl: Buffer, sheets: SheetModel[], sh: SheetModel, det: SvcSheet, lst: ListProfile, targets: SvcTarget[], ours: Record<string, string>, lex: ReturnType<typeof buildLexicon>, warnings: string[]): Promise<Shaped | null> {
+async function shapeSvc(tpl: Buffer, sheets: SheetModel[], sh: SheetModel, det: SvcSheet, lst: ListProfile, targets: SvcTarget[], ours: Record<string, string>, lex: ReturnType<typeof buildLexicon>, warnings: string[], s: AppState, d: ISODate): Promise<Shaped | null> {
   const remove = Object.entries(lst.show || {}).filter(([, v]) => v === 'remove').map(([k]) => k).filter(k => det.blocks.some(b => svcKeyOf(b) === k));
   const placed = new Set(matchSvc(det, targets, lst).filter(m => (m.sure === 'sure' || m.sure === 'mine') && m.value).map(m => m.value));
   const add: AddSvc[] = [];
   for (const a of lst.add || []) {
+    if (a.value.startsWith('st:')) {                          // λίστα ατόμων σε κατάσταση: γραμμές όσοι είναι σε αυτή τη μέρα (τουλάχιστον 2)
+      const st = STATE_TARGETS.find(x => x.value === a.value); const word = STATE_FILE_WORD[a.value];
+      if (!st || !word) { warnings.push('Η κατάσταση που ζητήθηκε να μπει στο έντυπο δεν υπάρχει: δεν μπήκε.'); continue; }
+      if (placed.has(a.value)) continue;
+      add.push({ value: a.value, label: word, nums: Math.max(2, stateWho(s, d, a.value).length), per: 1, hours: [], after: a.after, like: a.like, state: true }); continue;
+    }
     const t = targets.find(x => x.value === a.value);
     if (!t || t.kept || !t.groups.length) { warnings.push('Η υπηρεσία που ζητήθηκε να μπει στο έντυπο δεν είναι ενεργή στην εφαρμογή: δεν μπήκε.'); continue; }
     if (placed.has(a.value)) continue;                     // υπάρχει ήδη στο αρχείο (π.χ. το έντυπο έχει ήδη βγει από εδώ)
@@ -104,7 +110,7 @@ export async function listsFill(tpl: Buffer, s: AppState, d: ISODate, o: FillIn)
     const targets: SvcTarget[] = svcTargets(s, posts);
     // δομή: μπλοκ που δεν υπάρχουν πια στο έντυπο βγαίνουν, υπηρεσίες που λείπουν μπαίνουν (στο αντίγραφο που βγαίνει)· οι θέσεις των γραμμών μετά είναι άλλες
     if (lstE && (lstE.add?.length || Object.values(lstE.show || {}).includes('remove'))) {
-      const sp = await shapeSvc(tpl, sheets, hit.sh, det, lstE, targets, ours, lex, warnings);
+      const sp = await shapeSvc(tpl, sheets, hit.sh, det, lstE, targets, ours, lex, warnings, s, d);
       if (sp) { tplE = sp.tpl; sheets = sp.sheets; hit = { p: hit.p, sh: sp.sh, det: sp.det }; det = sp.det; lstE = sp.lst; ours = sp.ours; }
     }
     // τι είναι κάθε μπλοκ: οι επιλογές του χρήστη, αλλιώς μόνο ό,τι είναι σίγουρο (ό,τι μένει Πρόταση / άγνωστο δεν γράφεται)· «φαίνεται, δεν γεμίζει» = ανενεργό

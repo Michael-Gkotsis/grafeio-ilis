@@ -287,7 +287,7 @@ describe('εξαγωγή, προεπισκόπηση και δοκιμή ακο�
       const base = { model: m.model, step: 'posts', e: noEdits(), trial: null, onStep() {}, setPost() {}, setCreate() {}, setShow() {}, addSvc() {}, dropAdd() {}, skipSvc() {}, setCol() {}, setRoom() {} };
       const draw = (e = noEdits()) => renderToString(React.createElement(ListMapBody as any, { ...base, e }));
       const h0 = draw(); expect(h0).toContain('Στο έντυπο που βγαίνει'); expect(h0).toContain('Φαίνεται και γεμίζει'); expect(h0).toContain('Υπηρεσίες της εφαρμογής που λείπουν'); expect(h0).toContain(esc(missing.label));
-      expect(h0).toContain('Πρόσθεσέ τη'); expect(h0).not.toMatch(/undefined|\[object|NaN/);
+      expect(h0).toContain('Πρόσθεσέ τη'); expect(h0).toContain('Λίστα κατάστασης που λείπει από το έντυπο'); expect(h0).not.toMatch(/undefined|\[object|NaN/);
       expect(missingOf(m.model, noEdits()).map(x => x.value)).toContain(missing.value);
       // προσθέτω: δεν είναι πια «λείπει», φαίνεται ως «Θα μπει»
       const e1 = { ...noEdits(), adds: [{ value: missing.value, after: '^', like: key(present[0].label) }] };

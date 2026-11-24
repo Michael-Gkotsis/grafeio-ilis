@@ -184,6 +184,8 @@ const STATE_WORDS: [string, RegExp, RegExp][] = [
   ['st:ADIK', /^(ΑΓΝΟΟΥΜΕΝΟΙ|ΑΔΙΚΑΙΟΛΟΓΗΤΗ ΑΠΟΥΣΙΑ|ΛΙΠΟΤΑΚΤΕΣ)$/, /ΑΓΝΟΟΥΜ|ΑΔΙΚΑΙΟΛΟΓΗΤ|ΛΙΠΟΤΑΚΤ/],
   ['st:ABS', /^(ΑΠΟΝΤΕΣ|ΑΠΟΝΤΕΣ ΑΔΕΙΕΣ|ΑΠΟΥΣΙΕΣ)$/, /ΑΠΟΝΤ/]
 ];
+// Η λέξη που γράφεται στο έντυπο όταν μπαίνει νέα λίστα κατάστασης (αναγνωρίζεται ξανά ως «σίγουρη» από το STATE_WORDS)
+export const STATE_FILE_WORD: Record<string, string> = { 'st:APS': 'ΑΠΕΣΠΑΣΜΕΝΟΙ', 'st:NOS': 'ΝΟΣΟΚΟΜΕΙΟ', 'st:EY': 'Ε.Υ', 'st:EA': 'Ε.Α', 'st:EO': 'Ε.Ο', 'st:STEP': 'ΣΤΕΠ', 'st:PUN': 'ΤΙΜΩΡΗΜΕΝΟΙ', 'st:LEAVE': 'ΑΔΕΙΟΥΧΟΙ', 'st:SICK': 'ΑΝΑΡΡΩΤΙΚΕΣ', 'st:ADIK': 'ΑΓΝΟΟΥΜΕΝΟΙ', 'st:ABS': 'ΑΠΟΝΤΕΣ' };
 const stateLabel = (v: string): string => STATE_TARGETS.find(x => x.value === v)?.label || '';
 // Ποιοι είναι σε αυτή την κατάσταση τη μέρα d: οπλίτες (όχι στελέχη), όχι όποιος γυρίζει ως την ώρα έναρξης υπηρεσιών (όπως οι ΑΠΟΝΤΕΣ της ΦΡΟΥΡΑΣ)
 export function stateWho(s: AppState, d: ISODate, value: string): Person[] {
