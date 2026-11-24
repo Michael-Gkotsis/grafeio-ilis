@@ -512,7 +512,7 @@ function assetCmd(s: AppState, c: Extract<Command, { t: 'saveAsset' | 'assetBulk
     let out: AppState = old ? { ...s, assets: list.map(y => (y === old ? x : y)) } : { ...s, assets: [...list, x] };
     // «+ Νέος τύπος…» της φόρμας: ο τύπος μπαίνει και στη λίστα τύπων της κατηγορίας
     const cat = catOf(cfg, x.cat);
-    if (c.addType && x.type && cat && cat.kind !== 'vehicle' && !cat.types.some(t => normGreek(t) === normGreek(x.type))) out = { ...out, settings: { ...out.settings, assets: { ...out.settings.assets, cats: cfg.cats.map(y => (y.id === cat.id ? { ...y, types: [...y.types, x.type] } : y)) } } };
+    if (c.addType && x.type && cat && !cat.types.some(t => normGreek(t) === normGreek(x.type))) out = { ...out, settings: { ...out.settings, assets: { ...out.settings.assets, cats: cfg.cats.map(y => (y.id === cat.id ? { ...y, types: [...y.types, x.type] } : y)) } } };
     // κύριο όπλο ατόμου/στελέχους: ο τύπος, ο οπλοβαστός και η θέση ζουν στο Δυναμολόγιο, οπότε η αλλαγή από τη φόρμα πηγαίνει εκεί (αλλιώς δεν φαινόταν πουθενά)
     const pr = c.syncPrimary && (!cat || cat.kind === 'weapon') && weaponKey(x.no) ? primaryWeapons(out).filter(y => weaponKey(y.no) === weaponKey(x.no)).sort((a, b) => Number(b.active) - Number(a.active))[0] : undefined;
     if (pr) {

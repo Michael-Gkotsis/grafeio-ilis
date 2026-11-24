@@ -1830,14 +1830,6 @@ thead .mg-tail--n{font-size:11px}
 @media (max-width:1100px){.mit__grid{grid-template-columns:150px minmax(0,1fr)}.mit__card{grid-column:1 / -1;position:static;max-height:none}}
 .mit__chips{display:flex;flex-wrap:wrap;gap:6px}
 
-/* Οχήματα (φάση 5): μετρήσεις-φίλτρα, πίνακας και καρτέλα δίπλα-δίπλα (1366×768 χωρίς οριζόντια κύλιση) */
-.veh__kpis{margin-bottom:10px}.veh__kpis .kpi{padding:8px 14px 6px}.veh__kpis .kpi__n{font-size:26px}.veh__kpis .kpi__l{text-transform:none;letter-spacing:0;font-size:13px;font-weight:500}
-.veh__kpis .kpi--bad .kpi__l,.veh__kpis .kpi--bad .kpi__n{color:var(--bad)}.veh__kpis .kpi--warn .kpi__n{color:var(--warn)}
-.veh__grid{display:grid;grid-template-columns:minmax(0,1fr) 372px;gap:12px;align-items:start;margin-top:10px}
-.veh__type{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.veh__card{overflow:hidden;max-height:max(440px,calc(100vh - 318px))}.veh__body{flex:1 1 auto;min-height:0;overflow:auto}.veh__card .mit__acts{flex:none;border-top:1px solid var(--border);padding-top:8px}
-.veh__card .ui-tabs{margin:0;gap:0;flex:none}.veh__card .ui-tabs button{height:34px;padding:0 9px;font-size:13px;flex:1 1 auto}
-@media (max-width:1100px){.veh__grid{grid-template-columns:minmax(0,1fr)}.veh__card{grid-column:1 / -1;position:static;max-height:none}}
 
 /* ---- «Πρότυπο μονάδας»: οθόνη αντιστοίχισης ΗΚΑΙ/ΗΚΑΛ ---- */
 .tm{display:flex;flex-direction:column;gap:10px;min-width:0}
@@ -1987,3 +1979,15 @@ thead .mg-tail--n{font-size:11px}
 .op__step button{width:26px;border:0;background:none;color:inherit;font-size:15px;cursor:pointer}
 .op__step button:hover:not(:disabled){background:var(--hover)}.op__step button:disabled{opacity:.4;cursor:not-allowed}
 .op__step output{min-width:30px;display:grid;place-items:center;font-weight:700;font-size:13px;border-left:1px solid var(--input);border-right:1px solid var(--input)}
+/* Οχήματα (24/11): λωρίδα μετρήσεων 52px με φίλτρα, στο ίδιο σχέδιο με τον Οπλισμό */
+.op__topacts .op__split{margin-bottom:0}
+.op__kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-bottom:10px}
+.op__kpi{display:flex;align-items:center;gap:10px;height:52px;padding:0 14px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--card);color:var(--foreground);cursor:pointer;text-align:left;min-width:0;overflow:hidden}
+.op__kpi:hover{border-color:var(--primary)}
+.op__kpi[aria-pressed="true"]{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary)}
+.op__kpi-n{font-family:var(--f-mono);font-size:24px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.op__kpi-l{font-size:13px;color:var(--muted-fg);line-height:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.op__kpi--ok .op__kpi-n{color:var(--ok)}
+.op__kpi--warn{background:var(--warn-bg);border-color:var(--warn)}.op__kpi--warn .op__kpi-n,.op__kpi--warn .op__kpi-l{color:var(--warn)}
+.op__kpi--bad{background:var(--bad-bg);border-color:var(--bad-line)}.op__kpi--bad .op__kpi-n,.op__kpi--bad .op__kpi-l{color:var(--bad)}
+@media (max-width:900px){.op__kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
