@@ -533,7 +533,7 @@ export interface Settings {
   sigs?: Partial<Record<SigForm, Sig[]>>;  // υπογραφές ανά έντυπο, από αριστερά προς τα δεξιά (κενό = όπως το έντυπο), sigs.ts
   layout?: Partial<Record<LayoutForm, Layout>>;  // πού μετακίνησες υπογραφές, κεφαλίδα, ημερομηνία πάνω στο χαρτί, layout.ts
   outputDir: string;                     // φάκελος για τα Excel (κενό = προεπιλογή)
-  fixed: Partial<Record<'ly' | 'dy', number>>; // μόνιμος Λ/Υ και Δ/Υ: μπαίνουν μόνοι τους, εκτός σειράς
+  fixed: Partial<Record<string, number>>;   // μόνιμο άτομο ανά θέση (κλειδί θέσης: 'ly', 'dy', 'Θ1α'…): μπαίνει μόνο του κάθε μέρα, εκτός σειράς (Michael, 24/11: κάθε υπηρεσία)
   rev: number;                           // έκδοση ρυθμίσεων, για τις αλλαγές προεπιλογών
   views?: SavedView[];                   // αποθηκευμένες λίστες στο Προσωπικό (π.χ. «Θαλαμάρχες»)
   sources?: Partial<Record<ListKind, SourceBinding>>;   // από ποιο Excel/φύλλο/πίνακα διαβάζει κάθε είδος και πού γράφει
