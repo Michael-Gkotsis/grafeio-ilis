@@ -13,7 +13,7 @@ import { hkRowLabel, HK, UNIT } from '../../shared/unit';
 import type { Cadre, CadreAbs } from '../../shared/domain';
 import { CADRE_FILTERS, GROUP_NAME, orderedCadre, cadreAbsFrom, cadreClash, cadreMatch, cadreSearch, cadreStateOn, cadreStatusOf, colShort, groupOfCol, type CadreFilter, type CadreGroup, type CadreStatus } from '../../shared/cadre';
 import { addDays, dayName, dm, dow } from '../../shared/dates';
-import { EPOP_ROWS, cadreSeat, dutyStats, isEpop, monthTxt } from '../../shared/rules';
+import { EPOP_ROWS, cadreSeat, dutyLimitInfo, dutyStats, isEpop, monthTxt } from '../../shared/rules';
 import { seatTxt } from '../../shared/weapons';
 import type { AppState } from '../../shared/domain';
 import { PersonalTab } from './personal';
@@ -163,6 +163,7 @@ export function CadreSheet({ cid, list, onMove, onClose }: P) {
   // με υπηρεσίες από το πρόγραμμα στελεχών: μετρούν μαζί με όσες έκανε με το χέρι στις θέσεις (cadreDuty.ts)
   const month = dl && dl.roster > 0 ? dl.done + ' τον μήνα (πρόγραμμα ' + dl.roster + ' · θέσεις στρατιωτών ' + dl.seat + ') · όριο ' + dl.effBase + (dl.extra ? '+' + dl.extra : '') : month0;
   const dutyCfg = dutyCfgOf(state.settings); const dutyP = personOf(state, c.id);
+  const lim0 = c.active && c.pid != null ? dutyLimitInfo(state, today, cadreSeat(c), true) : null;   // «N από ΟΡΙΟ»: ένα όριο του μήνα για θέσεις στρατιωτών (Michael, 24/11)
   const wtxt = [c.wtype, c.weapon && 'αριθμός ' + c.weapon, (c.rack || c.wpos) && 'θέση ' + seatTxt(c.rack, c.wpos)].filter(Boolean).join(' · ');
   return html`<${Sheet} onClose=${onClose} wide=${true} actions=${html`<${SheetNav} at=${at} n=${total} move=${move}/>`} title=${html`<h2 style=${{ fontSize: '18px' }}>${rankTxt(c)} ${c.last} ${c.first}</h2>`}
     subtitle=${html`<div className="muted" style=${{ fontSize: '13px' }}>${[c.origin && 'Προέλευση ' + c.origin, c.spec, c.role, HK() + ': ' + hkRowLabel(c.hk), !c.active && 'ΕΚΤΟΣ ΔΥΝΑΜΗΣ'].filter(Boolean).join(' · ')}</div>`}>
@@ -180,7 +181,7 @@ export function CadreSheet({ cid, list, onMove, onClose }: P) {
     ${tab === 'leave' && html`<${LeaveTab} key=${cid} c=${c} year=${lvYear} setYear=${setLvYear} years=${leaveYears} onApal=${() => setStFor({ apal: true })}/>`}
     ${tab === 'info' && html`<dl className="kv"><dt>Βαθμός</dt><dd>${c.rank || '—'}</dd><dt>Προέλευση</dt><dd>${c.origin || '—'}</dd><dt>Ο/Σ</dt><dd>${c.spec || '—'}</dd><dt>Επίθετο</dt><dd>${c.last || '—'}</dd><dt>Όνομα</dt><dd>${c.first || '—'}</dd>
       <dt>ΑΜ</dt><dd className="num">${c.am || '—'}</dd><dt>Τηλέφωνο</dt><dd className="num">${c.phone || '—'}</dd><dt>Θέση</dt><dd>${c.role || '—'}</dd><dt>Γραμμή ${HK()}</dt><dd>${hkRowLabel(c.hk)}</dd>
-      ${c.monthMax != null && html`<dt>Υπηρεσίες τον μήνα</dt>`}${c.monthMax != null && html`<dd>το πολύ ${c.monthMax}</dd>`}<dt>Όπλο</dt><dd>${wtxt || '—'}</dd><dt>Σε δύναμη</dt><dd>${c.active ? 'Ναι' : 'Όχι'}</dd><${HeldBlock} cid=${c.id}/>
+      ${c.monthMax != null && html`<dt>Υπηρεσίες τον μήνα</dt>`}${c.monthMax != null && html`<dd>το πολύ ${c.monthMax}</dd>`}${lim0 && html`<dt>Όριο σε θέσεις στρατιωτών</dt>`}${lim0 && html`<dd data-cadre-limit=""><span className=${lim0.over ? 'lim is-over' : 'lim'}>${lim0.txt} τον μήνα</span> <span className="muted" style=${{ fontSize: '12px' }}>(${lim0.own ? 'δικό του όριο' : 'όριο κατηγορίας, όπως στο πρόγραμμα στελεχών'}${lim0.over ? ' · πάνω από το όριο' : ''})</span></dd>`}<dt>Όπλο</dt><dd>${wtxt || '—'}</dd><dt>Σε δύναμη</dt><dd>${c.active ? 'Ναι' : 'Όχι'}</dd><${HeldBlock} cid=${c.id}/>
       ${(dutyP.group || dutyP.limit != null || dutyP.none || dutyP.only || dutyP.no24 || dutyP.noDow?.length) && html`<dt>Υπηρεσίες στελεχών</dt>`}${(dutyP.group || dutyP.limit != null || dutyP.none || dutyP.only || dutyP.no24 || dutyP.noDow?.length) && html`<dd data-cadre-dutyof="">${[dutyCfg.groups.find(g => g.id === dutyP.group)?.name, dutyP.limit != null && 'όριο ' + dutyP.limit, dutyP.none && 'ελαφράς: καμία', dutyP.only && 'ελαφράς: μόνο', dutyP.no24 && 'όχι 24ωρες', dutyP.noDow?.length && 'μέρες που δεν θέλει: ' + dutyP.noDow.length].filter(Boolean).join(' · ')}</dd>`}</dl>
       <div style=${{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}><${Button} variant="outline" onClick=${() => setDutyDlg(true)} data-tip="Ομάδα υπηρεσιών, όριο του μήνα και περιορισμοί (ελαφράς, μητέρα…)">Στοιχεία υπηρεσιών…<//><${Button} variant="ghost" onClick=${() => setDel(true)}>Διαγραφή στελέχους…<//></div>`}
     ${tab === 'notes' && html`<${NotesTab} key=${cid} who=${{ cid }}/>`}

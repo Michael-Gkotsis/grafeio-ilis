@@ -385,6 +385,7 @@ export function shapePerson(x: NewPerson, id: number, lists?: UserLists): Person
   if (!p.dn) delete p.dn;
   if (!p.offDays?.length) delete p.offDays;
   if (!(Number(x.monthMax) > 0)) delete p.monthMax; else p.monthMax = Math.floor(Number(x.monthMax));
+  if (!(Number(x.dutyMax) >= 1)) delete p.dutyMax; else p.dutyMax = Math.floor(Number(x.dutyMax));   // δικό του όριο υπηρεσιών (Michael, 24/11)
   return p;
 }
 // διπλός: ίδιο ΑΣΜ, ή ίδιο ονοματεπώνυμο και πατρώνυμο
@@ -1039,6 +1040,13 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
         if (v.join() === DEFAULT_STRICT_ORDER.join()) delete rules.strictOrder; else rules.strictOrder = v;
       }
       if (rules.newAvg != null) { if (rules.newAvg) rules.newAvg = true; else delete rules.newAvg; }
+      // όριο υπηρεσιών στρατιώτη (Michael, 24/11): ακέραιος 1..999, κενό = χωρίς όριο· περίοδος: 'all' (προεπιλογή, δεν αποθηκεύεται) ή 'month'
+      if (rules.dutyMax != null) {
+        const n = Math.floor(Number(rules.dutyMax));
+        if (!(n >= 1 && n <= 999)) throw new Error('Το όριο υπηρεσιών είναι από 1 έως 999');
+        rules.dutyMax = n;
+      } else delete rules.dutyMax;
+      if (rules.dutyMaxPer !== 'month' || !rules.dutyMax) delete rules.dutyMaxPer;
       return { state: { ...s, rules }, text: 'Άλλαξαν οι κανόνες υπηρεσιών: ' + c.text, files: [] };
     }
     case 'setCap': {
@@ -1279,6 +1287,8 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const old = pm.get(c.person.id); if (!old) throw new Error('Δεν βρέθηκε το άτομο');
       // όριο υπηρεσιών τον μήνα (ΕΠΟΠ/ΟΒΑ): ακέραιος πάνω από 0, αλλιώς χωρίς όριο
       const person: Person = withOrigin({ ...c.person }, s.settings.lists); const mx = Math.floor(Number(person.monthMax)); if (mx > 0) person.monthMax = mx; else delete person.monthMax;
+      // δικό του όριο υπηρεσιών (Michael, 24/11): ακέραιος από 1, αλλιώς ισχύει το όριο των κανόνων
+      const dx = Math.floor(Number(person.dutyMax)); if (dx >= 1) person.dutyMax = dx; else delete person.dutyMax;
       // εκτός δύναμης από την καρτέλα (4/11): η σημείωση γίνεται «Εκτός δύναμης: <λόγος>», όπως όσων ήρθαν από το φύλλο ΕΚΤΟΣ ΔΥΝΑΜΗΣ,
       // ώστε να γράφεται στο φύλλο ΕΚΤΟΣ ΔΥΝΑΜΗΣ και να μη γυρίζει σε δύναμη με την επόμενη εισαγωγή του Δυναμολογίου (mergeRow).
       // Ξανά σε δύναμη: φεύγει μόνο η λέξη, ο λόγος μένει στη σημείωση.

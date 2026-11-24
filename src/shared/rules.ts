@@ -93,6 +93,22 @@ export function monthDuties(s: AppState, date: ISODate, pid: number, idx?: Map<n
   if (c && s.cadreDuties) for (const x of s.cadreDuties) if (x.cid === c.id && (withDay || x.date !== date) && x.date.slice(0, 7) === ym) n++;
   return n;
 }
+// Το όριο του μήνα ενός στελέχους σε θέση στρατιωτών (Michael, 24/11): ΕΝΑ όριο από τα δύο που υπήρχαν χωριστά. Πρώτα το δικό του
+// «υπηρεσίες τον μήνα» (Cadre.monthMax, χωρίς έξτρα), μετά το προσωπικό όριο του προγράμματος στελεχών (cadreDutyOf.limit, με το έξτρα της
+// κατηγορίας), τέλος η βάση της κατηγορίας (αξιωματικοί/υπαξιωματικοί, με έξτρα). Το έξτρα (+1) μετρά «αν χρειαστεί» όπως στο πρόγραμμα
+// στελεχών: το όριο που ζητά επιβεβαίωση είναι η βάση. Εδώ και όχι στο cadreDuty.ts (εξαρτάται από το rules.ts): οι προεπιλογές 3+1 / 4+1 και ο
+// έλεγχος τιμής είναι ίδια με το dutyCfgOf (test/duty-limit.test.ts τα συγκρίνει).
+export interface SeatLimit { base: number; extra: number; src: 'monthMax' | 'own' | 'cat' }
+const cfgNum = (v: unknown, d: number) => (typeof v === 'number' && isFinite(v) && v >= 0 ? v : d);
+export function cadreSeatLimit(s: Pick<AppState, 'settings' | 'cadreDutyOf'>, c: Cadre): SeatLimit {
+  const cat = hkRowsOf(s.settings.lists).off.includes(c.hk) ? 'off' : 'nco';
+  const raw = s.settings.cadreDuty?.limits?.[cat]; const extra = cfgNum(raw?.extra, 1);
+  if (c.monthMax) return { base: c.monthMax, extra: 0, src: 'monthMax' };
+  const own = s.cadreDutyOf?.[c.id]?.limit;
+  if (typeof own === 'number' && isFinite(own) && own >= 0) return { base: Math.floor(own), extra, src: 'own' };
+  return { base: cfgNum(raw?.base, cat === 'off' ? 3 : 4), extra, src: 'cat' };
+}
+const seatLimitTxt = (l: SeatLimit) => l.base + (l.extra ? '+' + l.extra : '');
 // Το όριο του μήνα: «έφτασε το όριο» αν με αυτή τη μέρα το ξεπερνά (ζητά επιβεβαίωση, όπως όλοι οι κανόνες)
 export function monthBlock(s: AppState, date: ISODate, pid: number, idx?: Map<number, Set<ISODate>>): string | null {
   const c = pid < 0 ? cadreOf(s, pid) : undefined;
@@ -101,8 +117,10 @@ export function monthBlock(s: AppState, date: ISODate, pid: number, idx?: Map<nu
     // στέλεχος με κατάσταση εκείνη τη μέρα (άδεια, απαλλαγή, ΕΥ…): μόνο η «Υπηρεσία εντός στρατοπέδου» τον αφήνει
     const a = cadreAbsOn(s, c.id, date); const k = a && cadreAbsOf(a.kind, s.settings.lists);
     if (k && k[2] && k[2] !== 'yp') return 'Στέλεχος: ' + k[1] + ' ' + dm(a!.from) + (a!.to !== a!.from ? '–' + dm(a!.to) : '');
+    const l = cadreSeatLimit(s, c); const n = monthDuties(s, date, pid, idx);
+    return n >= l.base ? 'Έφτασε το όριο του μήνα: ' + n + ' από ' + seatLimitTxt(l) + ' υπηρεσίες' : null;
   }
-  const p = pid < 0 ? seatMap(s).get(pid) : personMap(s.people).get(pid);
+  const p = personMap(s.people).get(pid);
   const max = p?.monthMax;
   if (!p || !max || !limited(p, s.settings.lists)) return null;
   const n = monthDuties(s, date, pid, idx);
@@ -113,6 +131,49 @@ export function monthTxt(s: AppState, date: ISODate, p: Person, withDay = false)
   if (!limited(p, s.settings.lists)) return '';
   const n = monthDuties(s, date, p.id, undefined, withDay);
   return p.monthMax ? n + ' από ' + p.monthMax + ' τον μήνα' : n + ' τον μήνα';
+}
+
+// --------------------------- Όριο υπηρεσιών στρατιώτη (Michael, 24/11) ---------------------------
+// «Όριο 19 υπηρεσίες κάποιος και μετά να συμπληρώνει τους υπόλοιπους μέχρι να έρθουν even. Και προειδοποίηση όταν ξεπερνάει το όριο.»
+// Όριο από τους κανόνες (Rules.dutyMax) ή δικό του (Person.dutyMax, υπερισχύει)· περίοδος Rules.dutyMaxPer: 'all' (όλες οι υπηρεσίες που ξέρει η
+// εφαρμογή, όπως «Όλοι οι μήνες» στον Έλεγχο υπηρεσιών: ημερολόγιο, Excel, προηγούμενες) ή 'month' (ο μήνας της μέρας). Μετράει εκτός από την
+// ίδια τη μέρα. Η αυτόματη συμπλήρωση δεν παίρνει όποιον το έφτασε όσο υπάρχει άλλος· με το χέρι ζητά επιβεβαίωση (ruleBlock), ποτέ μπλοκάρισμα.
+export interface DutyLimit { max: number; per: 'all' | 'month'; own: boolean }
+const posInt = (v: unknown): number => { const n = Math.floor(Number(v)); return n > 0 && isFinite(n) ? n : 0; };
+export function dutyLimitOf(rules: Pick<Rules, 'dutyMax' | 'dutyMaxPer'>, p: Pick<Person, 'dutyMax'> | undefined): DutyLimit | null {
+  const own = posInt(p?.dutyMax); const max = own || posInt(rules.dutyMax);
+  return max ? { max, per: rules.dutyMaxPer === 'month' ? 'month' : 'all', own: !!own } : null;
+}
+// πόσες υπηρεσίες έχει στην περίοδο του ορίου (withDay: μετρά και η ίδια η μέρα)
+export function dutyCount(s: AppState, date: ISODate, pid: number, per: 'all' | 'month', idx?: Map<number, Set<ISODate>>, withDay = false): number {
+  if (per === 'month') return monthDuties(s, date, pid, idx, withDay);
+  const st = statOf(s, pid); let n = st.total;
+  if (!withDay) for (let i = st.log.length - 1; i >= 0 && st.log[i].d >= date; i--) if (st.log[i].d === date) n--;
+  return n;
+}
+// η αυτόματη συμπλήρωση μιας μέρας κρατά τους μετρητές όλης της δύναμης μία φορά (ίδια μέρα, ίδιο αποτέλεσμα)
+let limitGate: { date: ISODate; n: Map<number, number> } | null = null;
+let limitOff = false;   // στη συμπλήρωση «πάνω από το όριο» το όριο δεν ισχύει (fillOverLimit)
+function limitBlock(s: AppState, date: ISODate, pid: number, idx?: Map<number, Set<ISODate>>): string | null {
+  if (pid <= 0 || limitOff) return null;
+  const p = personMap(s.people).get(pid); if (!p || limited(p, s.settings.lists)) return null;
+  const lim = dutyLimitOf(s.rules, p); if (!lim) return null;
+  const n = (limitGate?.date === date ? limitGate.n.get(pid) : undefined) ?? dutyCount(s, date, pid, lim.per, idx);
+  return n >= lim.max ? 'Πάνω από το όριο: θα είναι η ' + (n + 1) + 'ή υπηρεσία του (όριο ' + lim.max + ')' : null;
+}
+const limitsOn = (s: Pick<AppState, 'rules' | 'people'>) => !!posInt(s.rules.dutyMax) || s.people.some(p => posInt(p.dutyMax));
+// «18 από 19» για τον Έλεγχο υπηρεσιών και την καρτέλα (στρατιώτης: όριο υπηρεσιών· στέλεχος: το όριο του μήνα για θέσεις). over: πάνω από το όριο
+export interface LimitInfo { n: number; txt: string; limit: string; per: 'all' | 'month'; over: boolean; own: boolean }
+export function dutyLimitInfo(s: AppState, date: ISODate, p: Person, withDay = true): LimitInfo | null {
+  if (p.cid) {
+    const c = cadreOf(s, p.id); if (!c) return null;
+    const l = cadreSeatLimit(s, c); const n = monthDuties(s, date, p.id, undefined, withDay);
+    return { n, limit: seatLimitTxt(l), txt: n + ' από ' + seatLimitTxt(l), per: 'month', over: n > l.base, own: l.src !== 'cat' };
+  }
+  if (limited(p, s.settings.lists)) return null;
+  const lim = dutyLimitOf(s.rules, p); if (!lim) return null;
+  const n = dutyCount(s, date, p.id, lim.per, undefined, withDay);
+  return { n, limit: String(lim.max), txt: n + ' από ' + lim.max, per: lim.per, over: n > lim.max, own: lim.own };
 }
 
 // Θέσεις του εντύπου που ισχύει τώρα (ΣΒΕΝ, ΣΠΕΝ ή δικό σου), χωρίς όσες έχουν αφαιρεθεί
@@ -575,12 +636,14 @@ export function ruleBlock(s: AppState, date: ISODate, pid: number, idx?: Map<num
   if (c && !c.monthMax && !isEpop(c, s.settings.lists)) return null;   // απλά στελέχη με το χέρι: μόνο η κατάσταση· ΕΠΟΠ/ΟΒΑ (και όποιο έχει όριο, #125) κρατούν τους κανόνες τους
   if (isFixed(s, pid, k)) return null;
   const ds = (idx || dutyIndexOf(s)).get(pid);
-  if (!ds) return null;
-  for (let i = 1; i <= r.restDays; i++) for (const d of [addDays(date, -i), addDays(date, i)]) if (ds.has(d)) return 'Υπηρεσία ' + dm(d) + ' (ανάπαυση)';
-  // από 2 μέρες: Παρασκευή αργία και Κυριακή είναι δύο αργίες στη σειρά (η 1 μέρα είναι ήδη ανάπαυση)
-  if (r.noConsecHol && isHol(s.settings, date))
-    for (let i = 2; i <= 9; i++) for (const d of [addDays(date, -i), addDays(date, i)]) if (ds.has(d) && isHol(s.settings, d)) return 'Έκανε αργία ' + holName(s.settings, d) + ' ' + dm(d);
-  return k ? numBlock(s, date, pid, k, ds) : null;
+  if (ds) {
+    for (let i = 1; i <= r.restDays; i++) for (const d of [addDays(date, -i), addDays(date, i)]) if (ds.has(d)) return 'Υπηρεσία ' + dm(d) + ' (ανάπαυση)';
+    // από 2 μέρες: Παρασκευή αργία και Κυριακή είναι δύο αργίες στη σειρά (η 1 μέρα είναι ήδη ανάπαυση)
+    if (r.noConsecHol && isHol(s.settings, date))
+      for (let i = 2; i <= 9; i++) for (const d of [addDays(date, -i), addDays(date, i)]) if (ds.has(d) && isHol(s.settings, d)) return 'Έκανε αργία ' + holName(s.settings, d) + ' ' + dm(d);
+    const nb = k ? numBlock(s, date, pid, k, ds) : null; if (nb) return nb;
+  }
+  return limitBlock(s, date, pid, idx);   // όριο υπηρεσιών (Michael, 24/11): τελευταίο, ώστε να φαίνονται πρώτα οι άλλοι λόγοι
 }
 // Στέλεχος σε θέση στρατιωτών: ό,τι θα έβγαζε το πρόγραμμα στελεχών (cadreDuty.ts eligibility) για τη μέρα, ως ⚠ και όχι ως μπλοκάρισμα
 // (Michael, 17/11: «μετρούν μαζί»). Εδώ και όχι στο cadreDuty.ts, που εξαρτάται από το rules.ts. Η θέση δεν είναι υπηρεσία του
@@ -824,7 +887,7 @@ export function fairCompare(h: boolean, kind: string, date: ISODate) {
 // rooms (Michael, 13/11): μόνο για αυτή τη συμπλήρωση, παίρνει μόνο όσους είναι σε αυτούς τους θαλάμους (κενό = όλοι).
 // Η σειρά δικαιοσύνης μετριέται όπως πάντα σε όλη τη δύναμη· οι μόνιμοι Λ/Υ-Δ/Υ μπαίνουν όπως πάντα.
 export function fillDay(s: AppState, date: ISODate, rooms?: readonly number[] | null): { guards: Guards; n: number; empty: string[]; warn: string[] } {
-  autoFill++; try { return fillDay0(s, date, rooms); } finally { autoFill--; }
+  autoFill++; try { return fillDay0(s, date, rooms); } finally { autoFill--; limitGate = null; limitOff = false; }
 }
 function fillDay0(s: AppState, date: ISODate, rooms?: readonly number[] | null): { guards: Guards; n: number; empty: string[]; warn: string[] } {
   const g: Record<string, number> = { ...(s.guards[date] || {}) };
@@ -835,7 +898,15 @@ function fillDay0(s: AppState, date: ISODate, rooms?: readonly number[] | null):
   // ΕΠΟΠ/ΟΒΑ: μόνο με το χέρι (εκτός αν είναι ο μόνιμος Λ/Υ ή Δ/Υ)
   const pool = dutyPool(s); const all = activePeople(s);
   const fair = fairMap(s, pool, date);
-  const people = rooms?.length ? pool.filter(p => p.room != null && rooms.includes(p.room)) : pool;
+  const people0 = rooms?.length ? pool.filter(p => p.room != null && rooms.includes(p.room)) : pool;
+  // όριο υπηρεσιών (Michael, 24/11): όσοι το έφτασαν δεν μπαίνουν όσο υπάρχει άλλος (ruleBlock: limitBlock)· χωρίς όριο, τίποτα δεν αλλάζει
+  const over = new Map<number, { n: number; max: number }>();
+  if (limitsOn(s)) {
+    const cnt = new Map<number, number>();
+    for (const p of pool) { const l = dutyLimitOf(s.rules, p); if (!l) continue; const n = dutyCount(s, date, p.id, l.per); cnt.set(p.id, n); if (n >= l.max) over.set(p.id, { n, max: l.max }); }
+    limitGate = cnt.size ? { date, n: cnt } : null;
+  }
+  const people = over.size ? people0.filter(p => !over.has(p.id)) : people0;
   // το ευρετήριο της βάσης κοινό (όχι αντίγραφο κάθε συνόλου)· αντίγραφο μόνο για όσους μπαίνουν σήμερα
   const idx = new Map(dutyIndexOf(s)); const own = new Set<number>();
   const mark = (id: number) => { if (!own.has(id)) { own.add(id); idx.set(id, new Set(idx.get(id) || [])); } idx.get(id)!.add(date); };
@@ -875,12 +946,22 @@ function fillDay0(s: AppState, date: ISODate, rooms?: readonly number[] | null):
   // αργία: θέσεις που κανείς δεν μπορούσε να πάρει επειδή όλοι είχαν κάνει αργία πρόσφατα (Michael, 1/11: «γεμίζει με ειδοποίηση»)
   const holWarn: string[] = []; const nHol = s.rules.noConsecHol && isHol(s.settings, date) ? fillAfterHoliday(s, date, g, mine, order, people, fair, idx, fixed, strict, mark) : 0;
   n += nHol;
+  // όριο υπηρεσιών: θέσεις που έμειναν κενές επειδή όλοι όσοι μπορούσαν είχαν φτάσει το όριο: μπαίνει όποιος είναι λιγότερο πάνω από το όριο, με ειδοποίηση
+  const limWarn: string[] = [];
+  const cap = over.size ? people0.filter(p => over.has(p.id)) : [];
+  if (cap.length && order.some(x => !g[x.k])) {
+    let put: number[] = [];
+    limitOff = true;
+    try { put = fillOverLimit(s, date, g, mine, order, cap, over, fair, idx, fixed, strict, mark); } finally { limitOff = false; }
+    n += put.length;
+    if (put.length) limWarn.push(dm(date) + ': ' + (put.length === 1 ? 'μπήκε 1' : 'μπήκαν ' + put.length) + ' πάνω από το όριο υπηρεσιών (' + put.map(pid => shortName(pm0.get(pid)!) + ' ' + (over.get(pid)!.n + 1) + '/' + over.get(pid)!.max).join(', ') + ')');
+  }
   if (nHol) holWarn.push(dm(date) + ': ' + (nHol === 1 ? 'μπήκε 1 που είχε' : 'μπήκαν ' + nHol + ' που είχαν') + ' κάνει αργία πρόσφατα (δεν έφταναν οι υπόλοιποι)');
   // μονάδα: 2η υπηρεσία όποιου έχει ήδη σήμερα, μόνο για θέσεις που έμειναν κενές (όλοι πήραν πρώτα μία)
   if (twoMode(s) !== 'never') { secondOn = true; try { n += secondPass(s, date, g, mine, order, people, fair, idx, fixed, strict, mark); } finally { secondOn = false; } }
   // κενές θέσεις και «χωρίς άλλη επιλογή» όπως έμειναν μετά την επιδιόρθωση
   const fin: AppState = { ...s, guards: { ...s.guards, [date]: g } };
-  const pm = pm0; const empty: string[] = []; const warn: string[] = [...fixedWarn, ...holWarn];
+  const pm = pm0; const empty: string[] = []; const warn: string[] = [...fixedWarn, ...holWarn, ...limWarn];
   for (const x of order) {
     const pid = g[x.k];
     if (!pid) { empty.push(x.k); if (skNone.has(x.k)) warn.push(x.label + ': ' + STRICT_SK); continue; }
@@ -938,6 +1019,21 @@ function repair(s: AppState, date: ISODate, g: Record<string, number>, mine: Set
   for (const x of posts) if (!g[x.k]) tryFill(x, false);
   for (const x of posts) if (mine.has(x.k) && g[x.k] && lr(g[x.k], x)) tryFill(x, true);
   return added;
+}
+// Όριο υπηρεσιών (Michael, 24/11): κενές θέσεις που δεν γέμισε κανείς κάτω από το όριο. Παίρνουν όσοι το έφτασαν, με τους ίδιους κανόνες
+// (το όριο δεν ισχύει εδώ), πρώτος όποιος είναι λιγότερο πάνω από το όριο· ισοπαλία: η σειρά δικαιοσύνης. Πόσα άτομα μπήκαν (pid).
+function fillOverLimit(s: AppState, date: ISODate, g: Record<string, number>, mine: Set<string>, posts: Post[], cap: Person[], over: Map<number, { n: number; max: number }>, fair: Map<number, Fair & { pid: number }>, idx: Map<number, Set<ISODate>>, fixed: Set<number>, strict: boolean, mark: (id: number) => void): number[] {
+  const put: number[] = []; const memo = new Map<string, number[]>();
+  const by = (p: Person) => over.get(p.id)!.n - over.get(p.id)!.max;
+  for (const x of posts) {
+    if (g[x.k]) continue;
+    const w: AppState = { ...s, guards: { ...s.guards, [date]: { ...g } } };
+    const list = candidates(w, date, x, cap, fair, idx, fixed, memo).map((p, i) => ({ p, i })).sort((a, b) => by(a.p) - by(b.p) || a.i - b.i).map(c => c.p);
+    const c = strict ? strictPick(w, date, x, list, cap, idx, fixed, memo) : list[0];
+    if (!c) continue;
+    g[x.k] = c.id; mine.add(x.k); mark(c.id); put.push(c.id);
+  }
+  return put;
 }
 // Δεύτερη υπηρεσία (μονάδα): κάθε κενή θέση παίρνει όποιον έχει ήδη υπηρεσία σήμερα, είναι πρώτος στη σειρά δικαιοσύνης (όποιος έχει λιγότερες
 // σήμερα πρώτος) και περνά όλους τους κανόνες (ώρες χωρίς επικάλυψη και με κενό, ανάπαυση, καταστάσεις, χωρίς «μόνο αν δεν υπάρχει άλλος»).
@@ -1263,7 +1359,7 @@ export function fairAvg(s: AppState, date: ISODate, fair?: Map<number, Fair>): {
 // «Γιατί αυτός;» για κάθε κατειλημμένη θέση μιας μέρας
 export function whyAll(s: AppState, date: ISODate): Record<string, string> {
   const g = s.guards[date] || {}; const keys = Object.keys(g); if (!keys.length) return {};
-  const fair = fairMap(s, dutyPool(s), date); const a = { ...fairAvg(s, date, fair), fair }; const out: Record<string, string> = {};
+  const fair = fairMap(s, dutyPool(s), date); const a = { ...fairAvg(s, date, fair), fair, skipped: skippedForLimit(s, date) }; const out: Record<string, string> = {};
   for (const k of keys) out[k] = whyText(s, date, k, a);
   return out;
 }
@@ -1281,7 +1377,14 @@ function reservedFor(s: AppState, date: ISODate, post: Post, pid: number, fair: 
 }
 const TYPE_NAME: Partial<Record<DutyKind, string>> = { th: 'θαλαμοφύλακας', op: 'οπλοφύλακας', sk: 'σκοπιά', mg: 'μαγειρεία', tae: 'ΤΑΕ', other: 'άλλη υπηρεσία' };
 const typeName = (s: AppState, post: Post) => { const t = dutyType(s, post.k, post.kind); return t.startsWith('b:') ? allBlocks(s.settings).find(b => 'b:' + b.id === t)?.name || post.label : TYPE_NAME[post.kind] || post.kind; };
-export function whyText(s: AppState, date: ISODate, k: string, avgs?: { hol: number; total: number; fair?: Map<number, Fair> }): string {
+// Όσοι έφτασαν το όριο υπηρεσιών τη μέρα και δεν έχουν θέση σήμερα (για το «Γιατί αυτός;»)
+function skippedForLimit(s: AppState, date: ISODate): number {
+  if (!limitsOn(s)) return 0;
+  const busy = new Set(Object.values(s.guards[date] || {})); let k = 0;
+  for (const p of dutyPool(s)) { if (busy.has(p.id)) continue; const l = dutyLimitOf(s.rules, p); if (l && dutyCount(s, date, p.id, l.per) >= l.max) k++; }
+  return k;
+}
+export function whyText(s: AppState, date: ISODate, k: string, avgs?: { hol: number; total: number; fair?: Map<number, Fair>; skipped?: number }): string {
   const pid = (s.guards[date] || {})[k]; const post = postBy(s, k);
   if (!pid || !post) return '';
   const p = seatMap(s).get(pid);
@@ -1301,6 +1404,10 @@ export function whyText(s: AppState, date: ISODate, k: string, avgs?: { hol: num
     parts.push(nn(f.total) + (f.total === 1 ? ' υπηρεσία' : ' υπηρεσίες') + (f.share != null ? ', αναλογούν ' + r1(f.share) : ' (μ.ό. ' + r1(avg(x => x.total)) + ')'));
   }
   if (f.avg) parts.push('νέος: από μ.ό.');
+  // όριο υπηρεσιών (Michael, 24/11): ή μπήκε πάνω από το όριο (δεν υπήρχε άλλος), ή άλλοι παραλείφθηκαν επειδή το έφτασαν
+  const lim = dutyLimitOf(s.rules, p);
+  if (lim) { const n = dutyCount(s, date, pid, lim.per); if (n >= lim.max) parts.push('⚠ πάνω από το όριο υπηρεσιών: ' + (n + 1) + 'ή, όριο ' + lim.max + ' (δεν υπήρχε άλλος κάτω από το όριο)'); else parts.push((n + 1) + 'ή υπηρεσία, όριο ' + lim.max); }
+  const skp = avgs?.skipped ?? skippedForLimit(s, date); if (skp) parts.push(skp + (skp === 1 ? ' παραλείφθηκε' : ' παραλείφθηκαν') + ' επειδή έφτασαν το όριο υπηρεσιών');
   const two = secondDuty(s, date, pid, k); if (two) parts.push('⚠ ' + two);
   const ah = isFixed(s, pid, k) ? null : dutyAhead(s, date, pid); if (ah) parts.push('έχει ήδη υπηρεσία ' + dm(ah));
   if (s.rules.rotate !== false) { const n = f.byType[dutyType(s, k, post.kind)] || 0; const nm = typeName(s, post); parts.push(n ? nm + ' ' + n + (n === 1 ? ' φορά' : ' φορές') + ' πριν' : 'πρώτη φορά ' + nm); }

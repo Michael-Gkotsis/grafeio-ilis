@@ -29,6 +29,7 @@ export const RULE_TXT = (r: Rules & { armBefore?: number; armAfter?: number }, s
   r.newAvg ? 'οι νέοι ξεκινούν από τον μέσο όρο' : '',
   r.rotate === false ? 'χωρίς εναλλαγή υπηρεσιών' : 'εναλλαγή υπηρεσιών',
   r.strictUnarmed ? 'Αυστηρά Άοπλοι' + (r.strictOrder && !same(strictKeys(r), DEFAULT_STRICT_ORDER) ? ' (' + strictOrderTxt(r, st) + ')' : '') : '',
+  r.dutyMax ? 'όριο υπηρεσιών στρατιωτών ' + r.dutyMax + (r.dutyMaxPer === 'month' ? ' τον μήνα' : ' συνολικά') : '',
   r.hkTime && r.hkTime !== DEFAULT_HK_TIME ? 'ώρα ' + HK() + ' ' + r.hkTime : '',
   (r.armBefore ?? ARM_BEFORE) !== ARM_BEFORE || (r.armAfter ?? ARM_AFTER) !== ARM_AFTER ? 'το όπλο ένοπλης υπηρεσίας βγαίνει ' + (r.armBefore ?? ARM_BEFORE) + '′ πριν και μπαίνει ' + (r.armAfter ?? ARM_AFTER) + '′ μετά' : ''
 ].filter(Boolean).join(', ');
