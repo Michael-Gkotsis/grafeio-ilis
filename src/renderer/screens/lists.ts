@@ -18,9 +18,10 @@ import { HK_A, HK_K, hkRankOf, personMap } from '../../shared/rules';
 import { hkRowLabel, HK } from '../../shared/unit';
 import { punAcc, punMax } from '../../shared/punish';
 
-const IDS: ListId[] = ['soldierRanks', 'cadreRanks', 'origins', 'specs', 'religions', 'medKinds', 'punKinds', 'leaveKinds', 'cadreAbs', 'weaponTypes', 'weaponOut', 'siUnarmed', 'subUnits', 'moveWhys'];
+const IDS: ListId[] = ['soldierRanks', 'cadreRanks', 'origins', 'specs', 'eids', 'religions', 'medKinds', 'punKinds', 'leaveKinds', 'cadreAbs', 'weaponTypes', 'weaponOut', 'siUnarmed', 'subUnits', 'moveWhys'];
 const HELP = (): Record<ListId, string> => ({
   moveWhys: 'Στο «Λόγος» της Κίνησης δύναμης (καρτέλα στρατιώτη, λειτουργία μονάδας). Οι βασικοί (Μετάθεση, Απόσπαση, Απόλυση) μένουν πάντα· ό,τι γράφεις στο «Άλλο…» μπορεί να μπει εδώ.',
+  eids: 'Στο πεδίο «Ειδικότητα» της καρτέλας στοιχείων (στρατιώτη και στελέχους), ως φίλτρο στο Προσωπικό και στα Έντυπα και ως στήλη στα Έντυπα. Είναι άλλο πράγμα από το Ο/Σ (όπλο/σώμα). Δεν επηρεάζει υπηρεσίες, έξοδο ή ΗΚΑΙ και δεν γράφεται στο Excel του Δυναμολογίου. Γράφεται με κεφαλαία· ό,τι κρύψεις δεν προτείνεται πια, αλλά μένει σε όσους το έχουν.',
   religions: 'Στο πεδίο «Θρήσκευμα» της καρτέλας στοιχείων (στρατιώτη και στελέχους), ως φίλτρο στο Προσωπικό και στα Έντυπα και ως στήλη στα Έντυπα. Δεν επηρεάζει υπηρεσίες, έξοδο ή ΗΚΑΙ. Πρόσθεσε ό,τι χρειάζεσαι, π.χ. «Ορθόδοξος Μουσουλμάνος»· ό,τι κρύψεις δεν προτείνεται πια, αλλά μένει σε όσους το έχουν.',
   subUnits: 'Μόνο στη λειτουργία μονάδας. Στο πεδίο «Λόχος / Ίλη» του στρατιώτη (νέος στρατιώτης, Γρήγορη εισαγωγή, καρτέλα) και στο Δυναμολόγιο, όπου υπάρχει στήλη και φίλτρο. Γράψε τα ονόματα όπως τα θες, π.χ. 1ος ΛΟΧΟΣ, 4η ΙΛΗ. Με τα βέλη αλλάζει η σειρά, με το «Μετονομασία» αλλάζει το όνομα και στους στρατιώτες που το έχουν. Όποιο το έχει κάποιος δεν σβήνεται, μόνο κρύβεται.',
   soldierRanks: 'Στη φόρμα στρατιώτη και στο dropdown «Βαθμός» του Δυναμολογίου. Κάθε δικός σου βαθμός λέει σε ποια γραμμή της ' + HK() + ' μετρά.',
@@ -93,6 +94,7 @@ export function ListsCard() {
     else if (id === 'moveWhys') state.people.forEach(p => (p.moves || []).forEach(m => add(m.why, p.id)));
     else if (id === 'weaponOut') (state.weaponLog || []).forEach(w => add(w.reason, w.pid));
     else if (id === 'subUnits') state.people.forEach(p => add(p.sub, p.id));
+    else if (id === 'eids') { state.people.forEach(p => add(p.eid, p.id)); state.cadreList.forEach(c => add(c.eid, undefined, cName(c))); }
     else if (id === 'religions') { state.people.forEach(p => add(p.religion, p.id)); state.cadreList.forEach(c => add(c.religion, undefined, cName(c))); }
     else if (id !== 'siUnarmed') state.people.forEach(p => add(id === 'specs' ? p.spec : p.rank, p.id));
     return m;
@@ -275,4 +277,4 @@ function WhoHas({ e }: { e?: { pids: Set<number>; names: Set<string> } }) {
   const ids = ps.map(p => p.id);
   return html`<div className="lists__who">${ps.map(p => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => nav.openPerson(p.id, ids)}>${rkShort(p)}${!p.active && html` <span className="muted">(εκτός)</span>`}</button>`)}${[...e.names].sort(collator.compare).map(n => html`<span key=${n} className="na">${n}</span>`)}</div>`;
 }
-const PH: Record<ListId, string> = { soldierRanks: 'π.χ. ΚΛΗΡ', cadreRanks: 'π.χ. ΣΜΧΟΣ', origins: 'π.χ. ΣΣΑΣ', specs: 'π.χ. ΠΝ', punKinds: 'π.χ. Επίπληξη', leaveKinds: 'π.χ. Γονική', cadreAbs: 'π.χ. Σχολείο', medKinds: 'π.χ. ΕΛ ΓΥΜΝ', siUnarmed: 'π.χ. Ι5', weaponTypes: 'π.χ. M1911', weaponOut: 'π.χ. ΦΡΟΥΡΑ', subUnits: 'π.χ. 1ος ΛΟΧΟΣ', religions: 'π.χ. Σιχ', moveWhys: 'π.χ. ΝΟΣΟΚΟΜΕΙΟ' };
+const PH: Record<ListId, string> = { soldierRanks: 'π.χ. ΚΛΗΡ', cadreRanks: 'π.χ. ΣΜΧΟΣ', origins: 'π.χ. ΣΣΑΣ', specs: 'π.χ. ΠΝ', punKinds: 'π.χ. Επίπληξη', leaveKinds: 'π.χ. Γονική', cadreAbs: 'π.χ. Σχολείο', medKinds: 'π.χ. ΕΛ ΓΥΜΝ', siUnarmed: 'π.χ. Ι5', weaponTypes: 'π.χ. M1911', weaponOut: 'π.χ. ΦΡΟΥΡΑ', subUnits: 'π.χ. 1ος ΛΟΧΟΣ', religions: 'π.χ. Σιχ', eids: 'π.χ. ΟΔΗΓΟΣ', moveWhys: 'π.χ. ΝΟΣΟΚΟΜΕΙΟ' };

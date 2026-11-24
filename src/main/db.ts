@@ -9,7 +9,7 @@ import { normNote } from '../shared/notes';
 import { clockOf, daysBetween, nowParts, today } from '../shared/dates';
 import { capsPerService, ownKinds } from '../shared/rules';
 import { writeDurable } from './files';
-import { splitOrigins } from '../shared/ranks';
+import { seedEids, splitOrigins } from '../shared/ranks';
 import { isStatusKind, type ListKind } from '../shared/sources';
 
 // empty: το αρχείο είναι άδειο (0 bytes) ή δεν έχει τους πίνακές μας (κόψιμο ρεύματος, μισή αντιγραφή φακέλου)
@@ -118,6 +118,8 @@ export class Store {
     }
     // προέλευση (Michael, 22/10): «ΕΠΟΠ ΛΧΙΑΣ» στον βαθμό γίνεται βαθμός ΛΧΙΑΣ με προέλευση ΕΠΟΠ (μόνο όσοι το έχουν)
     const so = splitOrigins(this.state); if (so) { this.commit(so); this.flush(); }
+    // ειδικότητα στελεχών (Michael, 24/11): όσες είχαν ήδη γραφτεί μπαίνουν στη λίστα Ειδικότητες (τα στελέχη μένουν όπως ήταν)
+    const se = seedEids(this.state); if (se) { this.commit(se); this.flush(); }
     // έγκριση σε όλες τις αιτήσεις (1/11): οι παλιές αιτήσεις (όχι άδειας) χωρίς απάντηση δεν μετρούν ως «περιμένουν»
     const mo = markOldRequests(this.state, today()); if (mo) { this.commit(mo); this.flush(); }
     // καινούργια βάση (χωρίς άτομα και προηγούμενες υπηρεσίες): δεν έχει τίποτα από την παλιά ανάγνωση του ελέγχου

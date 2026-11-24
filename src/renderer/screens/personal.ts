@@ -10,7 +10,7 @@ import { BLOOD_GROUPS, PFIELDS, XFIELDS, normExtra, normPersonal, showPersonal, 
 
 type P = any;
 type Key = PKey | XKey;
-type Rec = Personal & Extras & { religion?: string };
+type Rec = Personal & Extras & { religion?: string; eid?: string };
 const draftOf = (rec: Rec): Record<Key, string> => ({ iban: showPersonal('iban', rec.iban), amka: showPersonal('amka', rec.amka), afm: showPersonal('afm', rec.afm), email: rec.email || '', relEmail: rec.relEmail || '', blood: rec.blood || '' });
 const isX = (k: Key): k is XKey => k === 'email' || k === 'relEmail' || k === 'blood';
 const norm1 = (k: Key, v: unknown) => (isX(k) ? normExtra(k, v) : normPersonal(k, v));
@@ -19,10 +19,12 @@ const norm1 = (k: Key, v: unknown) => (isX(k) ? normExtra(k, v) : normPersonal(k
 export function PersonalTab({ who, rec }: P) {
   const { run } = useStore();
   const [f, setF] = useState(() => draftOf(rec));
-  const [saved, setSaved] = useState<Key | 'religion' | null>(null);
+  const [saved, setSaved] = useState<Key | 'religion' | 'eid' | null>(null);
   const lists = useStore().state.settings.lists;
   const [rel, setRel] = useState(rec.religion || '');   // θρήσκευμα (Michael, 18/11): επιλογή από τη λίστα Ρυθμίσεις › Λίστες, αποθηκεύεται μόλις διαλέξεις
   const religions = listOf(lists, 'religions');
+  const [eid, setEid] = useState(rec.eid || '');   // ειδικότητα (Michael, 24/11): επιλογή από τη λίστα Ρυθμίσεις › Λίστες › Ειδικότητες
+  const eids = listOf(lists, 'eids');
   const soldier = who.pid != null;   // e-mail και ομάδα αίματος: μόνο οπλίτες
   const live = useRef({ f, rec, who, run }); live.current = { f, rec, who, run };
   const save = async (k: Key) => {
@@ -65,6 +67,16 @@ export function PersonalTab({ who, rec }: P) {
         ${saved === x.k ? html`<span className="field__help">Αποθηκεύτηκε</span>` : null}
       </div>`)}
     </div>`}
+    <div className="field" data-eid="">
+      <label className="field__label" htmlFor="pr-eid">Ειδικότητα</label>
+      <${Select} id="pr-eid" className="ui-input" value=${eid}
+        onChange=${async (e: any) => { const v = e.target.value; setSaved(null); setEid(v); if (await run({ t: 'setPersonal', ...who, eid: v }, false)) setSaved('eid'); }}>
+        <option value="">— (δεν έχει δηλωθεί)</option>
+        ${eids.map(g => html`<option key=${g} value=${g}>${g}</option>`)}
+        ${eid && !eids.some(g => itemKey(g) === itemKey(eid)) ? html`<option value=${eid}>${eid}</option>` : null}
+      <//>
+      ${saved === 'eid' ? html`<span className="field__help">Αποθηκεύτηκε</span>` : html`<span className="field__help">Η λίστα συμπληρώνεται στις Ρυθμίσεις › Λίστες › Ειδικότητες. Δεν επηρεάζει υπηρεσίες ή ΗΚΑΙ.</span>`}
+    </div>
     <div className="field" data-religion="">
       <label className="field__label" htmlFor="pr-religion">Θρήσκευμα</label>
       <${Select} id="pr-religion" className="ui-input" value=${rel}

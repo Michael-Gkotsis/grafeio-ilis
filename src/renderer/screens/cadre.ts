@@ -8,7 +8,7 @@ import { useNav, useStore } from '../store';
 import { ActiveFilter, ChoiceField, DateRangeField, SigsMenu } from '../common';
 import { useHeadPick } from '../headPick';
 import type { Sig } from '../../shared/sigs';
-import { cadreAbsKinds, cadreAbsOf, guessHk, hkCadreRows, listOf, optionsOf, rankTxt, type UserLists } from '../../shared/ranks';
+import { cadreAbsKinds, cadreAbsOf, guessHk, hkCadreRows, itemKey, listOf, optionsOf, rankTxt, type UserLists } from '../../shared/ranks';
 import { hkRowLabel, HK, UNIT } from '../../shared/unit';
 import type { Cadre, CadreAbs } from '../../shared/domain';
 import { CADRE_FILTERS, GROUP_NAME, orderedCadre, cadreAbsFrom, cadreClash, cadreMatch, cadreSearch, cadreStateOn, cadreStatusOf, colShort, groupOfCol, type CadreFilter, type CadreGroup, type CadreStatus } from '../../shared/cadre';
@@ -199,7 +199,7 @@ function CadreDialog({ c, onClose }: P) {
   const lists = state.settings.lists;
   const ranks = useMemo(() => optionsOf(listOf(lists, 'cadreRanks'), state.cadreList.map(x => x.rank)), [state.cadreList, lists]);
   const specs = useMemo(() => optionsOf(listOf(lists, 'specs'), state.cadreList.map(x => x.spec || '')), [state.cadreList, lists]);
-  const eids = useMemo(() => optionsOf([], state.cadreList.map(x => x.eid || '')), [state.cadreList]);
+  const eids = useMemo(() => listOf(lists, 'eids'), [lists]);   // ειδικότητα: μόνο από τη λίστα Ρυθμίσεις › Λίστες › Ειδικότητες (Michael, 24/11)
   const wtypes = useMemo(() => optionsOf(listOf(lists, 'weaponTypes'), [c.wtype || '']), [lists, c.wtype]);
   const origins = useMemo(() => optionsOf(listOf(lists, 'origins'), [...state.cadreList.map(x => x.origin), ...state.people.map(p => p.origin)]), [state.cadreList, state.people, lists]);
   const [f, setF] = useState({ rank: c.rank || '', origin: c.origin || '', hk: c.hk || 'Λοχίες', spec: c.spec || '', eid: c.eid || '', last: c.last || '', first: c.first || '', am: c.am || '', phone: c.phone || '', role: c.role || '', active: c.active ?? true, monthMax: c.monthMax as number | undefined, wtype: c.wtype || '', weapon: c.weapon || '', rack: c.rack || '', wpos: c.wpos || '' });
@@ -215,7 +215,11 @@ function CadreDialog({ c, onClose }: P) {
       <${ChoiceField} id="cd-spec" label="Ο/Σ" value=${f.spec} options=${specs} placeholder="π.χ. ΤΘ" onChange=${(v: string) => setF({ ...f, spec: v })}/></div>
     <div className="field-row">${fld('last', 'Επώνυμο *')}${fld('first', 'Όνομα')}</div>
     <div className="field-row">${fld('am', 'ΑΜ', 'αριθμός μητρώου')}${fld('phone', 'Τηλέφωνο')}</div>
-    <div className="field-row"><${ChoiceField} id="cd-eid" label="Ειδικότητα" value=${f.eid} options=${eids} placeholder="π.χ. ΔΙΟΙΚΗΤΙΚΟΣ" otherLabel="+ Νέα ειδικότητα…" otherHelp="Γράφεται με κεφαλαία και μένει στη λίστα για την επόμενη φορά." onChange=${(v: string) => setF({ ...f, eid: v })}/></div>
+    <div className="field-row"><div className="field"><label className="field__label" htmlFor="cd-eid">Ειδικότητα</label><${Select} id="cd-eid" className="ui-input" value=${f.eid} onChange=${(e: any) => setF({ ...f, eid: e.target.value })}>
+        <option value="">— (δεν έχει δηλωθεί)</option>
+        ${eids.map(g => html`<option key=${g} value=${g}>${g}</option>`)}
+        ${f.eid && !eids.some(g => itemKey(g) === itemKey(f.eid)) ? html`<option value=${f.eid}>${f.eid}</option>` : null}
+      <//><span className="field__help">Η λίστα συμπληρώνεται στις Ρυθμίσεις › Λίστες › Ειδικότητες.</span></div></div>
     <div className="field-row">${fld('role', 'Θέση', 'π.χ. Διοικητής ' + UNIT().gen)}
       <div className="field"><label className="field__label" htmlFor="cd-hk">Γραμμή στην ${HK()}</label><${Select} id="cd-hk" className="ui-input" value=${f.hk} onChange=${(e: any) => { setHkTouched(true); setF({ ...f, hk: e.target.value }); }}>${hkCadreRows(lists).map(r => html`<option key=${r} value=${r}>${hkRowLabel(r)}</option>`)}<//></div></div>
     ${duty && html`<div className="field"><label className="field__label" htmlFor="cd-mm">Υπηρεσίες τον μήνα (το πολύ)</label><input id="cd-mm" className="ui-input" type="number" min="1" max="31" style=${{ maxWidth: '120px' }} placeholder="π.χ. 4" value=${f.monthMax ?? ''} onChange=${(e: any) => setF({ ...f, monthMax: Math.max(0, Math.floor(+e.target.value)) || undefined })}/><span className="field__help">Με αριθμό μπαίνει στις θέσεις των Υπηρεσιών, μόνο με το χέρι (ποτέ η αυτόματη συμπλήρωση). Πάνω από το όριο ζητά αιτία. Κενό = δεν κάνει υπηρεσίες.</span></div>`}
