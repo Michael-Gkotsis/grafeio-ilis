@@ -11,10 +11,11 @@ import { LeaveEndDialog, StatusFixDialog } from './people';
 import { hasTimes, normTime, timeNames } from '../../shared/hours';
 import { DayFormsDialog } from './dayForms';
 import { HdTab } from './hd';
-import { ActiveFilter, ChangePlanList, DateBar, DateField, DateRangeField, ExcelSheet, ExportButton, PersonPicker, StatusBadge, TemplateNote, TimeField, useUsbCopy } from '../common';
+import { ActiveFilter, ChangePlanList, DateBar, DateField, DateRangeField, ExportButton, PersonPicker, StatusBadge, TemplateNote, TimeField, useUsbCopy } from '../common';
 import { USB_DAYS, cadreDutyGaps, maintDueRows, newsSince, usbAge, usbDue } from '../../shared/reminders';
 import { noteDue, noteGroups, noteHead, noteSearch, noteWho } from '../../shared/notes';
-import { hkaiFront, hkaiBack, frouraEmpty } from '../sheets';
+import { frouraEmpty } from '../sheets';
+import { RealPreview } from '../realPreview';
 import { HK_SECTIONS, kolColName, dutyStartOf, hkLvOn, hkOn, hkToggle, type HkaiManual, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, coversDay, effects, fullName, shortName, unitOf, isWaiting, type LeaveAsk, type Person, type PersonRequest, type Status, platoonsOf, platoonShort, roomTxt } from '../../shared/domain';
 import { ReturnsList } from './guard';
 import { HK_MANUAL, approvalPlan, planNeedsOk, awayNow, activePeople, hkaiCounts, kolView, isRecordExpiredOn, personMap, statusesAt, statusesOn, strengthOf, strengthAt, awayText, SVC_AWAY_LBL, type StatusPlan } from '../../shared/rules';
@@ -357,14 +358,11 @@ function HkaiMain() {
   const date = nav.params.hkaiDate || today;
   const [side, setSide] = useState(mobile ? 'sum' : 'front');
   const h = useMemo(() => hkaiCounts(state, date), [state, date]);
-  const front = useMemo(() => hkaiFront(state, date, h), [state, date, h]);
-  const back = useMemo(() => hkaiBack(state, date), [state, date]);
   // στρατιώτες και στελέχη (καρτέλα Στελέχη, με τη σειρά της) σε κάθε στήλη
   const src = [...kolKeysOf(state.settings.lists), ...absKeysOf(state.settings.lists)].map(k => [k, '', hkColLabel(k, state.settings.lists)] as [string, string, string]).filter(([k]) => h.cols[k].length || h.cadre[k]?.length);
   const cOrd = useMemo(() => new Map(orderedCadre(state.cadreList).map((c, i) => [c.id, i])), [state.cadreList]);
   const cadreOf = (k: string) => [...(h.cadre[k] || [])].sort((a, b) => (cOrd.get(a.id) ?? 0) - (cOrd.get(b.id) ?? 0));
   const cadreSeen = [...new Set(src.flatMap(([k]) => cadreOf(k).map(c => c.id)))];   // ▲▼ στην κάρτα στελέχους: τα στελέχη όπως φαίνονται εδώ, στη σειρά των στηλών
-  const fn = HK() + ' ' + dm(date).replace('/', '.') + '.' + date.slice(2, 4) + '.xlsx';
   const cadre = state.cadreList.filter(c => c.active).length || Object.values(state.settings.cadre).reduce((a, b) => a + (b || 0), 0);
   const sum = html`<div className="stack"><${Card} title="Από πού βγαίνει κάθε αριθμός">
     <div className="tiles" style=${{ marginBottom: '12px' }}><div className="tile tile--main" data-tip=${'Η δύναμη της ' + HK() + ': στρατιώτες και στελέχη, με τον κανόνα των ' + (state.rules?.hkTime || '08:00') + '. Το Σήμερα και η Δύναμη μετρούν μόνο στρατιώτες, τώρα.'}><span className="tile__n">${h.total}</span><span className="tile__l">Δύναμη</span></div><div className="tile"><span className="tile__n">${h.kol}</span><span className="tile__l">Κωλυόμενοι</span></div><div className="tile"><span className="tile__n">${h.apo}</span><span className="tile__l">Απόντες</span></div><div className="tile"><span className="tile__n">${h.avail}</span><span className="tile__l">Διαθέσιμοι</span></div></div>
@@ -381,7 +379,7 @@ function HkaiMain() {
   <${HkaiSectionsCard}/></div>`;
   const sheets = html`<div>
     <div className="toolbar" style=${{ marginBottom: '8px' }}>${!mobile && html`<${Tabs} value=${side === 'sum' ? 'front' : side} onChange=${setSide} items=${[{ value: 'front', label: 'Μπροστά' }, { value: 'back', label: 'Πίσω' }]}/>`}<${HkLeavesToggle} date=${date} onToggle=${() => setSide('back')}/></div>
-    ${side === 'back' ? html`<${ExcelSheet} model=${back} fileName=${fn} sheetName="πισω" meta="A4 οριζόντιο"/>` : html`<${ExcelSheet} model=${front} fileName=${fn} sheetName="μπροστινο" meta="A4 οριζόντιο · 1 σελίδα" footer="Γράφονται μόνο τα κελιά εισόδου· τα αθροίσματα μένουν τύποι του εντύπου."/>`}
+    <${RealPreview} req=${{ kind: 'hkai', date }} watch=${state} sheet=${side === 'back' ? 1 : 0}/>
     <${TemplateNote} ids=${['hkai']}/></div>`;
   return html`<div>
     <${PageHeader} title=${HK() + ' της ' + dmy(date)} sub="Βγαίνει μόνη της· κάθε αριθμός ανοίγει τα ονόματα."><${DateBar} value=${date} onChange=${(d: string) => requestLeave(() => nav.set({ hkaiDate: d }))} days=${[addDays(today, -1), today, addDays(today, 1)]}/>

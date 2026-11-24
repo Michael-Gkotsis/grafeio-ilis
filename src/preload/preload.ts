@@ -87,6 +87,7 @@ const api: Api = {
   repBuild: (o, kind, file) => ipcRenderer.invoke('rep:build', o, kind, file),
   repPreview: (src, r, ids, date, raw, opts) => ipcRenderer.invoke('rep:preview', src, r, ids, date, !!raw, opts),
   layoutPreview: q => ipcRenderer.invoke('layout:preview', q),
+  formPreview: q => ipcRenderer.invoke('form:preview', q),
   repRun: (r, file, ids, date, print, force, opts) => ipcRenderer.invoke('rep:run', r, file, ids, date, !!print, !!force, opts || {}),
   repHist: id => ipcRenderer.invoke('rep:hist', id),
   repTimes: id => ipcRenderer.invoke('rep:times', id),

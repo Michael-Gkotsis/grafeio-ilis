@@ -11,7 +11,8 @@ import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
 import { ActiveFilter, DateBar, ExcelSheet, ExportButton, GoLink, PersonPicker, PrintButton, SigsButton, TemplateNote, TimeField, MonthField, useExport, useExportBusy } from '../common';
 import { useHeadPick } from '../headPick';
 import { mins, normTime } from '../../shared/hours';
-import { frouraSheet, checkSheet } from '../sheets';
+import { checkSheet } from '../sheets';
+import { RealPreview } from '../realPreview';
 import { fileNameOf, frouraName } from '../../shared/fileNames';
 import { roomCfg, blockShape, groupKey, TYPES, KIND_LBL, KIND_NAME, OUTS_FMT, isOutsAll, PHASE_NAME, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, blocksOf, everyBlock, dutyStartOf, phaseBase, phaseList, phaseName, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type OutsFmt, type Rules, type Person, type Phase, type Post, type Status, type TypeKey } from '../../shared/domain';
 import { dutyPool, secondDuty, whyAll, fairKey, isEpop, monthTxt, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, seatMap, seatPeople, pickPeople, postOf, postsOf, ruleBlock, statusesFrom, outMinOn, dutyMin, DEFAULT_HK_TIME, statusWarn, strengthOf, activePeople, strictKeys, aheadDays } from '../../shared/rules';
@@ -71,7 +72,7 @@ const MonthSelect = ({ m, width = '190px', small }: { m: DutyMonth; width?: stri
 
 function DutyCheck({ onOpen, m }: P) {
   const { state, today } = useStore();
-  const [q, setQ] = useState(''); const dq = useDeferredValue(q); const [hol, setHol] = useState(false); const [view, setView] = useState('list');
+  const [q, setQ] = useState(''); const dq = useDeferredValue(q); const [hol, setHol] = useState(false); const [view, setView] = useState('list'); const [pvOpen, setPvOpen] = useState(false);
   // μέρες χωρίς υπηρεσία: από την τελευταία υπηρεσία του, όποιου μήνα (όχι μόνο του μήνα που βλέπεις)
   const allSt = dutyStats(state);
   const idle = (pid: number): number => { const l = allSt.get(pid)?.last; return l ? Math.max(0, daysBetween(l, today) - 1) : 9999; };
@@ -100,7 +101,9 @@ function DutyCheck({ onOpen, m }: P) {
   const chkHead = kinds.some(k => kindLbl(k).length > 9) ? 58 : 34;
   return html`<${Card} title="Έλεγχος υπηρεσιών" actions=${html`<${Badge} tone="ok" data-tip="Βγαίνει από το ημερολόγιο υπηρεσιών (ποιος, ποια μέρα, ποια θέση) (Κ-03)" data-tip-side="left">Ενημερώνεται αυτόματα<//>`}>
     <div className="toolbar"><${Segmented} value=${view} onChange=${setView} items=${[{ value: 'list', label: 'Λίστα' }, { value: 'grid', label: 'Μηνιαίο πλέγμα (Excel)' }]}/>
-      ${view === 'grid' && html`<input type="search" className="ui-input" style=${{ width: '240px' }} aria-label="Αναζήτηση στο πλέγμα" placeholder="Όνομα (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/><${MonthField} aria-label="Μήνας" style=${{ width: '170px' }} value=${ym} onChange=${(e: any) => { if (e.target.value) { setYm(e.target.value); setAllM(false); } }}/><${ExportButton} kind="check" date=${ym + '-01'} label=${'Έλεγχος υπηρεσιών ' + mon} size="sm"/>`}</div>
+      ${view === 'grid' && html`<input type="search" className="ui-input" style=${{ width: '240px' }} aria-label="Αναζήτηση στο πλέγμα" placeholder="Όνομα (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/><${MonthField} aria-label="Μήνας" style=${{ width: '170px' }} value=${ym} onChange=${(e: any) => { if (e.target.value) { setYm(e.target.value); setAllM(false); } }}/><${ExportButton} kind="check" date=${ym + '-01'} label=${'Έλεγχος υπηρεσιών ' + mon} size="sm"/><${Button} size="sm" variant="outline" onClick=${() => setPvOpen(true)} data-tip="Το ίδιο αρχείο που βγαίνει στο Excel, σε σελίδες όπως θα τυπωθεί">Προεπισκόπηση αρχείου<//>`}</div>
+    ${pvOpen && html`<${Dialog} size="xl" title=${'Προεπισκόπηση · ' + fileNameOf(state.settings, 'check', { text: norm(mon) })} description="Είναι το ίδιο αρχείο που βγαίνει στο Excel (το πλέγμα εδώ πάνω φιλτράρεται, το αρχείο έχει πάντα όλους)." onClose=${() => setPvOpen(false)}
+      footer=${html`<${Button} variant="outline" onClick=${() => setPvOpen(false)}>Κλείσε<//>`}><${RealPreview} req=${{ kind: 'check', date: ym + '-01' }} watch=${state}/><//>`}
     ${view === 'grid' ? html`<${ExcelSheet} model=${grid} fileName=${fileNameOf(state.settings, 'check', { text: norm(mon) })} sheetName="ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ" meta="A4 οριζόντιο" footer="Γκρι στήλες: ΣΚ και αργίες, από το ημερολόγιο. Θ θαλαμοφύλακας · Μ μαγειρεία · ΛΥ Λ/Υ-Δ/Υ. Στο Excel γράφεται και ο λόγος απουσίας."/>` : html`<div>
     <div className="toolbar" style=${{ marginBottom: 0 }}><input type="search" className="ui-input" aria-label="Αναζήτηση στον έλεγχο" placeholder="Όνομα (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
       <${MonthSelect} m=${m}/>
@@ -320,7 +323,6 @@ export function GuardScreen() {
     return { noDuty, unarmed, posted, capped, offDay, epop };
   }, [state.statuses, state.caps, state.people, state.cadreList, state.settings, date]);
   const epopHint = useCallback((p: Person) => monthTxt(state, date, p), [state.guards, state.dutyLog, state.settings, state.cadreList, state.cadreDuties, date]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const model = useMemo(() => frouraSheet(state, date), [state, date]);
   // «Γιατί αυτός;» μία φορά ανά αλλαγή, όχι σε κάθε απόδοση (π.χ. όσο γράφεις αιτία στο παράθυρο «παρά τον κανόνα»)
   const why = useMemo(() => whyAll(state, date), [state.guards, state.dutyLog, state.people, state.settings, state.baseline, state.statuses, state.caps, state.rules, date]);
   const [force, setForce] = useState<{ k: string; p: Person; why: string; reason: string; swapWith?: string; move?: string } | null>(null);
@@ -413,7 +415,9 @@ export function GuardScreen() {
   // γιατί είναι γκρι η «Αυτόματη συμπλήρωση» (UX Μ5)
   const afWhy = locked ? 'Περασμένη μέρα: πάτα πρώτα «Ξεκλείδωσε για διόρθωση»' : !people.length ? 'Δεν έχουν μπει στρατιώτες (μενού Στρατιώτες)' : !empty.length ? 'Δεν υπάρχουν κενές θέσεις' : '';
   const fileName = frouraName(state.settings, phase, date);
-  const sheet = () => html`<${ExcelSheet} model=${model} fileName=${fileName} sheetName=${'ΦΡΟΥΡΑ ' + phaseName(state.settings, phase)} meta=${(empty.length ? '⚠ ' + empty.length + ' κενές' : '✓ Πλήρης') + ' · A4 οριζόντιο'}/>`;
+  // το ίδιο αρχείο που βγάζει το «Βγάλε το Excel» (με το template, τα ενεργά μπλοκ, την κεφαλίδα και τις υπογραφές που ισχύουν)· ροζ τα κελιά των κενών θέσεων, μόνο στην οθόνη
+  const sheet = () => html`<div className="guard__pv"><p className=${cx('note', 'guard__pvinfo', empty.length && 'is-warn')} role="status">${empty.length ? '⚠ ' + empty.length + (empty.length === 1 ? ' κενή' : ' κενές') + ' · ' + empty.map(x => x.label).join(', ') + ' (ροζ στην οθόνη, κενές και στο Excel)' : '✓ Πλήρης'} · ${fileName}</p>
+    <${RealPreview} req=${{ kind: 'froura', date, headId: hpF.headId }} watch=${state}/></div>`;
   const left = html`<div className="guard__left">
     ${locked && html`<${Alert} tone="info"><span>Περασμένη μέρα: οι θέσεις είναι κλειδωμένες για να μην αλλάξει κατά λάθος ο έλεγχος υπηρεσιών.</span><${Button} size="sm" variant="outline" onClick=${() => setUnlocked({ ...unlocked, [date]: true })}>Ξεκλείδωσε για διόρθωση<//><//>`}
     ${printed && html`<${Alert} tone="info"><span>Βγήκε Excel για αυτή τη μέρα στις <b>${printed}</b>. Αν αλλάξεις κάτι, βγάλ' το ξανά.</span><//>`}
@@ -490,7 +494,7 @@ export function GuardScreen() {
     <div className="guard__days"><${DateBar} value=${date} onChange=${setDate} days=${[0, 1, 2, 3, 4, 5, 6].map(i => addDays(today, i))} count=${emptyOn}/></div>
     <div style=${{ marginBottom: '14px' }}><${Tabs} value=${cur} onChange=${setTab} items=${tabs}/></div>
     ${cur === 'skips' ? html`<${SkipsView} onPerson=${setProf}/>` : cur === 'who' ? whoTab : mobile ? (cur === 'posts' ? left : cur === 'check' ? check : xl) : (cur === 'posts' ? html`<div className="guard">${left}${side}</div>` : check)}
-    ${preview && html`<${Dialog} size="xl" title=${'Προεπισκόπηση · ' + fileName} description="Ό,τι βλέπεις εδώ βγαίνει ίδιο στο Excel." onClose=${() => setPreview(false)}
+    ${preview && html`<${Dialog} size="xl" title=${'Προεπισκόπηση · ' + fileName} description="Είναι το ίδιο αρχείο που βγαίνει στο Excel." onClose=${() => setPreview(false)}
       footer=${html`<${Button} variant="outline" onClick=${() => setPreview(false)}>Κλείσε<//><${PrintButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών" variant="outline" take=${hpF.take}/>${hpF.nodeAt('pv')}<${Button} disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>`}>${sheet()}<//>`}
     ${rules && html`<${RulesDialog} onClose=${() => setRules(false)} onTab=${setTab} onFixed=${() => { setTab('posts'); setFixedOpen(true); }}/>`}
     ${roomsOpen && html`<${RoomsDialog} value=${onlyRooms} onSave=${setOnlyRooms} onClose=${() => setRoomsOpen(false)}/>`}

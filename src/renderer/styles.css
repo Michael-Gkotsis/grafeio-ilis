@@ -1180,6 +1180,9 @@ button.lists__n{text-decoration:underline dotted;text-underline-offset:3px;color
 .rep-pv.is-busy .rep-pv__page{opacity:.55;transition:opacity .2s}
 .rep-pv .empty{color:#eee}
 .rep-pv__more{color:#eee;text-align:center;margin:0}
+.realpv{display:flex;flex-direction:column;gap:8px;min-width:0}.realpv .rep-pvbar{min-height:0}.realpv .rep-pvbar:empty{display:none}
+.realpv__busy{margin-left:auto;font-size:12px;font-weight:600;color:var(--muted-fg)}.realpv .rep-pvbar__pg{margin-left:0}.realpv__busy ~ .rep-pvbar__pg{margin-left:0}
+.realpv__warn{margin:0;padding-left:18px;font-size:13px;color:var(--muted-fg)}
 .rep-pickhint{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:var(--radius);background:var(--info-bg);color:var(--info);font-size:13px}
 .rep-pickhint .ui-btn{margin-left:auto}
 .rep-opts{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;font-size:13px}

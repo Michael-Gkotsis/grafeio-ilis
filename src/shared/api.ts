@@ -79,6 +79,10 @@ export interface RepPreview { html: string; css: string; pages: number; counts?:
 // Θέσεις πάνω στο χαρτί: το έντυπο όπως θα βγει (με τις θέσεις layout/sigs αν δόθηκαν), ή ένα από τα Έντυπα
 export type LayoutReq = { form: LayoutForm; date: ISODate; sigs?: Sig[]; layout?: Layout; headId?: string } | { report: Report; file?: string; build?: BuildOpts; ids: (number | string)[]; date: ISODate; headId?: string };
 export interface LayoutPv { css: string; sheets: (LayoutSheet & { html: string; pages: number })[]; warnings: string[] }
+// Προεπισκόπηση του ίδιου αρχείου που γράφει η εξαγωγή (Michael, 24/11): kind/date όπως στο exportFile· sheet: μόνο αυτό το φύλλο
+export interface FormPvReq { kind: ExportKind; date: ISODate; sheet?: string; sigs?: Sig[]; headId?: string }
+// marks: κελιά (όπως βγήκαν στο πρώτο φύλλο) των κενών θέσεων, μόνο για την οθόνη· ms: πόσο κράτησε (0 = από τη μνήμη)
+export interface FormPv { css: string; sheets: { name: string; html: string; pages: number }[]; warnings: string[]; marks: string[]; ms: number }
 export type { Block };
 export interface TplFile { exists: boolean; mtime: number }
 // Πρόχειρο εντύπου για προεπισκόπηση: από αρχείο προτύπου, ή από τις επιλογές του «Φτιάξ' το εδώ» (χωρίς αρχείο ακόμα)
@@ -174,6 +178,7 @@ export interface Api {
   repBuild(o: BuildOpts, kind: RepKind, file?: string): Promise<({ ok: true; file: string; mtime: number } & BuiltOut) | Fail>;
   repPreview(src: RepSource, r: Report, ids: (number | string)[], date: ISODate, raw?: boolean, opts?: { sample?: number }): Promise<RepPreview | Fail>;
   layoutPreview(q: LayoutReq): Promise<LayoutPv | Fail>;
+  formPreview(q: FormPvReq): Promise<FormPv | Fail>;
   // out 'sheet': γράφει φύλλο στο Δυναμολόγιο/άλλο Excel· confirm: φύλλα με ίδιο όνομα που δεν έφτιαξε το έντυπο (ξανά με force)
   repRun(r: Report, file: string, ids: (number | string)[], date: ISODate, print?: boolean, force?: boolean, opts?: { quiet?: boolean; again?: boolean; headId?: string }): Promise<RepRunResult>;
   repHist(id: string): Promise<RepHistEntry[]>;   // ιστορικό εκδόσεων: τα 10 τελευταία, νεότερο πρώτο
