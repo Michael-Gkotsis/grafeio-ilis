@@ -8,6 +8,7 @@ import { itemKey, live, rankTxt, statusLbl } from './ranks';
 import { leavePhrase } from './hkaiText';
 import { collator } from './text';
 import { backBy } from './hours';
+import { ekeState } from './mode';
 
 export type RosterFilter = 'all' | 'leave' | 'pun' | 'post' | 'inactive' | 'dnright';
 export const ROSTER_FILTERS: [RosterFilter, string, string][] = [
@@ -26,13 +27,14 @@ const isPun = (s: Status) => s.type === 'PUN';
 export function filterStatus(f: RosterFilter, on: Status[]): Status | undefined {
   return f === 'leave' ? on.find(isLeave) : f === 'pun' ? on.find(isPun) : undefined;
 }
-// Ταιριάζει στο φίλτρο; on: οι καταστάσεις του τη μέρα (statusesOn)
-export function rosterMatch(f: RosterFilter, p: Person, on: Status[]): boolean {
+// Ταιριάζει στο φίλτρο; on: οι καταστάσεις του τη μέρα (statusesOn)· day: η μέρα για το φίλτρο «eke» (Σε ΕΚΕ τη μέρα)
+export function rosterMatch(f: RosterFilter, p: Person, on: Status[], day?: ISODate): boolean {
   if (f === 'inactive') return !p.active;
   if (!p.active) return false;
   if (f === 'all') return true;
   if (f.startsWith('rel:')) return !!p.religion && itemKey(p.religion) === f.slice(4);   // αποθηκευμένη λίστα με θρήσκευμα (Προσωπικό)
   if (f.startsWith('eid:')) return !!p.eid && itemKey(p.eid) === f.slice(4);   // αποθηκευμένη λίστα με ειδικότητα (Προσωπικό, Michael 24/11)
+  if ((f as string) === 'eke') return !!day && ekeState(p, day) === 'now';   // αποθηκευμένη λίστα «Σε ΕΚΕ» (Στρατιώτες, Michael 24/11)
   if (f === 'post') return !!p.post;
   if (f === 'dnright') return !!p.dn;
   return !!filterStatus(f, on);

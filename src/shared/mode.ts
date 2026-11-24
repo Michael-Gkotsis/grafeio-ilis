@@ -100,3 +100,29 @@ export function moveRows(list: PendingMove[], name: (p: Person) => string): Move
   }
   return rows;
 }
+
+// Σε ΕΚΕ, εκπαίδευση ειδικότητας (Michael, 24/11): ο στρατιώτης έρχεται στη μονάδα για ένα διάστημα (από–έως, το έως προαιρετικό).
+// Η ειδικότητα που εκπαιδεύεται είναι το eid. Μόνο ενημερωτικό: σήμα στη λίστα, φίλτρο και στήλες στα Έντυπα· δεν αγγίζει υπηρεσίες, έξοδο, ΗΚΑΙ.
+export type EkeState = 'now' | 'soon' | 'none';
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+// now: ισχύει τη μέρα· soon: αρχίζει αργότερα· none: δεν έχει ή έληξε. Χωρίς «από» (μόνο «έως») = από την αρχή, ισχύει ως το «έως»
+export function ekeState(p: Pick<Person, 'eke'>, day: ISODate): EkeState {
+  const e = p.eke; if (!e || (!e.from && !e.to)) return 'none';
+  if (e.from && e.from > day) return 'soon';
+  return !e.to || day <= e.to ? 'now' : 'none';
+}
+// Γιατί δεν γίνονται δεκτές αυτές οι μέρες (κενό = εντάξει): λάθος μορφή ή μέρα που δεν υπάρχει, «έως» πριν το «από»
+export function ekeWhy(from?: string | null, to?: string | null): string {
+  const bad = (v: string) => { const t = new Date(v + 'T12:00:00Z'); return !ISO_DAY.test(v) || isNaN(+t) || t.toISOString().slice(0, 10) !== v; };
+  for (const v of [from, to]) if (v && bad(v)) return 'Λάθος ημερομηνία στην ΕΚΕ';
+  return from && to && from > to ? 'Το «Έως» της ΕΚΕ δεν μπορεί να είναι πριν από το «Από»' : '';
+}
+// Η ΕΚΕ όπως αποθηκεύεται: μόνο ό,τι έχει τιμή· τίποτα = χωρίς ΕΚΕ
+export const cleanEke = (from?: string | null, to?: string | null): Person['eke'] =>
+  from || to ? { ...(from ? { from: from as ISODate } : {}), ...(to ? { to: to as ISODate } : {}) } : undefined;
+// Το σήμα δίπλα στο όνομα: «ΕΚΕ έως 12/12» (τώρα), «ΕΚΕ από 07/12» (αρχίζει αργότερα), «ΕΚΕ» (τώρα, χωρίς έως)· τίποτα όταν έληξε ή δεν έχει
+export function ekeBadge(p: Pick<Person, 'eke'>, day: ISODate): { text: string; now: boolean } | null {
+  const st = ekeState(p, day); if (st === 'none') return null;
+  const e = p.eke!; const dm = (d: ISODate) => d.slice(8) + '/' + d.slice(5, 7);
+  return st === 'soon' ? { text: 'ΕΚΕ από ' + dm(e.from!), now: false } : { text: e.to ? 'ΕΚΕ έως ' + dm(e.to) : 'ΕΚΕ', now: true };
+}

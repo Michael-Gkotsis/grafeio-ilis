@@ -2,30 +2,34 @@
 // οθόνες)· των οπλιτών γράφονται και στο Excel του Δυναμολογίου (στήλες IBAN, ΑΜΚΑ, ΑΦΜ, Michael 3/11), των στελεχών στο δικό τους Excel (ΣΤΕΛΕΧΗ, Αρχεία Excel). Αποθηκεύονται μόνα τους όταν βγεις από το πεδίο ή φύγεις από την καρτέλα·
 // ο έλεγχος (ψηφία κ.λπ.) μόνο προειδοποιεί, δεν εμποδίζει.
 import { useEffect, useRef, useState } from 'react';
-import { html } from '../ui';
+import { html, Button } from '../ui';
 import { useStore } from '../store';
 import { Select } from '../select';
+import { DateField } from '../common';
+import { isUnit } from '../../shared/mode';
 import { listOf, itemKey } from '../../shared/ranks';
 import { BLOOD_GROUPS, PFIELDS, XFIELDS, normExtra, normPersonal, showPersonal, warnPersonal, type Extras, type Personal, type PKey, type XKey } from '../../shared/personal';
 
 type P = any;
 type Key = PKey | XKey;
-type Rec = Personal & Extras & { religion?: string; eid?: string };
+type Rec = Personal & Extras & { religion?: string; eid?: string; eke?: { from?: string; to?: string } };
 const draftOf = (rec: Rec): Record<Key, string> => ({ iban: showPersonal('iban', rec.iban), amka: showPersonal('amka', rec.amka), afm: showPersonal('afm', rec.afm), email: rec.email || '', relEmail: rec.relEmail || '', blood: rec.blood || '' });
 const isX = (k: Key): k is XKey => k === 'email' || k === 'relEmail' || k === 'blood';
 const norm1 = (k: Key, v: unknown) => (isX(k) ? normExtra(k, v) : normPersonal(k, v));
 
 // who: { pid } ή { cid }, rec: το άτομο ή το στέλεχος (key=id στον γονιό, ώστε να ξαναρχίζει σε κάθε άλλο άτομο)
 export function PersonalTab({ who, rec }: P) {
-  const { run } = useStore();
+  const { run, state, today } = useStore();
   const [f, setF] = useState(() => draftOf(rec));
-  const [saved, setSaved] = useState<Key | 'religion' | 'eid' | null>(null);
+  const [saved, setSaved] = useState<Key | 'religion' | 'eid' | 'eke' | null>(null);
   const lists = useStore().state.settings.lists;
   const [rel, setRel] = useState(rec.religion || '');   // θρήσκευμα (Michael, 18/11): επιλογή από τη λίστα Ρυθμίσεις › Λίστες, αποθηκεύεται μόλις διαλέξεις
   const religions = listOf(lists, 'religions');
   const [eid, setEid] = useState(rec.eid || '');   // ειδικότητα (Michael, 24/11): επιλογή από τη λίστα Ρυθμίσεις › Λίστες › Ειδικότητες
   const eids = listOf(lists, 'eids');
   const soldier = who.pid != null;   // e-mail και ομάδα αίματος: μόνο οπλίτες
+  const eke = soldier && isUnit(state.settings);   // Σε ΕΚΕ (Michael, 24/11): μόνο οπλίτες, μόνο λειτουργία μονάδας· αποθηκεύεται μόλις αλλάξει
+  const setEke = async (from?: string, to?: string) => { setSaved(null); if (await run({ t: 'setEke', pid: who.pid, ...(from ? { from } : {}), ...(to ? { to } : {}) }, false)) setSaved('eke'); };
   const live = useRef({ f, rec, who, run }); live.current = { f, rec, who, run };
   const save = async (k: Key) => {
     const { f: cur, rec: r, who: w, run: go } = live.current;
@@ -77,6 +81,15 @@ export function PersonalTab({ who, rec }: P) {
       <//>
       ${saved === 'eid' ? html`<span className="field__help">Αποθηκεύτηκε</span>` : html`<span className="field__help">Η λίστα συμπληρώνεται στις Ρυθμίσεις › Λίστες › Ειδικότητες. Δεν επηρεάζει υπηρεσίες ή ΗΚΑΙ.</span>`}
     </div>
+    ${eke && html`<div className="field" data-eke="">
+      <label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!rec.eke} onChange=${(e: any) => (e.target.checked ? setEke(today) : setEke())}/>Σε ΕΚΕ (εκπαίδευση ειδικότητας)</label>
+      ${rec.eke && html`<div className="field-row">
+        <div className="field"><label className="field__label" htmlFor="pr-eke-from">Από</label><${DateField} id="pr-eke-from" className="ui-input" max=${rec.eke.to} value=${rec.eke.from || ''} onChange=${(e: any) => e.target.value && setEke(e.target.value, rec.eke?.to)}/></div>
+        <div className="field"><label className="field__label" htmlFor="pr-eke-to">Έως <small className="muted">(προαιρετικό)</small></label><${DateField} id="pr-eke-to" className="ui-input" min=${rec.eke.from} value=${rec.eke.to || ''} onChange=${(e: any) => e.target.value && setEke(rec.eke?.from, e.target.value)}/>
+          ${rec.eke.to && rec.eke.from && html`<${Button} variant="link" onClick=${() => setEke(rec.eke?.from)}>Χωρίς «Έως»<//>`}</div>
+      </div>`}
+      ${saved === 'eke' ? html`<span className="field__help">Αποθηκεύτηκε</span>` : html`<span className="field__help">Μόνο για να ξέρουμε και να το βγάζεις στα Έντυπα. Δεν αλλάζει υπηρεσίες, έξοδο ή ΗΚΑΙ. Το «Έως» είναι προαιρετικό (αν δεν το ξέρεις ακόμα).</span>`}
+    </div>`}
     <div className="field" data-religion="">
       <label className="field__label" htmlFor="pr-religion">Θρήσκευμα</label>
       <${Select} id="pr-religion" className="ui-input" value=${rel}

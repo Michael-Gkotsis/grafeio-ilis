@@ -23,7 +23,7 @@ import { RoomField } from './units';
 import { QuickAddDialog } from './quickAdd';
 import { siOf, siShort } from '../../shared/si';
 import { essoPersonTxt } from '../../shared/esso';
-import { isUnit, essoChoices, defaultEsso, essoRows, essoKeyOf, subRows, subKeyOf, SUB_CHIPS_MAX } from '../../shared/mode';
+import { isUnit, ekeBadge, ekeState, essoChoices, defaultEsso, essoRows, essoKeyOf, subRows, subKeyOf, SUB_CHIPS_MAX } from '../../shared/mode';
 import { ROSTER_FILTERS, currentEssos, filterStatus, rosterMatch, statusKind, type RosterFilter } from '../../shared/rosterLists';
 import { itemKey, hkColsOf, OWN_COL_TAG } from '../../shared/ranks';
 import { collator, normGreek, upper } from '../../shared/text';
@@ -85,18 +85,20 @@ function gridOf(narrow: boolean, withSt: boolean, unit = false, withSub = false,
   return [cols.join(' '), aa + ks.reduce((a, k) => a + w(k)[1], 0) + (withSt ? 220 : 0) + 18];
 }
 const stTxt = (st: Status, lists: P) => statusKind(st, lists) + ' · ' + dm(st.from) + (st.open ? ' – χωρίς λήξη' : st.to !== st.from ? '–' + dm(st.to) : '');
-const PersonRow = memo(function PersonRow({ p, n, odd, style, grid, st, lists, selected, onOpen, narrow, nm, unit, withSub, noPR }: P) {
+const PersonRow = memo(function PersonRow({ p, n, odd, style, grid, st, lists, selected, onOpen, narrow, nm, unit, withSub, noPR, day }: P) {
   const si = p.si ? siOf(p, lists).text : '';
+  const eke = unit ? ekeBadge(p, day) : null;   // Σε ΕΚΕ (Michael, 24/11): μπλε όσο διαρκεί, γκρι αν αρχίζει αργότερα
   return html`<div className=${cx('ptable__row', odd && 'is-odd', selected && 'is-sel')} style=${{ ...style, gridTemplateColumns: grid }} role="row" tabIndex="0" onClick=${() => onOpen(p.id)} onKeyDown=${(e: any) => { if (e.key === 'Enter') onOpen(p.id); }}>
-    <span className="num muted">${n}</span><span data-tip=${rankTxt(p)}>${rankTxt(p)}</span><span>${p.spec}</span><span data-tip=${p.last}><b>${p.last}</b>${nm && html`<${NoteDot} m=${nm}/>`}</span><span data-tip=${p.first}>${p.first}</span>${!narrow && html`<span>${p.father}</span>`}
+    <span className="num muted">${n}</span><span data-tip=${rankTxt(p)}>${rankTxt(p)}</span><span>${p.spec}</span><span data-tip=${p.last}><b>${p.last}</b>${nm && html`<${NoteDot} m=${nm}/>`}${eke && html` <${Badge} tone=${eke.now ? 'info' : undefined}>${eke.text}<//>`}</span><span data-tip=${p.first}>${p.first}</span>${!narrow && html`<span>${p.father}</span>`}
     ${st && html`<span><${Badge} tone=${TYPES[st.type as TypeKey].tone}>${stTxt(st, lists)}<//></span>`}
     <span className="num">${p.asm}</span>${!narrow && html`<span className="num">${p.phone}</span>`}<span>${p.room ?? ''}</span>${unit && html`<span>${p.essos}</span><span className="num" data-tip=${p.inOn ? dmy(p.inOn) + (p.came ? ' από ' + p.came : '') : undefined}>${p.inOn ? dmyy(p.inOn) : ''}</span>${withSub && html`<span data-tip=${p.sub && p.sub.length > 8 ? p.sub : undefined}>${p.sub || ''}</span>`}`}${!(unit && noPR) && html`<span data-tip=${p.post && p.post.length > 9 ? p.post : undefined}>${p.post || ''}</span><span data-tip=${p.role && p.role.length > 9 ? p.role : undefined}>${p.role || ''}</span>`}
     <span data-tip=${si !== siShort(si) ? si : undefined}>${siShort(si)}</span><span>${p.dn ? '✓' : ''}</span></div>`;
 });
-const PersonCard = memo(function PersonCard({ p, style, st, lists, onOpen }: P) {
+const PersonCard = memo(function PersonCard({ p, style, st, lists, onOpen, unit, day }: P) {
+  const eke = unit ? ekeBadge(p, day) : null;
   return html`<div className="pcard" style=${style} onClick=${() => onOpen(p.id)}>
     <div><b><${RkName} p=${p} fn=${plainName} keep=${true}/></b><small>${[p.father && 'του ' + p.father, !rkOn() && p.spec, roomTxt(p), p.phone, p.si && siOf(p, lists).text, p.post && 'πόστο ' + p.post, p.dn && 'ΔΝ'].filter(Boolean).join(' · ')}</small></div>
-    ${st && html`<${Badge} tone=${TYPES[st.type as TypeKey].tone}>${stTxt(st, lists)}<//>`}</div>`;
+    ${st && html`<${Badge} tone=${TYPES[st.type as TypeKey].tone}>${stTxt(st, lists)}<//>`}${eke && html`<${Badge} tone=${eke.now ? 'info' : undefined}>${eke.text}<//>`}</div>`;
 });
 
 type Filt = { unit: string; room: number | null; filter: string };
@@ -115,7 +117,7 @@ function PeopleList() {
   const marks = useMemo(() => noteIndex(state.notes, today), [state.notes, today]);   // ένδειξη «έχει σημειώσεις» δίπλα στο όνομα
   // φίλτρα στα params της οθόνης, ώστε να τα θυμάται όταν γυρνάς (Shell)
   const unitMode = isUnit(state.settings);
-  const filter: string = nav.params.filter && (unitMode || !/^(esso|sub):/.test(String(nav.params.filter))) ? nav.params.filter : 'all'; const unitP: string = nav.params.unit || 'all';
+  const filter: string = nav.params.filter && (unitMode || !/^(esso|sub):|^eke$/.test(String(nav.params.filter))) ? nav.params.filter : 'all'; const unitP: string = nav.params.unit || 'all';
   // ουλαμός που θυμόταν η οθόνη αλλά δεν υπάρχει πια (άλλαξε όνομα στις Ρυθμίσεις): όλη η Ίλη
   const unit = unitP === 'all' || platoonsOf(state.settings).some(u => platoonShort(u.name) === unitP) ? unitP : 'all'; const room: number | null = nav.params.room ?? null;
   const date: string = nav.params.pdate && nav.params.pdate >= today ? nav.params.pdate : today;
@@ -143,11 +145,12 @@ function PeopleList() {
     if (!place(p, f)) return false;
     if (f.filter.startsWith('sub:')) return p.active && subKeyOf(p) === f.filter.slice(4);   // μονάδα: ένας Λόχος / Ίλη
     if (f.filter.startsWith('esso:')) return p.active && essoKeyOf(p) === f.filter.slice(5);   // μονάδα: μία ΕΣΣΟ
+    if (f.filter === 'eke') return p.active && ekeState(p, date) === 'now';   // Σε ΕΚΕ τη μέρα της λίστας (Michael, 24/11)
     if (f.filter.startsWith('eid:')) return p.active && !!p.eid && itemKey(p.eid) === f.filter.slice(4);   // ειδικότητα (Michael, 24/11)
     if (f.filter.startsWith('rel:')) return p.active && !!p.religion && itemKey(p.religion) === f.filter.slice(4);   // θρήσκευμα (Michael, 18/11)
     const ss = ssOf.get(p.id) || [];
     return ROSTER_FILTERS.some(([k]) => k === f.filter) ? rosterMatch(f.filter as RosterFilter, p, ss) : p.active && legacyMatch(f.filter, ss, state.settings.lists);
-  }, [ssOf, state.settings.rooms]);
+  }, [ssOf, state.settings.rooms, date]);
   const listFor = useCallback((f: Filt, text: string) => (f.filter === 'inactive' ? state.people.filter(p => !p.active).sort((a, b) => collator.compare(a.last, b.last)) : searchPeople(state.people, text)).filter(p => matches(p, f)), [state.people, matches]);
   // πόσοι ταιριάζουν σε κάθε φίλτρο (στον επιλεγμένο ουλαμό/θάλαμο), για να φαίνεται πριν πατήσεις
   const counts = useMemo(() => {
@@ -156,12 +159,13 @@ function PeopleList() {
       if (!place(p, { unit, room, filter: 'all' })) return;
       const ss = ssOf.get(p.id) || [];
       for (const [k] of ROSTER_FILTERS) if (rosterMatch(k, p, ss)) n[k] = (n[k] || 0) + 1;
+      if (unitMode && p.active && ekeState(p, date) === 'now') n.eke = (n.eke || 0) + 1;   // Σε ΕΚΕ τη μέρα της λίστας
       if (p.active && p.eid) { const k = 'eid:' + itemKey(p.eid); n[k] = (n[k] || 0) + 1; }
       if (p.active && p.religion) { const k = 'rel:' + itemKey(p.religion); n[k] = (n[k] || 0) + 1; }
       if (unitMode && p.active) { const k = 'esso:' + essoKeyOf(p); n[k] = (n[k] || 0) + 1; if (p.sub) { const s = 'sub:' + subKeyOf(p); n[s] = (n[s] || 0) + 1; } }
     });
     return n;
-  }, [state.people, ssOf, unit, room, state.settings.rooms, unitMode]);
+  }, [state.people, ssOf, unit, room, state.settings.rooms, unitMode, date]);
   // θρήσκευμα: φίλτρο (dropdown) μόνο όταν κάποιος έχει δηλωμένο· πρώτα τα θρησκεύματα της λίστας, μετά όσα έχουν γραφτεί αλλιώς
   const relList = useMemo(() => {
     const used = new Map<string, string>(); active.forEach(p => { if (p.religion && !used.has(itemKey(p.religion))) used.set(itemKey(p.religion), p.religion); });
@@ -197,7 +201,7 @@ function PeopleList() {
   const delView = async (v: SavedView) => { if (await run({ t: 'setSettings', settings: { views: views.filter(x => x.id !== v.id) }, text: 'διαγραφή λίστας «' + v.name + '»' }, false)) toast({ text: 'Διαγράφηκε η λίστα «' + v.name + '»', actions: [undoMark()] }); };
   const dateLbl = date === today ? '' : dayName(date, today);
   const filtered = unit !== 'all' || room != null || filter !== 'all' || !!dq.trim();
-  const fLabel = filter.startsWith('sub:') ? (subList.find(r => itemKey(r.name) === filter.slice(4))?.name || filter.slice(4)) : filter.startsWith('esso:') ? 'ΕΣΣΟ ' + filter.slice(5) : filter.startsWith('eid:') ? 'Ειδικότητα: ' + (eidList.find(r => r.key === filter.slice(4))?.name || filter.slice(4)) : filter.startsWith('rel:') ? 'Θρήσκευμα: ' + (relList.find(r => r.key === filter.slice(4))?.name || filter.slice(4)) : (ROSTER_FILTERS.find(([k]) => k === filter) || [, filter])[1];
+  const fLabel = filter === 'eke' ? 'Σε ΕΚΕ' : filter.startsWith('sub:') ? (subList.find(r => itemKey(r.name) === filter.slice(4))?.name || filter.slice(4)) : filter.startsWith('esso:') ? 'ΕΣΣΟ ' + filter.slice(5) : filter.startsWith('eid:') ? 'Ειδικότητα: ' + (eidList.find(r => r.key === filter.slice(4))?.name || filter.slice(4)) : filter.startsWith('rel:') ? 'Θρήσκευμα: ' + (relList.find(r => r.key === filter.slice(4))?.name || filter.slice(4)) : (ROSTER_FILTERS.find(([k]) => k === filter) || [, filter])[1];
   // sigs: υπογραφές μόνο για αυτή τη φορά («Υπογραφές…»)
   const exportXl = async (sigs?: Sig[], hid?: string) => {
     setXl(true);
@@ -236,6 +240,7 @@ function PeopleList() {
       ${relList.length > 0 && html`<${Select} className="ui-select" aria-label="Θρήσκευμα" value=${filter.startsWith('rel:') ? filter : ''} onChange=${(e: any) => setFilter(e.target.value || 'all')}><option value="">Όλα τα θρησκεύματα</option>${relList.map(r => html`<option key=${r.key} value=${'rel:' + r.key}>${r.name} · ${counts['rel:' + r.key] || 0}</option>`)}<//>`}
       ${dateSel}</div>
     <div className="filters"><${Strip} role="group" aria-label="Γρήγορα φίλτρα">${ROSTER_FILTERS.map(([k, l]) => html`<button key=${k} type="button" className="ui-chip" aria-pressed=${!curView && filter === k} data-tip=${k === 'leave' || k === 'pun' ? (k === 'leave' ? 'Σε άδεια ' : 'Με ποινή ') + (dateLbl ? dateLbl.toLowerCase() : 'σήμερα') : undefined} onClick=${() => setFilter(filter === k && k !== 'all' ? 'all' : k)}>${l}<span className="cnt">${counts[k] || 0}</span></button>`)}
+      ${unitMode && (counts.eke > 0 || filter === 'eke') && html`<button type="button" className="ui-chip" aria-pressed=${!curView && filter === 'eke'} data-tip="Όσοι είναι σε εκπαίδευση ειδικότητας (ΕΚΕ)" onClick=${() => setFilter(filter === 'eke' ? 'all' : 'eke')}>Σε ΕΚΕ<span className="cnt">${counts.eke || 0}</span></button>`}
       ${essoList.map(r => html`<button key=${'e' + r.txt} type="button" className="ui-chip" aria-pressed=${!curView && filter === 'esso:' + r.txt} data-tip=${'Μόνο η ΕΣΣΟ ' + r.txt} onClick=${() => setFilter(filter === 'esso:' + r.txt ? 'all' : 'esso:' + r.txt)}>${r.txt}<span className="cnt">${counts['esso:' + r.txt] || 0}</span></button>`)}
       ${unitMode && subChips && subList.map(r => html`<button key=${'s' + r.name} type="button" className="ui-chip" aria-pressed=${!curView && filter === 'sub:' + itemKey(r.name)} data-tip=${'Μόνο ' + r.name} onClick=${() => setFilter(filter === 'sub:' + itemKey(r.name) ? 'all' : 'sub:' + itemKey(r.name))}>${r.name}<span className="cnt">${counts['sub:' + itemKey(r.name)] || 0}</span></button>`)}
       ${views.map((v, i) => html`<button key=${v.id} type="button" className=${cx('ui-chip', 'ui-chip--view', i === 0 && 'ui-chip--gap')} aria-pressed=${curView === v} data-tip="Αποθηκευμένη λίστα" onClick=${() => applyView(v)}>${Icon.star}${v.name}<span className="cnt">${viewN[i]}</span></button>`)}<//>
@@ -243,10 +248,10 @@ function PeopleList() {
         extra=${curView ? html`<button type="button" className="actfilter__act" onClick=${() => delView(curView)} data-tip="Σβήνει τη λίστα (όχι τους ανθρώπους)">Διαγραφή λίστας</button>` : filtered && html`<button type="button" className="actfilter__act" onClick=${() => setSaving(true)} data-tip="Κράτα αυτό το φίλτρο ως λίστα με όνομα, π.χ. «Θαλαμάρχες»">☆ Αποθήκευση</button>`}/>
       <span className="toolbar__count">${rows.length} από ${filter === 'inactive' ? counts.inactive || 0 : total}</span></div>
     ${rows.length === 0 ? html`<div className="ui-card empty">${total === 0 ? html`Δεν υπάρχει ακόμα προσωπικό. <${Button} variant="link" onClick=${() => setAdding('many')}>Γράψε τους στρατιώτες τον έναν μετά τον άλλον<//> ή <${Button} variant="link" onClick=${() => nav.go('templates', { tab: 'import' })}>κάνε εισαγωγή από το Δυναμολόγιο<//>` : html`Κανείς δεν ταιριάζει. <${Button} variant="link" onClick=${clear}>Καθάρισε αναζήτηση και φίλτρα<//>`}</div>` :
-    mobile ? html`<div className="ui-card" style=${{ overflow: 'hidden' }}><${VirtualList} items=${rows} rowHeight=${68} height=${height} renderRow=${(p: Person, _i: number, style: P) => html`<${PersonCard} key=${p.id} p=${p} style=${style} st=${stOf(p)} lists=${lists} onOpen=${open}/>`}/></div>` :
+    mobile ? html`<div className="ui-card" style=${{ overflow: 'hidden' }}><${VirtualList} items=${rows} rowHeight=${68} height=${height} renderRow=${(p: Person, _i: number, style: P) => html`<${PersonCard} key=${p.id} p=${p} style=${style} unit=${unitMode} day=${date} st=${stOf(p)} lists=${lists} onOpen=${open}/>`}/></div>` :
     html`<div className="ptable ptable--roster" role="table" aria-rowcount=${rows.length}><div style=${{ overflowX: 'auto' }}><div style=${{ minWidth: gridMin + 'px' }}>
       <div className="ptable__head" role="row" style=${{ gridTemplateColumns: grid }}><span>Α/Α</span>${cols.filter(([k]) => HEAD_KEYS.includes(k)).map(([k, l]) => H(k, l))}${withSt && html`<span>${filter === 'leave' ? 'Άδεια' : 'Ποινή'}</span>`}${cols.filter(([k]) => !HEAD_KEYS.includes(k)).map(([k, l]) => H(k, l))}</div>
-      <${VirtualList} items=${rows} rowHeight=${rowH} height=${height} resetKey=${filter + '|' + unit + '|' + room + '|' + dq + '|' + sort.k + sort.dir} renderRow=${(p: Person, i: number, style: P) => html`<${PersonRow} key=${p.id} p=${p} n=${i + 1} odd=${i % 2 === 1} style=${style} grid=${grid} narrow=${narrow} noPR=${noPR} unit=${unitMode} withSub=${withSub} st=${stOf(p)} lists=${lists} selected=${nav.params.person === p.id} nm=${marks.get('p' + p.id)} onOpen=${open}/>`}/>
+      <${VirtualList} items=${rows} rowHeight=${rowH} height=${height} resetKey=${filter + '|' + unit + '|' + room + '|' + dq + '|' + sort.k + sort.dir} renderRow=${(p: Person, i: number, style: P) => html`<${PersonRow} key=${p.id} p=${p} n=${i + 1} odd=${i % 2 === 1} style=${style} grid=${grid} narrow=${narrow} noPR=${noPR} unit=${unitMode} withSub=${withSub} day=${date} st=${stOf(p)} lists=${lists} selected=${nav.params.person === p.id} nm=${marks.get('p' + p.id)} onOpen=${open}/>`}/>
     </div></div></div>`}
     ${adding === 'one' && html`<${NewPersonDialog} onClose=${() => setAdding(false)} onMany=${() => setAdding('many')}/>`}
     ${adding === 'many' && html`<${QuickAddDialog} onClose=${() => setAdding(false)}/>`}
@@ -484,6 +489,14 @@ function PersonFields({ x, setX, id, isNew }: P) {
       <div className="field"><label className="field__label" htmlFor=${id + '-came'}>Ήρθε από</label><input id=${id + '-came'} className="ui-input" placeholder="π.χ. ΚΕΝ ΑΥΛΩΝΑ" value=${x.came || ''} onChange=${(e: any) => setX({ ...x, came: e.target.value })}/></div></div>
       <div className="field-row"><${SubField} id=${id + '-sub'} value=${x.sub || ''} onChange=${(v: string) => setX({ ...x, sub: v || undefined })}/><div className="field"><label className="field__label" htmlFor=${id + '-serve'}>Θητεία</label><${Select} id=${id + '-serve'} className="ui-input" value=${String(x.serve === 9 ? 9 : 12)} onChange=${(e: any) => setX({ ...x, serve: e.target.value === '9' ? 9 : undefined })}><option value="12">12 μήνες</option><option value="9">9 μήνες (Θράκη, νησιά, ΕΛΔΥΚ…)</option><//></div><div className="field"></div></div>
       <span className="field__help">Ημερομηνία εισαγωγής: πότε ήρθε στη μονάδα (και παλιότερη, για όσους είναι ήδη εδώ). Μπαίνει στις ΕΓΓΡΑΦΕΣ της ${HK()} εκείνης της μέρας. «Ήρθε από» προαιρετικό.</span></div>`}
+    ${unit && isNew && html`<div className="field">
+      <label className="ui-checkrow"><input type="checkbox" className="ui-check" checked=${!!x.eke} onChange=${(e: any) => setX({ ...x, eke: e.target.checked ? { from: today } : undefined })}/>Σε ΕΚΕ (εκπαίδευση ειδικότητας)</label>
+      ${x.eke && html`<div className="field-row">
+        <div className="field"><label className="field__label" htmlFor=${id + '-eke-from'}>Από</label><${DateField} id=${id + '-eke-from'} className="ui-input" max=${x.eke.to} value=${x.eke.from || ''} onChange=${(e: any) => e.target.value && setX({ ...x, eke: { ...x.eke, from: e.target.value } })}/></div>
+        <div className="field"><label className="field__label" htmlFor=${id + '-eke-to'}>Έως <small className="muted">(προαιρετικό)</small></label><${DateField} id=${id + '-eke-to'} className="ui-input" min=${x.eke.from} value=${x.eke.to || ''} onChange=${(e: any) => e.target.value && setX({ ...x, eke: { ...x.eke, to: e.target.value } })}/>
+          ${x.eke.to && x.eke.from && html`<${Button} variant="link" onClick=${() => setX({ ...x, eke: { from: x.eke.from } })}>Χωρίς «Έως»<//>`}</div>
+      </div>`}
+      <span className="field__help">Μόνο για να ξέρουμε και να το βγάζεις στα Έντυπα. Δεν αλλάζει υπηρεσίες, έξοδο ή ΗΚΑΙ.</span></div>`}
     <div className="field-row"><${SiField} id=${id + '-si'} value=${x.si} cat=${x.siCat || ''} onChange=${(v: string, c: string) => setX({ ...x, si: v, siCat: c || undefined })}/>${F('post', 'Πόστο', { nullable: true })}</div>
     <div className="field-row">${F('role', 'Ρόλος', { nullable: true })}${isNew && !unit && F('essos', 'ΕΣΣΟ', { placeholder: 'π.χ. 2026 Γ΄' })}${F('weapon', 'Αριθμός όπλου (γράφεται μόνο όταν είναι Λ/Υ ή Δ/Υ)')}</div>
     ${isEpop(x, state.settings.lists) && html`<div className="field"><label className="field__label" htmlFor=${id + '-mm'}>Υπηρεσίες τον μήνα (το πολύ)</label><input id=${id + '-mm'} className="ui-input" type="number" min="1" max="31" style=${{ maxWidth: '120px' }} placeholder="π.χ. 4" value=${x.monthMax ?? ''} onChange=${(e: any) => setX({ ...x, monthMax: e.target.value ? Math.max(0, Math.floor(+e.target.value)) || undefined : undefined })}/><span className="field__help">ΕΠΟΠ/ΟΒΑ: δεν μπαίνει στην αυτόματη συμπλήρωση, μόνο με το χέρι. Πάνω από το όριο ζητά επιβεβαίωση. Κενό = χωρίς όριο.</span></div>`}
