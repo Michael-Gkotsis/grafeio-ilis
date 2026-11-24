@@ -483,7 +483,7 @@ export function GuardScreen() {
     </section>
     <section className="xlcard">
       <h2 className="xlcard__hd">Excel</h2>
-      <p><span className="mono">${fileName}</span> · A4 οριζόντιο. ${empty.length ? 'Με ' + empty.length + (empty.length === 1 ? ' κενή γράφεται' : ' κενές γράφεται') + ' «ΚΕΝΗ».' : 'Πλήρες.'}</p>
+      <p><span className="mono">${fileName}</span> · A4 οριζόντιο. ${empty.length ? 'Με ' + empty.length + (empty.length === 1 ? ' κενή μένει' : ' κενές μένουν') + ' κενό στο Excel.' : 'Πλήρες.'}</p>
       <${Button} variant="outline" onClick=${() => setPreview(true)}>Προεπισκόπηση<//>
       ${hpF.node}
       <${PrintButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών" take=${hpF.take}/>

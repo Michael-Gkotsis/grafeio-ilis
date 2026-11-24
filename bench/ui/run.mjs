@@ -106,7 +106,9 @@ const after = async (navIdx, key, tab) => {
   }, key));
   return med(xs);
 };
-const navIdx = name => navs.find(([, n]) => n === name)?.[0] + 1;
+// το κουμπί «Δυναμολόγιο» λέγεται πια «Στρατιώτες» (#369)· τα κλειδιά των αποτελεσμάτων μένουν όπως ήταν
+const NAV_NAME = { 'Δυναμολόγιο': 'Στρατιώτες' };
+const navIdx = name => { const i = navs.find(([, n]) => n === (NAV_NAME[name] || name))?.[0]; if (i == null) throw new Error('Δεν βρέθηκε κουμπί πλοήγησης «' + name + '»'); return i + 1; };
 for (const [scr, key, tab] of [['Σήμερα', 'statuses'], ['Δυναμολόγιο', 'people'], ['Υπηρεσίες', 'guards', 'Θέσεις'], ['Υπηρεσίες', 'guards', 'Έλεγχος'], ['Υπηρεσίες', 'guards', 'Ποιος'], ['Εξοδούχοι', 'statuses'], ['ΗΚΑΙ', 'statuses'], ['Οπλισμός', 'people', 'Όπλα']])
   R['μετά από εντολή (' + key + '): ' + scr + (tab ? ' › ' + tab : '')] = await after(navIdx(scr), key, tab);
 // αναζήτηση στο Δυναμολόγιο: ένα γράμμα
