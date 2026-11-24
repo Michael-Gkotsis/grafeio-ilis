@@ -855,13 +855,14 @@ export function genUnitGrid(seed: number, people: Person[], seatsOf: Record<stri
 // Κατάσταση υπηρεσιών ΣΕ ΛΙΣΤΑ: λέξη θέσης στην πρώτη γραμμή κάθε μπλοκ, νούμερα, βάρδιες Φ/Κ, προτυπωμένος βαθμός, επικεφαλίδα που μπορεί να είναι
 // μετατοπισμένη, διαχωριστικές κενές γραμμές, άγνωστες θέσεις, τίτλος με παλιά ημερομηνία, υπογραφές. Αλήθεια: ποιο μπλοκ είναι ποια υπηρεσία της εφαρμογής.
 export interface SvcTargetIn { value: string; label: string; kind: string; groups: number[] }   // groups: πόσες θέσεις έχει κάθε νούμερο
-export interface SvcMockBlock { label: string; truth: string | null; sureOk: boolean; rows: { r: number; g: number; j: number }[] }   // truth: υπηρεσία της εφαρμογής (null = δεν είναι· δεν γράφεται ποτέ)
+export interface SvcMockBlock { label: string; truth: string | null; sureOk: boolean; rows: { r: number; g: number; j: number }[]; state?: boolean }   // truth: υπηρεσία της εφαρμογής (null = δεν είναι· δεν γράφεται ποτέ)
 export interface SvcMock { buf: Buffer; sheet: string; blocks: SvcMockBlock[]; rankCol: number; nameCol: number; headRank: number; headName: number; titleRow: number; sigRow: number; foreign: { r: number; c: number }[]; filled: { r: number; c: number; text: string }[]; flags: string[] }
 const LABELS: Record<string, string[]> = { th: ['ΘΑΛΑΜΟΦΥΛΑΚΕΣ', 'ΘΑΛΑΜΟΦΥΛΑΚΑΣ', 'Θαλαμοφύλακες'], op: ['ΟΠΛΟΦΥΛΑΚΕΣ', 'Οπλοφύλακες'], mg: ['ΜΑΓΕΙΡΕΙΑ', 'ΜΑΓΕΙΡΟΙ'], sk: ['ΣΚΟΠΟΙ', 'ΥΠΗΡΕΣΙΑ ΣΚΟΠΟΙ'], tae: ['ΤΑΕ'], ly: ['Λ/Υ'], dy: ['Δ/Υ'] };
 const LOOSE: Record<string, string[]> = { th: ['ΘΑΛΑΜΟΦΥΛΑΚΕΣ ΙΛΩΝ', 'ΘΑΛΑΜΟΦΥΛΑΚΕΣ Δ/Σ'], mg: ['ΜΑΓΕΙΡΑΣ'], sk: ['ΥΠΗΡΕΣΙΑ ΣΚΟΠΟΙ ΠΥΛΗΣ'] };
-const UNKNOWN_POSTS = ['ΕΣΤΙΑΤΟΡΑΣ', 'ΗΣΑ', 'ΚΕΠΙΚ', 'ΚΥΛΙΚΕΙΟ', 'ΔΑΣΟΠΕΡΙΠΟΛΟ', 'ΑΠΕΣΠΑΣΜΕΝΟΙ', 'ΕΕΑΣ', 'ΑΥΔΜ', 'ΠΕΡΙΠ. ΣΤΡΑΤΟΠΕΔΟΥ'];
+const UNKNOWN_POSTS = ['ΕΣΤΙΑΤΟΡΑΣ', 'ΗΣΑ', 'ΚΕΠΙΚ', 'ΚΥΛΙΚΕΙΟ', 'ΔΑΣΟΠΕΡΙΠΟΛΟ', 'ΕΕΑΣ', 'ΑΥΔΜ', 'ΠΕΡΙΠ. ΣΤΡΑΤΟΠΕΔΟΥ'];
 const PLACEHOLDER_RANKS = ['ΣΤΡ(ΤΘ)', 'ΣΤΡ', 'ΔΝΕΑΣ', 'ΑΝΘΣΤΗΣ', 'ΕΠΟΠ ΑΛΧΙΑΣ'];
-export function genSvcList(seed: number, targets: SvcTargetIn[], o: { fillNames?: boolean } = {}): SvcMock {
+// states: λίστες ατόμων σε κατάσταση στο κάτω μέρος (ΑΠΕΣΠΑΣΜΕΝΟΙ, ΚΙΧΝΕ- ΕΥ…): λέξη στην πρώτη γραμμή, 2-5 γραμμές, άλλοτε με συγχωνευμένη λέξη και άδεια κελιά
+export function genSvcList(seed: number, targets: SvcTargetIn[], o: { fillNames?: boolean; states?: { value: string; label: string }[] } = {}): SvcMock {
   const r = rng(seed * 7919 + 17); const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('ΥΠΗΡΕΣΙΕΣ'); const flags: string[] = [];
   const nameCol = pick(r, [5, 5, 6]), rankCol = 3, shiftCol = 4;
   const put = (rr: number, cc: number, v: string | number | null) => { ws.getCell(rr + 1, cc + 1).value = v; };
@@ -906,6 +907,13 @@ export function genSvcList(seed: number, targets: SvcTargetIn[], o: { fillNames?
     }
     blocks.push({ label: it.label, truth: t ? t.value : null, sureOk: it.sureOk && !!t, rows });
     row++;                                 // διαχωριστική κενή γραμμή
+  }
+  for (const st of o.states || []) {
+    const n = int(r, 2, 5); const merged = chance(r, 0.5); const rows: SvcMockBlock['rows'] = [];
+    for (let i = 0; i < n; i++) { const rr = row++; rows.push({ r: rr, g: i, j: 0 }); if (!merged) put(rr, rankCol, pick(r, PLACEHOLDER_RANKS)); }
+    put(rows[0].r, 0, st.label); if (merged) ws.mergeCells(rows[0].r + 1, 1, rows[n - 1].r + 1, 1);
+    blocks.push({ label: st.label, truth: st.value, sureOk: false, rows, state: true });
+    row++;
   }
   const sigRow = row + 1;
   put(sigRow, 0, 'Ο'); put(sigRow, 2, 'ΤΟ'); put(sigRow, 5, 'Ο'); put(sigRow + 1, 0, 'ΑΛΧΙΑΣ ΙΛΗΣ'); put(sigRow + 1, 2, '2ο ΓΡΑΦΕΙΟ'); put(sigRow + 1, 5, 'ΔΚΤΗΣ ΕΠΧΙΑΣ');
