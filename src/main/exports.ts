@@ -282,7 +282,7 @@ function extendFroura(wb: Workbook, ws: Sheet, map: FrouraMap, over: Map<FTable,
 // ανεβαίνει· αλλιώς (πίνακας δίπλα σε άλλον) αδειάζει μόνο η περιοχή. Καλείται όταν έχουν γραφτεί όλα· down() = πού πήγε μια γραμμή του template.
 async function dropHiddenBlocks(wb: Workbook, ws: Sheet, name: string, map: FrouraMap, seats: Map<string, Seat>, blocks: BlockDef[], down: (r: number) => number): Promise<DropOut> {
   const none: DropOut = { rows: [], boxes: [] };
-  const hidden = blocks.filter(b => b.hidden); if (!hidden.length) return none;
+  const hidden = blocks.filter(b => b.hidden && !b.keep); if (!hidden.length) return none;   // keep: ανενεργή που μένει στο έντυπο, άγραφη
   const keyOf = (b: BlockDef) => (b.custom || !['ly', 'th', 'op', 'mg', 'sk', 'tae'].includes(b.kind) ? 'b:' + b.id : b.kind);
   const offKinds = new Set(hidden.map(keyOf));
   const used = new Set([...seats.values()].map(x => x.ref)), usedTabs = new Set([...seats.values()].map(x => x.t).filter(Boolean));

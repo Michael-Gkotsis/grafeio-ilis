@@ -76,6 +76,16 @@ export function growFormula(f: string, sheet: string, own: boolean, from: number
   })).join('');
   return out === plain ? f : out.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+// Περιοχές που ξεκινούν από τη γραμμή from ξεκινούν από τη γραμμή to (όταν μπαίνουν/βγαίνουν γραμμές στην αρχή μιας λίστας: το Excel αφήνει την αρχή στο παλιό πρώτο στοιχείο)
+export function pullFormula(f: string, sheet: string, own: boolean, from: number, to: number): string {
+  const name = sheet.toLowerCase();
+  const plain = unesc(f);
+  const out = plain.split(/("(?:[^"]|"")*")/).map((part, i) => i % 2 ? part : part.replace(REF_RE, (m, q: string | undefined, a: string, b: string | undefined) => {
+    if (!b || (q ? sheetOf(q) !== name : !own)) return m;
+    return splitRef(a).r === from ? (q || '') + a.replace(/\d+$/, String(to)) + ':' + b : m;
+  })).join('');
+  return out === plain ? f : out.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 // Οι τύποι ενός κελιού (και η περιοχή των κοινών τύπων/πινάκων τύπων, ref="…")
 const shiftCellFormulas = (inner: string, sheet: string, own: boolean, after: number, n: number) =>
   inner.replace(/<f(\s[^>]*?)?(?:\/>|>([\s\S]*?)<\/f>)/g, (_m, fa = '', body: string | undefined) => {
@@ -270,6 +280,16 @@ export class Sheet {
     this.tail = n ? this.tail.replace(/<mergeCells\b([^>]*)>/, (_m, x: string) => `<mergeCells${setAttr(x, 'count', String(n))}>`) : this.tail.replace(/<mergeCells\b[^>]*>\s*<\/mergeCells>/, '');
     return this;
   }
+  // Η μορφή της γραμμής from (ύψος, στυλ κάθε κελιού) στη γραμμή to, χωρίς τιμές και τύπους. Για νέες γραμμές που μιμούνται υπάρχουσα.
+  copyLook(from: number, to: number): this {
+    const src = this.row(from, false); if (!src) return this;
+    const dst = this.row(to)!;
+    dst.attrs = setAttr(src.attrs, 'r', String(to));
+    dst.cells = src.cells.map(c => ({ col: c.col, attrs: setAttr(setAttr(c.attrs, 'r', colName(c.col) + to), 't', null), inner: '', selfClose: true }));
+    return this;
+  }
+  // Η σειρά της γραμμής r έχει τύπο σε κάποιο κελί
+  rowHasFormula(r: number): boolean { return !!this.row(r, false)?.cells.some(c => c.inner.includes('<f')); }
   // Αδειάζει ένα ορθογώνιο (στήλες c1–c2, γραμμές r1–r2): τιμές, μορφή και όσες συγχωνεύσεις είναι ολόκληρες μέσα του. Για τις γραμμές που
   // πρόσθεσε ο ψηλότερος από δύο πίνακες δίπλα-δίπλα: ο κοντύτερος δεν συνεχίζει με άδεια κελιά με πλαίσιο.
   clearBox(c1: number, c2: number, r1: number, r2: number): this {
@@ -506,6 +526,16 @@ export class Sheet {
     wb.shiftNames(this.name, after, n);
     wb.shiftForeign(this, after, n);
     return true;
+  }
+  // Περιοχές τύπων προς το φύλλο sheet που ξεκινούν από τη γραμμή from και ξεκινούν από τη γραμμή to (pullFormula)
+  pullStarts(sheet: string, from: number, to: number): number {
+    let n = 0;
+    for (const row of this.rows) for (const c of row.cells) {
+      if (!c.inner.includes('<f')) continue;
+      const inner = c.inner.replace(/(<f(?:\s[^>]*)?>)([\s\S]*?)(<\/f>)/g, (_m, o: string, body: string, e: string) => o + pullFormula(body, sheet, sheet === this.name, from, to) + e);
+      if (inner !== c.inner) { c.inner = inner; n++; }
+    }
+    return n;
   }
   // Περιοχές τύπων προς το φύλλο sheet που μεγαλώνουν (growFormula)
   growFormulas(sheet: string, from: number, last: number, to: number): number {

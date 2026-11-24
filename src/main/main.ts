@@ -1472,6 +1472,8 @@ else {
       creates: Array.isArray(r?.creates) ? r.creates.filter(x => typeof x?.name === 'string').map(x => ({ name: x.name.slice(0, 60) })) : [],
       cols: Object.fromEntries(Object.entries(r?.cols || {}).filter(([, v]) => typeof v === 'number')) as Record<string, number>,
       rooms: Array.isArray(r?.rooms) ? r.rooms.filter(x => typeof x?.sheet === 'string').map(x => ({ sheet: x.sheet, who: String(x.who || ''), on: !!x.on })) : [],
+      show: Object.fromEntries(Object.entries(r?.show || {}).filter(([, v]) => v === 'keep' || v === 'remove')) as Record<string, 'keep' | 'remove'>,
+      add: Array.isArray(r?.add) ? r.add.filter(a => typeof a?.value === 'string' && typeof a?.after === 'string' && typeof a?.like === 'string').map(a => ({ value: a.value, after: a.after, like: a.like })) : [],
       ...(typeof r?.sheet === 'string' ? { sheet: r.sheet } : {})
     });
     ipcMain.handle('list:model', async (_e, f: FormKind, file?: string, sheet?: string) => { try { return (await listModelOf(listFile(f, file), store.state, f === 'outs' ? 'outs' : 'froura', sheet)).model; } catch (e) { return fail(e); } });

@@ -141,12 +141,13 @@ export function detectSvc(sh: SheetModel, o: { lex?: Lexicon; cols?: Record<stri
 }
 
 // ---- τι θέσεις έχει η εφαρμογή
-export interface SvcTarget { value: string; label: string; kind: string; groups: Post[][]; posts: Post[] }
+export interface SvcTarget { value: string; label: string; kind: string; groups: Post[][]; posts: Post[]; kept?: boolean }   // kept: ανενεργή υπηρεσία που μένει στο έντυπο (BlockDef.keep): το μπλοκ ταυτίζεται αλλά δεν γεμίζει
 // Οι υπηρεσίες του εντύπου (ανενεργές όχι) και ο Λ/Υ, Δ/Υ ως μεμονωμένες θέσεις
 export function svcTargets(s: AppState, posts: Post[], phase?: string): SvcTarget[] {
   const out: SvcTarget[] = [];
-  for (const b of blocksOf(s.settings, phase).filter(x => !x.hidden && x.kind !== 'ly')) {
-    const ps = posts.filter(p => p.block === b.id); if (!ps.length) continue;
+  for (const b of blocksOf(s.settings, phase).filter(x => (!x.hidden || x.keep) && x.kind !== 'ly')) {
+    const ps = posts.filter(p => p.block === b.id);
+    if (!ps.length) { if (b.hidden && b.keep) out.push({ value: 'blk:' + b.id, label: b.name, kind: b.kind, groups: [], posts: [], kept: true }); continue; }
     out.push({ value: 'blk:' + b.id, label: b.name, kind: b.kind, groups: blockGroups(ps).map(gp => gp.map(x => ps.find(p => p.k === x.k)!)), posts: ps });
   }
   for (const k of ['ly', 'dy']) { const p = posts.find(x => x.k === k); if (p) out.push({ value: 'post:' + k, label: k === 'ly' ? 'Λ/Υ' : 'Δ/Υ', kind: 'ly', groups: [[p]], posts: [p] }); }
@@ -183,6 +184,8 @@ const STATE_WORDS: [string, RegExp, RegExp][] = [
   ['st:ADIK', /^(ΑΓΝΟΟΥΜΕΝΟΙ|ΑΔΙΚΑΙΟΛΟΓΗΤΗ ΑΠΟΥΣΙΑ|ΛΙΠΟΤΑΚΤΕΣ)$/, /ΑΓΝΟΟΥΜ|ΑΔΙΚΑΙΟΛΟΓΗΤ|ΛΙΠΟΤΑΚΤ/],
   ['st:ABS', /^(ΑΠΟΝΤΕΣ|ΑΠΟΝΤΕΣ ΑΔΕΙΕΣ|ΑΠΟΥΣΙΕΣ)$/, /ΑΠΟΝΤ/]
 ];
+// Η λέξη που γράφεται στο έντυπο όταν μπαίνει νέα λίστα κατάστασης (αναγνωρίζεται ξανά ως «σίγουρη» από το STATE_WORDS)
+export const STATE_FILE_WORD: Record<string, string> = { 'st:APS': 'ΑΠΕΣΠΑΣΜΕΝΟΙ', 'st:NOS': 'ΝΟΣΟΚΟΜΕΙΟ', 'st:EY': 'Ε.Υ', 'st:EA': 'Ε.Α', 'st:EO': 'Ε.Ο', 'st:STEP': 'ΣΤΕΠ', 'st:PUN': 'ΤΙΜΩΡΗΜΕΝΟΙ', 'st:LEAVE': 'ΑΔΕΙΟΥΧΟΙ', 'st:SICK': 'ΑΝΑΡΡΩΤΙΚΕΣ', 'st:ADIK': 'ΑΓΝΟΟΥΜΕΝΟΙ', 'st:ABS': 'ΑΠΟΝΤΕΣ' };
 const stateLabel = (v: string): string => STATE_TARGETS.find(x => x.value === v)?.label || '';
 // Ποιοι είναι σε αυτή την κατάσταση τη μέρα d: οπλίτες (όχι στελέχη), όχι όποιος γυρίζει ως την ώρα έναρξης υπηρεσιών (όπως οι ΑΠΟΝΤΕΣ της ΦΡΟΥΡΑΣ)
 export function stateWho(s: AppState, d: ISODate, value: string): Person[] {
@@ -216,12 +219,12 @@ export function matchSvc(det: SvcSheet, targets: SvcTarget[], profile: ListProfi
     const ly = /^(Λ\/Υ|ΛΥ|ΛΟΧΙΑΣ ΥΠΗΡΕΣΙΑΣ)$/.test(k), dy = /^(Δ\/Υ|ΔΥ|ΔΕΚΑΝΕΑΣ ΥΠΗΡΕΣΙΑΣ)$/.test(k);
     if (ly || dy) { const t = targets.find(x => x.value === 'post:' + (ly ? 'ly' : 'dy')); if (t) { value = t.value; sure = 'sure'; why = ''; } }
     else {
-      const exact = targets.find(x => nk(x.label).replace(/\s*\/\s*/g, '/') === k && !x.value.startsWith('post:'));
+      const exact = targets.find(x => nk(x.label).replace(/[^\p{L}\d/ ]/gu, ' ').replace(/\s+/g, ' ').trim().replace(/\s*\/\s*/g, '/') === k && !x.value.startsWith('post:'));   // ίδια κανονικοποίηση με το κλειδί του μπλοκ (τόνοι, παρενθέσεις)
       if (exact && (labelCount.get(b.key) || 1) === 1) { value = exact.value; sure = 'sure'; why = ''; }
       else {
         const kw = KIND_WORDS.find(([, strict, loose]) => strict.test(k) || loose.test(k));
         if (kw) {
-          const cands = targets.filter(x => x.kind === kw[0] && x.value.startsWith('blk:'));
+          const cands = targets.filter(x => x.kind === kw[0] && x.value.startsWith('blk:') && !x.kept);
           const i = kindSeen.get(kw[0]) || 0; kindSeen.set(kw[0], i + 1);
           const t = cands[Math.min(i, cands.length - 1)];
           if (t) {
@@ -239,7 +242,7 @@ export function matchSvc(det: SvcSheet, targets: SvcTarget[], profile: ListProfi
     // το ίδιο μπλοκ της εφαρμογής δεν είναι «σίγουρο» για δύο λέξεις του αρχείου
     if (value) { const n = (taken.get(value) || 0) + 1; taken.set(value, n); if (n > 1 && sure === 'sure') { sure = 'suggest'; why = 'Την ίδια υπηρεσία της εφαρμογής την έδειξε ήδη άλλη λέξη του αρχείου.'; } }
     // λιγότερα ή περισσότερα νούμερα από της εφαρμογής: δεν είναι αρκετό για «σίγουρο»
-    if (value && sure === 'sure') { const t = targets.find(x => x.value === value); if (t && t.groups.length !== b.groups.length) { sure = 'suggest'; why = 'Το αρχείο έχει ' + b.groups.length + ' νούμερα, η εφαρμογή ' + t.groups.length + '.'; } }
+    if (value && sure === 'sure') { const t = targets.find(x => x.value === value); if (t && !t.kept && t.groups.length !== b.groups.length) { sure = 'suggest'; why = 'Το αρχείο έχει ' + b.groups.length + ' νούμερα, η εφαρμογή ' + t.groups.length + '.'; } }
     out.push({ block: b, value, sure, why, labelKey: key });
   }
   return out;
