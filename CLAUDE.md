@@ -54,9 +54,10 @@ src/shared/     pure rules and types shared by main + renderer (domain.ts types,
 src/main/       main.ts (entry, IPC handlers), db.ts (sql.js database), xlsx.ts (own Excel engine), exports.ts
                 (ΦΡΟΥΡΑ/ΗΚΑΙ/Εξοδούχοι forms), hdDocx.ts (Word ΗΔ), print.ts, sources.ts (unit Excel files),
                 worker.ts + offload.ts (Excel work off the main thread), update.ts + updater.ts,
+                formPreview.ts (on-screen preview = the produced file through the print layout; printSetup is shared with the print window),
                 tplLists.ts (fill + screen model of those lists; fillFroura / fillOuts call it when a saved mapping matches the file)
 src/preload/    preload.ts (IPC bridge), print.ts
-src/renderer/   app.ts (shell, nav, shortcuts), screens/*.ts (one per screen; dutyMap.ts, listMap.ts, rosterMap.ts = «Αντιστοίχιση…» dialogs; weaponMap.ts = the same for a weapons file, opened from Οπλισμός › Μητρώο), store.ts, mockApi.ts, styles.css
+src/renderer/   app.ts (shell, nav, shortcuts), screens/*.ts (one per screen; dutyMap.ts, listMap.ts, rosterMap.ts = «Αντιστοίχιση…» dialogs; weaponMap.ts = the same for a weapons file, opened from Οπλισμός › Μητρώο), store.ts, realPreview.ts (RealPreview: pages of the real export file), mockApi.ts, styles.css
 templates/      the official .xlsx templates (rule 1)
 ```
 - The renderer never imports from `src/main`; it reaches main only through the preload API (`src/shared/api.ts`).

@@ -13,7 +13,8 @@ import { dm, dow, nowHM, nowParts, pskDays, today, type ISODate } from '../share
 import { Workbook, mergeFirstSheets, mergeSheets, sheetSafe } from './xlsx';
 import { zipHash } from './ziphash';
 import { off, useWorker, warmWorker, workerUp } from './offload';
-import type { Fail, LayoutPv, LayoutReq } from '../shared/api';
+import type { Fail, FormPv, FormPvReq, LayoutPv, LayoutReq } from '../shared/api';
+import { previewOf, printSetup } from './formPreview';
 import type { LayoutSheet } from '../shared/layout';
 import type { Boot, CmdResult, Diag, ExcelBusy, WriteTime, DirTarget, EssoArchiveInfo, EssoInfo, EssoResult, EssoStart, ExportKind, ExportOpts, ExportResult, FormInfo, FormOut, ImportPreview, SourceBook, SourceStatus, TemplateInfo, WritePreview } from '../shared/api';
 import { PREV_EVERY, SourceMetaStore, OldFormatError, holdPatch, bookNow, setBookReader, locateCheck, locateNow, writeGroup, type WriteOutcome, readBook, stamp, valuesHash, syncStamp, syncStampNow, tableState, tidyPreview, writeSource, MAX_COLS, type SourceMeta } from './sources';
@@ -38,7 +39,7 @@ import type { ListReq } from '../shared/listMap';
 import { checkTemplate, makeHdDocx } from './hdDocx';
 import { headFor } from '../shared/docHead';
 import { cleanHd, hdHeadDate, hdTags, HD_SECTIONS, type HdDoc } from '../shared/hd';
-import { cleanOpts, infoOf, openBook, previewHtml, printDefaults, printKey, rememberedSheets, renderBook, renderOpen, sectionsHtml, sheetFontSize, type Book, type PrintOpts } from './print';
+import { cleanOpts, infoOf, openBook, previewHtml, printKey, renderBook, renderOpen, sectionsHtml, type Book, type PrintOpts } from './print';
 import { xlLook } from '../shared/xlLook';
 import { buildTemplate, fillReport, inspectTemplate, placeSheets, previewReport, previewTemplate, type GroupKey } from './reports';
 import { forBuild, repDate, rowsOf, sigsNone, splitOk, withBuilt, type BuildOpts, type RepKind, type Report } from '../shared/reports';
@@ -251,7 +252,7 @@ async function made(what: MadeKind, date: ISODate, s: AppState, sigs?: Sig[] | n
 }
 // Το συμπληρωμένο έντυπο (χωρίς εγγραφή): το ίδιο για το κουμπί και για την αυτόματη ενημέρωση όσων έχουν ήδη βγει
 // sigs: υπογραφές μόνο για αυτή τη φορά (αλλιώς των Ρυθμίσεων ή του εντύπου)
-async function produce(kind: ExportKind, date: ISODate, s: AppState, sigs?: Sig[] | null, headId?: string): Promise<{ name: string; data: Buffer; warnings?: string[]; layout?: LayoutSheet[] }> {
+async function produce(kind: ExportKind, date: ISODate, s: AppState, sigs?: Sig[] | null, headId?: string): Promise<{ name: string; data: Buffer; warnings?: string[]; layout?: LayoutSheet[]; empty?: string[]; sheet?: string }> {
   const form = formOf(kind, s);
   if (kind === 'check') return made('check', date, s, sigs, undefined, headId);
   const b = formBinding(form);
@@ -831,11 +832,6 @@ function knownPath(file: string): boolean {
 // ------------------------------------------------------------------ Εκτύπωση χωρίς Excel (print.ts): προεπισκόπηση και διάλογος εκτυπωτή των Windows
 type PrintJob = { file: string; sheets: string[]; tmp: string; book: Book; key: string; base: PrintOpts; opts: PrintOpts };
 const printJobs = new Map<number, PrintJob>();   // ανά παράθυρο προεπισκόπησης (webContents)
-// οι ρυθμίσεις του εντύπου: οι αποθηκευμένες (χωρίς τις αλλαγές σελίδας, που αφορούν μόνο το σημερινό), αλλιώς οι αρχικές του
-function printPrefs(key: string, base: PrintOpts): { opts: PrintOpts; remember: boolean } {
-  const saved = readMeta().printPrefs?.[key];
-  return { opts: cleanOpts({ ...(saved || {}), breaks: undefined }, base), remember: true };
-}
 function savePrintPrefs(key: string, o: PrintOpts | null) {
   const all = { ...(readMeta().printPrefs || {}) };
   if (o) { const { breaks: _b, ...keep } = o; delete all[key]; all[key] = keep; } else delete all[key];
@@ -845,15 +841,7 @@ function savePrintPrefs(key: string, o: PrintOpts | null) {
 // fix: έντυπο με «Σταθερό μέγεθος γραμμάτων» (Michael, 4/11): «Όσες χρειάζονται» με τα γράμματα του Excel, πάνω από ό,τι είχε αποθηκευτεί
 async function printPage(file: string, sheets?: string[], fix?: boolean): Promise<Omit<PrintJob, 'file'>> {
   const book = await openBook(await fs.promises.readFile(file));
-  const key = printKey(file); const visible = book.sheets.filter(x => !x.hidden).map(x => x.name);
-  let base = printDefaults(key, sheets && sheets.length ? sheets : visible); const { opts, remember } = printPrefs(key, base);
-  if (fix) {
-    const sz = await sheetFontSize(book, (sheets && sheets[0]) || visible[0] || '');
-    const f = cleanOpts({ pages: 'auto', size: sz }, base); base = { ...base, pages: f.pages, size: f.size }; opts.pages = f.pages; opts.size = f.size;
-  }
-  // τα φύλλα που είχες διαλέξει την προηγούμενη φορά (αν δεν ζητήθηκαν συγκεκριμένα)· αν λείπει κάποιο, η αρχική επιλογή
-  const rem = rememberedSheets(opts.sheets, visible); if (rem) opts.sheets = rem; else delete opts.sheets;
-  const want = sheets && sheets.length ? sheets : rem;
+  const { key, base, opts, want } = await printSetup(book, file, readMeta().printPrefs?.[printKey(file)], sheets, fix); const remember = true;
   const doc = await renderOpen(book, { file: path.basename(file), sheets: want, layout: opts });
   const tmp = path.join(app.getPath('temp'), 'grafeio-print-' + crypto.randomUUID() + '.html');
   await fs.promises.writeFile(tmp, previewHtml(doc, path.basename(file), { opts, remember, duplex: !!readMeta().printDuplex }));
@@ -1341,6 +1329,21 @@ else {
         for (const l of ls) { const r = wb.printLastRow(l.sheet); if (r) wb.printDownTo(l.sheet, r + 8); }
         const doc = await renderBook(await wb.save(), { file: 'προεπισκόπηση.xlsx', sheets: ls.map(l => l.sheet), refs: true, maxPages: 2 });
         return { css: doc.css, warnings: out.warnings || [], sheets: ls.map(l => { const sh = doc.sheets.find(x => x.name === l.sheet); return { ...l, html: sh?.html || '', pages: sh?.pages || 0 }; }) };
+      } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+    });
+    // Προεπισκόπηση εντύπου: το ίδιο αρχείο με την εξαγωγή (produce), χωρίς να γράφεται τίποτα. Μνήμη ανά κατάσταση της εφαρμογής:
+    // όσο δεν αλλάζει τίποτα (ούτε το template στον δίσκο) ανοίγει αμέσως, και δύο ίδιες αιτήσεις μαζί μοιράζονται το ίδιο αποτέλεσμα
+    const pvCache = new Map<string, Promise<FormPv>>(); let pvState: unknown = null;
+    ipcMain.handle('form:preview', async (_e, q: FormPvReq): Promise<FormPv | Fail> => {
+      try {
+        const s = store.state; if (pvState !== s) { pvCache.clear(); pvState = s; }
+        let stamp = ''; if (q.kind !== 'check') { const st = fs.statSync(formTpl(formOf(q.kind, s) as Exclude<FormKind, 'check'>)); stamp = st.mtimeMs + ':' + st.size; }
+        const key = JSON.stringify([q.kind, q.date, q.sheet || '', q.sigs || null, q.headId || '', stamp, JSON.stringify(readMeta().printPrefs || {})]);
+        let p = pvCache.get(key);
+        if (p) return { ...(await p), ms: 0 };
+        if (pvCache.size >= 8) pvCache.delete(pvCache.keys().next().value as string);
+        p = produce(q.kind, q.date, s, q.sigs, q.headId).then(out => previewOf(out, readMeta().printPrefs?.[printKey(out.name)], q.sheet)); pvCache.set(key, p);
+        try { return await p; } catch (e) { pvCache.delete(key); throw e; }
       } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
     });
     ipcMain.handle('rep:run', async (_e, r: Report, file: string, ids: (number | string)[], date: ISODate, print: boolean, force?: boolean, opts?: { quiet?: boolean; again?: boolean; headId?: string }): Promise<RepOut> => {

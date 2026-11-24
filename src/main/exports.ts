@@ -36,7 +36,7 @@ export const who = (p: Person) => [rankTxt(p), p.spec ? '(' + p.spec + ')' : '',
 const titleDate = (d: ISODate, longYear: boolean) => { const x = parseD(d); return String(x.getDate()).padStart(2, '0') + ' ' + MON_SHORT[x.getMonth()] + ' ' + (longYear ? x.getFullYear() : String(x.getFullYear()).slice(2)); };
 export { byRoom };
 
-export interface ExportResult { name: string; data: Buffer; warnings: string[]; layout?: LayoutSheet[]; sheet?: string; sheets?: string[] }   // sheet: το φύλλο του εντύπου (ΠΣΚ: αυτό κρατιέται)· sheets: τα δύο φύλλα της «Όλης της δύναμης» (εξοδούχοι, δύναμη)
+export interface ExportResult { name: string; data: Buffer; warnings: string[]; layout?: LayoutSheet[]; sheet?: string; sheets?: string[]; empty?: string[] }   // empty: τα κελιά (όπως βγήκαν) των κενών θέσεων της ΦΡΟΥΡΑΣ, μόνο για την προεπισκόπηση στην οθόνη (δεν γράφεται στο αρχείο)· sheet: το φύλλο του εντύπου (ΠΣΚ: αυτό κρατιέται)· sheets: τα δύο φύλλα της «Όλης της δύναμης» (εξοδούχοι, δύναμη)
 
 // Λόχος/Τάγμα (Michael, 18/10): οι λέξεις της ίλης στα κείμενα του template («ΔΚΤΗΣ ΙΛΗΣ», «2Η ΕΠΧΙΑ») γίνονται του λόχου,
 // πριν γραφτεί οτιδήποτε (ό,τι γράφει η εφαρμογή, π.χ. η κεφαλίδα, έχει ήδη τις σωστές). Και ανάποδα (20/10): δικό σου
@@ -393,7 +393,8 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
   const headRefs = head.slice(0, Math.max(map.head.length, s.settings.unit.filter(Boolean).length)).map(h => refOf(h.c, h.r));
   const dh = await designHead(wb, ws, s, 'froura', headId, headRefs, [], d);
   const layout = await signSheets(wb, [{ ws, key: 'main', designed: !!dh, more: dh ? headBlocks(wb, ws, dh) : [blockOf(ws, 'head', headRefs)] }], s, 'froura', sigs, warnings);
-  return { name: frouraName(s.settings, phase, d), data: await wb.save(), warnings, layout, sheet: shName };
+  const empty = [...lay.cells].filter(([, names]) => !names.length).map(([ref]) => at(ref));
+  return { name: frouraName(s.settings, phase, d), data: await wb.save(), warnings, layout, sheet: shName, empty };
 }
 // Τα κελιά της κεφαλίδας: του template, και (αν έχει λιγότερες από 3) τα κενά από κάτω της, πάνω από τη γραμμή stop
 function headCells(head: { r: number; c: number }[], stop: number, busy: (r: number, c: number) => boolean): { r: number; c: number }[] {

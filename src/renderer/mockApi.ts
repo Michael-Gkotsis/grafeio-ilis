@@ -305,6 +305,8 @@ export function mockApi(): Api {
         return { key: x.key, sheet: x.label, blocks, html: html + '</table></div>', pages: 1 };
       }) };
     },
+    // Προεπισκόπηση εντύπου: στο πρόγραμμα περιήγησης δεν υπάρχει το πραγματικό αρχείο, μια σελίδα-σημείωση αρκεί
+    formPreview: async q => ({ css: '', warnings: [], marks: [], ms: 0, sheets: [{ name: 'δοκιμή', pages: 1, html: '<div class="pg" style="width:794px;height:240px;padding:24px;font:14px Arial">Δοκιμαστική προεπισκόπηση (' + q.kind + ' ' + q.date + '): το πραγματικό αρχείο φαίνεται μόνο στην εφαρμογή.</div>' }] }),
     repRun: async (r, _f, ids) => ({ ok: true, file: '(δοκιμή) ' + r.name + ' (' + ids.length + ').xlsx', warnings: [] }),
     repTimes: async () => ({}),
     repHist: async () => [],
