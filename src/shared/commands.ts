@@ -4,11 +4,11 @@ import type { WeaponApply } from './weaponUnit';
 import { HK } from './unit';
 import { applyHkCols, type HkColInput } from './hkCols';
 import { cleanHd, type HdDoc } from './hd';
-import { addDays, dayName, daysBetween, dm, DOW_FULL, weekday, type ISODate } from './dates';
+import { addDays, dayName, daysBetween, dm, dmy, DOW_FULL, weekday, type ISODate } from './dates';
 import { norm, normGreek, upper } from './text';
 import { noPending, TYPES, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, RECORD_CATS, kolColOf, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, blockGroups, blockShape, cleanShift, everyBlock, hasShift, MAX_NUMS, MAX_PER, reshapeBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Asset, type AssetEvent, type AssetHolder, type Baseline, type Cadre, type CadreAbs, type CadreGrant, type CadreDuty, type CadreDutyPerson, type DutyFix, type Note, type BlockDef, type ShiftDef, type BackFix, type CapKey, type DayPlan, type DutyKind, type HkaiManual, type Move, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
-import { isUnit } from './mode';
+import { cleanEke, ekeWhy, isUnit } from './mode';
 import { essoPersonTxt, parseEsso } from './esso';
 import { mergeDuties, type DutyCell } from './sources';
 import type { AbsNew, CadreNew } from './cadreSource';
@@ -169,6 +169,8 @@ export type Command =
   // Οπλισμός: αριθμοί όπλων, πολλοί μαζί με μία αναίρεση (επικόλληση στήλης, μεταφορά από άλλον). '' = χωρίς όπλο / παρέδωσε
   | { t: 'setWeapons'; changes: WeaponChange[]; what?: string }
   | { t: 'setPersonal'; pid?: number; cid?: string; iban?: string; amka?: string; afm?: string; email?: string; relEmail?: string; blood?: string; religion?: string; eid?: string }   // ειδικότητα (στρατιώτη ή στελέχους, Michael 24/11)· θρήσκευμα (στρατιώτη ή στελέχους, Michael 18/11)· IBAN/ΑΜΚΑ/ΑΦΜ από την καρτέλα (οπλίτη ή στελέχους)· e-mail, e-mail συγγενή, ομάδα αίματος μόνο οπλίτη
+  // Σε ΕΚΕ, εκπαίδευση ειδικότητας (Michael, 24/11, λειτουργία μονάδας): το διάστημα του στρατιώτη όπως το γράφεις (αντικαθιστά το προηγούμενο)· χωρίς from και to = βγαίνει από ΕΚΕ
+  | { t: 'setEke'; pid: number; from?: ISODate; to?: ISODate }
   // Έξοδος και είσοδος όπλων από τον οπλοβαστό (Michael, 18/10). Ώρα ΩΩ:ΛΛ (η φόρμα βάζει την τωρινή). Είσοδος χωρίς reason:
   // ο λόγος εισαγωγής κάθε εξόδου από τη λίστα (ΕΚΠ → ΛΗΞ ΕΚΠ)
   | { t: 'weaponOut'; pids: number[]; reason: string; day: ISODate; time: string; note?: string }
@@ -394,6 +396,7 @@ export function shapePerson(x: NewPerson, id: number, lists?: UserLists): Person
   if (!t(x.came)) delete p.came; else p.came = upper(t(x.came));   // «Ήρθε από» (μονάδα): κεφαλαία όπως ό,τι γράφεται στο Excel
   if (!x.siCat?.trim()) delete p.siCat; else p.siCat = normGreek(t(x.siCat));
   if (!p.dn) delete p.dn;
+  { const e = cleanEke(x.eke?.from, x.eke?.to); if (e) p.eke = e; else delete p.eke; }   // ΕΚΕ (Michael, 24/11): μόνο από–έως
   if (!p.offDays?.length) delete p.offDays;
   if (!(Number(x.monthMax) > 0)) delete p.monthMax; else p.monthMax = Math.floor(Number(x.monthMax));
   if (!(Number(x.dutyMax) >= 1)) delete p.dutyMax; else p.dutyMax = Math.floor(Number(x.dutyMax));   // δικό του όριο υπηρεσιών (Michael, 24/11)
@@ -406,6 +409,7 @@ function makePerson(s: AppState, x: NewPerson, today?: ISODate): Person {
   if (!p.last || !p.first) throw new Error('Γράψε επώνυμο και όνομα');
   // ημερομηνία εισαγωγής (μονάδα): μπορεί να είναι παλιά, όχι πάνω από ένα χρόνο μπροστά
   if (p.inOn && (!/^\d{4}-\d{2}-\d{2}$/.test(p.inOn) || (today && p.inOn > addDays(today, 366)))) throw new Error('Η ημερομηνία εισαγωγής δεν μπορεί να είναι πάνω από ένα χρόνο μπροστά');
+  { const why = ekeWhy(p.eke?.from, p.eke?.to); if (why) throw new Error(why); }
   const twin = (p.asm && s.people.find(y => y.asm === p.asm)) || s.people.find(y => personKey(y) === personKey(p));
   if (twin) throw new Error(twinText(twin, p.asm));
   return p;
@@ -1387,6 +1391,14 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const o = c.pid != null ? s.people.find(x => x.id === c.pid) : undefined; if (!o) throw new Error('Δεν βρέθηκε το άτομο');
       const q = patch(o); for (const k of XKEYS) { if (c[k] === undefined) continue; const v = normExtra(k, c[k]); if (v) q[k] = v; else delete q[k]; } if (same(o, q)) return { state: s, text: '', files: [] };
       return { state: { ...s, people: s.people.map(x => (x === o ? q : x)) }, text: 'Έξτρα στοιχεία: ' + shortName(o), files: [] };
+    }
+    case 'setEke': {
+      const p = pm.get(c.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
+      const why = ekeWhy(c.from, c.to); if (why) throw new Error(why);
+      const e = cleanEke(c.from, c.to);
+      if (e?.from === p.eke?.from && e?.to === p.eke?.to) return { state: s, text: '', files: [] };
+      const q: Person = { ...p }; if (e) q.eke = e; else delete q.eke;
+      return { state: { ...s, people: s.people.map(x => (x === p ? q : x)) }, text: 'ΕΚΕ ' + shortName(p) + ': ' + (e ? [e.from && 'από ' + dmy(e.from), e.to && 'έως ' + dmy(e.to)].filter(Boolean).join(' ') : 'βγήκε από ΕΚΕ'), files: [] };
     }
     case 'setWeapons': {
       const F = { weapon: normWeapon, wtype: (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim().toUpperCase(), rack: normRack, wpos: normPos } as const;
