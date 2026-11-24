@@ -474,6 +474,7 @@ export interface AssetCat {
   kind: 'weapon' | 'material' | 'vehicle';
   types: string[];
   fields: { id: string; name: string }[];
+  accs?: { name: string; qty?: number }[];   // παρελκόμενα που έχει συνήθως η κατηγορία (qty = προεπιλεγμένη ποσότητα)· λείπει στα παλιά δεδομένα
   every?: number;                        // συντήρηση κάθε N μήνες (προεπιλογή της κατηγορίας)
   everyKm?: number;                      // οχήματα: και κάθε N χλμ
   hours?: boolean;                       // οχήματα: μετρά ώρες κινητήρα αντί για χιλιόμετρα (ετικέτα «ώρ.»)· επέκταση του σχήματος της φάσης 5
@@ -496,7 +497,8 @@ export interface Asset {
   warOnly?: boolean;
   maint?: { last?: ISODate; next?: ISODate; every?: number; lastKm?: number; nextKm?: number };
   extra?: Record<string, string>;
-  acc?: string;
+  acc?: string;                          // παρελκόμενα ως κείμενο: από εδώ γράφει το Excel· όταν υπάρχει το accs, γράφεται από αυτό (accsToText)
+  accs?: { name: string; qty: number }[];   // παρελκόμενα ως λίστα (ποσότητα ανά είδος)· λείπει στα παλιά δεδομένα
   note?: string;
   plate?: string; driver?: { k: 'person'; pid: number } | { k: 'cadre'; cid: string }; km?: number; kmOn?: ISODate;
   gone?: ISODate;

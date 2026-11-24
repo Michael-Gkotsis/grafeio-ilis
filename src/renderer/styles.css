@@ -1905,3 +1905,21 @@ thead .mg-tail--n{font-size:11px}
 .tm__note{margin:0}
 .tm__foot{font-size:12px;color:var(--muted-fg);max-width:46ch}
 @media (max-width:900px){.tm__cols{grid-template-columns:minmax(0,1fr)}.tm__scroll{max-height:320px}.tm__wgrid{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}}
+/* Ρυθμίσεις › Οπλισμός και υλικό: κατηγορίες αριστερά, η επιλεγμένη δεξιά, λίστες με κουμπάκια (assetsSet.ts) */
+.asset-set{display:flex;gap:12px;align-items:flex-start}
+.asset-set__cats{width:230px;flex:none;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:6px;display:flex;flex-direction:column}
+.asset-set__edit{flex:1;min-width:0}
+.asset-set__sec{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted-fg);padding:8px 8px 2px}
+.asset-set__cat{display:flex;justify-content:space-between;gap:8px;width:100%;padding:5px 8px;border:0;border-radius:6px;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.asset-set__cat:hover{background:var(--hover)}
+.asset-set__cat.is-on{background:var(--hover);font-weight:700}
+.asset-set__n{color:var(--muted-fg);font-weight:400}
+.asset-set__add{margin-top:6px;padding:6px 8px;border:0;border-radius:6px;background:none;color:var(--primary);font:inherit;font-weight:700;text-align:left;cursor:pointer}
+.asset-set__add:hover{background:var(--hover)}
+.asset-chips{display:flex;flex-wrap:wrap;gap:6px}
+.asset-chip{display:inline-flex;align-items:center;gap:2px;min-height:28px;padding:0 4px 0 10px;border-radius:999px;background:var(--secondary);color:var(--secondary-fg);font-size:13px;font-weight:600}
+.asset-chip__b{width:22px;height:22px;border-radius:999px;border:0;background:none;color:inherit;font:inherit;font-size:12px;cursor:pointer;opacity:.75}
+.asset-chip__b:hover{background:var(--hover);opacity:1}
+.asset-chip--add{padding:0 10px;border:1px dashed var(--border);background:transparent;color:var(--primary);font-family:inherit;cursor:pointer}
+.asset-chip--add:hover{background:var(--hover)}
+@media (max-width:760px){.asset-set{flex-direction:column}.asset-set__cats{width:100%}}

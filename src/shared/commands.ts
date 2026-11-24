@@ -67,6 +67,8 @@ export type Command =
   | { t: 'assetHolder'; id: string; base?: Asset; holder: AssetHolder | null; date: ISODate }
   | { t: 'assetGone'; id: string; base?: Asset; why?: string; date: ISODate }
   | { t: 'deleteAsset'; id: string }
+  // Ρυθμίσεις οπλισμού: μετονομασία τύπου μιας κατηγορίας· αλλάζει και τον τύπο σε κάθε εγγραφή (και κύριο όπλο) που τον έχει, με μία αναίρεση
+  | { t: 'renameAssetType'; cat: string; from: string; to: string }
   // Αρχείο οπλισμού άλλης μονάδας (shared/weaponUnit.ts): κύριο όπλο στο Δυναμολόγιο και νέες εγγραφές Μητρώου, μόνο ό,τι δεν υπάρχει ήδη
   | { t: 'importWeapons'; apply: WeaponApply; source: string; date: ISODate }
   // Από το δικό τους Excel (3/11): νέα στελέχη και αλλαγές στοιχείων (με τους ίδιους κανόνες της καρτέλας), και καταστάσεις
@@ -849,6 +851,20 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const x = s.cadreList.find(y => y.id === c.cid); if (!x) throw new Error('Δεν βρέθηκε το στέλεχος');
       const p = c.person && cleanPerson(c.person); const rest = { ...(s.cadreDutyOf || {}) }; if (p) rest[x.id] = p; else delete rest[x.id];
       return { state: { ...s, cadreDutyOf: rest }, text: 'Στέλεχος: ' + rankTxt(x) + ' ' + x.last + ', στοιχεία υπηρεσιών' + (p ? '' : ' (καθαρίστηκαν)'), files: [] };
+    }
+    case 'renameAssetType': {
+      const to = String(c.to ?? '').replace(/\s+/g, ' ').trim(); const from = String(c.from ?? '').replace(/\s+/g, ' ').trim();
+      if (!to) throw new Error('Γράψε το νέο όνομα του τύπου');
+      const cfg = assetCfgOf(s.settings); const cat = catOf(cfg, c.cat); if (!cat) throw new Error('Δεν βρέθηκε η κατηγορία');
+      const fk = normGreek(from); const i = cat.types.findIndex(x => normGreek(x) === fk); if (i < 0) throw new Error('Δεν βρέθηκε ο τύπος «' + from + '»');
+      if (normGreek(to) !== fk && cat.types.some(x => normGreek(x) === normGreek(to))) throw new Error('Υπάρχει ήδη ο τύπος «' + to + '» στην κατηγορία');
+      const cats = cfg.cats.map(x => (x === cat ? { ...x, types: x.types.map((t, j) => (j === i ? to : t)) } : x));
+      const hit = (a: { type?: string }) => normGreek(a.type) === fk;
+      let n = 0; const assets = (s.assets || []).map(a => (a.cat === cat.id && hit(a) && a.type !== to ? (n++, { ...a, type: to }) : a));
+      // κύριο όπλο ατόμων/στελεχών (εικονικές γραμμές του Μητρώου): όπλα μόνο, ο τύπος γράφεται κεφαλαία όπως στο setWeapons
+      const wt = cat.kind === 'weapon'; const up = to.toUpperCase(); const hw = (x: { wtype?: string }) => wt && normGreek(x.wtype) === fk && x.wtype !== up;
+      const people = s.people.map(p => (hw(p) ? (n++, { ...p, wtype: up }) : p)); const cadreList = s.cadreList.map(p => (hw(p) ? (n++, { ...p, wtype: up }) : p));
+      return { state: { ...s, settings: { ...s.settings, assets: { ...s.settings.assets, cats } }, assets: s.assets ? assets : s.assets, people, cadreList }, text: 'Μητρώο: ο τύπος «' + from + '» της κατηγορίας ' + cat.name + ' έγινε «' + to + '»' + (n ? ' (' + n + ' εγγραφές)' : ''), files: [] };
     }
     case 'saveAsset': case 'assetMaint': case 'assetState': case 'assetHolder': case 'assetGone': case 'deleteAsset': case 'assetFuel': case 'assetKm': case 'assetDriver': return assetCmd(s, c, ctx);
     case 'addRequest': case 'updateRequest': {
