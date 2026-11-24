@@ -261,7 +261,11 @@ export function frontTexts(sh: SheetModel, o: { unit: string; place: string; d: 
       if (/(^|\s)ΗΜΕΡΗΣΙΑ[ΣΣ]?\s+ΑΝΑΦΟΡΑ[ΣΣ]?(?![\p{L}])/u.test(n)) {
         plan.found.title = true;
         const res = fillTitle(raw, { unit: upper(o.unit), d: o.d, fmt: o.fmt });
-        if (!res.date) { const dr = dateRight(g, sh, r, c); if (!(dr && putDate(dr))) plan.warnings.push('Ο τίτλος «' + t.slice(0, 40) + '» δεν έχει κενό ή ημερομηνία: δεν γράφτηκε'); }
+        if (!res.date) {
+          const dr = dateRight(g, sh, r, c);
+          // «ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ 4ης ΙΛΗΣ ΤΗΣ» χωρίς κενό και χωρίς κελί ημερομηνίας: η ημερομηνία μπαίνει στο τέλος, μετά το «ΤΗΣ»
+          if (!(dr && putDate(dr))) { if (/(^|\s)ΤΗΣ$/.test(n)) put(r, c, raw, t + ' ' + fmtDate(o.d, o.fmt)); else plan.warnings.push('Ο τίτλος «' + t.slice(0, 40) + '» δεν έχει κενό ή ημερομηνία: δεν γράφτηκε'); }
+        }
         else if (frame(res.text, [upper(o.unit), fmtDate(o.d, 'hk'), fmtDate(o.d, 'slash'), fmtDate(o.d, 'slash4')]) !== frame(raw, [])) plan.warnings.push('Ο τίτλος δεν γράφτηκε (θα άλλαζε λέξεις του εντύπου)');
         else put(r, c, raw, res.text);
         for (const s of res.skipped) plan.warnings.push('Στον τίτλο: ' + s + ': δεν γράφτηκε');
@@ -270,7 +274,7 @@ export function frontTexts(sh: SheetModel, o: { unit: string; place: string; d: 
       // «Πυλί, Κως,» και η ημερομηνία σε δικό της κελί δεξιά
       if (/^[^\d:]{1,40},$/u.test(t.trim())) { const dr = dateRight(g, sh, r, c); if (dr && putDate(dr)) { plan.found.date = true; continue; } }
       // «Τόπος, 25/09/26» · «Τόπος, / /» · «……, ημερομηνία» (a short text, a comma, then the date or its blank)
-      const pd = /^([^\d,:]{0,40}?|[_….\s]+),\s*(.*)$/u.exec(t);
+      const pd = /^([^\d,:]{0,40}?|\p{L}[^,:]{0,39}?|[_….\s]+),\s*(.*)$/u.exec(t);   // ο τόπος μπορεί να έχει αριθμό όταν αρχίζει με γράμμα («ΣΤΓ 915, / /»)
       if (pd && (DATE_SLASH.test(pd[2]) || DATE_WORD.test(pd[2])) && !/\p{L}{4,}\s+\p{L}{4,}\s+\p{L}{4,}/u.test(pd[1]) && pd[2].replace(DATE_SLASH, '').replace(DATE_WORD, '').replace(/[_….\s]/g, '') === '') {
         plan.found.date = true;
         const place = /^[_….\s]*$/.test(pd[1]) ? (o.place ? upper(o.place) : '') : pd[1];

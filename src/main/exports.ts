@@ -12,7 +12,7 @@ import { fileNameOf, frouraName } from '../shared/fileNames';
 import { formText, hkRowLabel, reportOf, unitKindOf, unitText } from '../shared/unit';
 import { seatMap, dutyMin, hkaiCounts, outMinOn, postBy, postsOf, statusesFrom } from '../shared/rules';
 import { DAY_GROUPS, dayBook, whenList, type DayGroup, type DayRow } from '../shared/outsDay';
-import { Workbook, colName, colNum, sheetSafe, splitRef, unesc, type Sheet, type XlValue } from './xlsx';
+import { Workbook, colName, colNum, sheetSafe, splitRef, toSerial, unesc, type Sheet, type XlValue } from './xlsx';
 import { HK_COLS, cleanHkaiCells, detectHkai, type HkaiMap } from '../shared/sources';
 import { hkOffText } from '../shared/cadre';
 import { foreignBack, hkaiAdaptive } from './tplAdapt';
@@ -485,11 +485,20 @@ type HkaiOpts = { front?: string; back?: string; map?: HkaiMap; cells?: Partial<
 // Μηχανή προσαρμογής: αν το template της μονάδας έχει αποθηκευμένη αντιστοίχιση («Πρότυπο μονάδας») και η παλιά διαδρομή δεν το γεμίζει ολόκληρο
 // (δικές του στήλες ή γραμμές, τύποι που μετρούν άλλο φύλλο, σύνολα που έγιναν αριθμοί), γεμίζει με το fillAdaptive. Αλλιώς ό,τι ήταν πάντα (τα έτοιμα templates, byte-identical).
 export async function fillHkai(tpl: Buffer, s: AppState, d: ISODate, opts: HkaiOpts = {}): Promise<ExportResult> {
+  const cells = cleanHkaiCells(opts.cells).cells;   // άκυρες τιμές (π.χ. «2») δεν μετρούν ως διορθώσεις
   if (s.settings.tplProfiles?.length || await foreignBack(tpl)) {
-    const ad = await hkaiAdaptive(tpl, s, d, { front: opts.front, cells: opts.cells, sigs: opts.sigs });
+    const ad = await hkaiAdaptive(tpl, s, d, { front: opts.front, cells, sigs: opts.sigs });
     if (ad) return { name: fileNameOf(s.settings, 'hkai', d), data: ad.data, warnings: ad.warnings, ...(ad.sheet ? { sheet: ad.sheet } : {}) };
   }
-  return fillHkaiClassic(tpl, s, d, opts);
+  try { return await fillHkaiClassic(tpl, s, d, opts); }
+  catch (e) {
+    // Έντυπο άλλης μονάδας με κελί που έχει τύπο εκεί που γράφει η παλιά διαδρομή: δεν σταματά με λάθος,
+    // γεμίζει η μηχανή προσαρμογής από όσα αναγνωρίζει στο ίδιο το έντυπο (το ίδιο που δείχνει η οθόνη «Αντιστοίχιση…»)
+    if (e instanceof TemplateError || !/έχει τύπο και δεν αλλάζει|^Λάθος κελί/.test((e as Error)?.message || '') || cells) throw e;   // «έχασε τύπους» μένει λάθος (το έντυπο της εφαρμογής χωρίς τύπους)
+    const ad = await hkaiAdaptive(tpl, s, d, { front: opts.front, sigs: opts.sigs, force: true });
+    if (!ad) throw e;
+    return { name: fileNameOf(s.settings, 'hkai', d), data: ad.data, warnings: ad.warnings, ...(ad.sheet ? { sheet: ad.sheet } : {}) };
+  }
 }
 async function fillHkaiClassic(tpl: Buffer, s: AppState, d: ISODate, opts: HkaiOpts = {}): Promise<ExportResult> {
   const wb = await Workbook.open(tpl); await unitWords(wb, s);
@@ -516,6 +525,12 @@ async function fillHkaiClassic(tpl: Buffer, s: AppState, d: ISODate, opts: HkaiO
   hkRowLabels(fr, m, ALL, s);
   hkHead(fr, m, s);
   if (m.title) fr.set(m.title, 'ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ ' + s.settings.unitName + ' ΤΗΣ ' + hkDate(d));
+  // ημερομηνία σε δικό της κελί (μορφή ημερομηνίας) δεξιά από τον τίτλο, όπως στην ΗΚΑΛ άλλων μονάδων: η παλιά μέρα δεν μένει
+  if (m.title) {
+    const tr = Number(/\d+$/.exec(m.title)![0]); const tc = colNum(m.title.replace(/\d+$/, ''));
+    const at = ((await wb.values(frName, 120, 40))[tr - 1] || []).findIndex((v, i) => i + 1 > tc && v instanceof Date);
+    if (at >= 0 && colName(at + 1) + tr !== m.date) fr.set(colName(at + 1) + tr, toSerial(d, wb.date1904));
+  }
   else warnings.push('Το template δεν έχει τίτλο «ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ…»: η ημερομηνία δεν γράφτηκε');
   if (m.date) fr.set(m.date, place + ', ' + hkDate(d));
   const rowsOf: [string, number][] = ALL.map(r => [r, m.rows[r]] as [string, number]).filter(([, r]) => r > 0);
