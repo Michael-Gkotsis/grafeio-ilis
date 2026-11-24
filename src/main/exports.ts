@@ -6,7 +6,7 @@ import { dutyAt, isWk, leaveStart, leaveText, outLbl, outNoteOf, withNote } from
 import { norm } from '../shared/text';
 import { backBy } from '../shared/hours';
 import { byName, hkOrgans, hkaiAdikLines, hkaiDiaLines, hkaiEgrLines, hkaiLeaveLines, hkaiPunLines, hkaiReqLines } from '../shared/hkaiText';
-import { TYPES, DEFAULT_DUTY_START, isOutsAll, blocksOf, coversDay, dutyStartOf, hkOn, fatherTxt, fullName, groupKey, hasShift, phaseBase, phaseName, PHASE_NAME, type AppState, type Person, type Phase, type Post, type Status } from '../shared/domain';
+import { TYPES, DEFAULT_DUTY_START, isOutsAll, blocksOf, coversDay, dutyStartOf, hkOn, fatherTxt, fullName, groupKey, hasShift, phaseBase, phaseName, PHASE_NAME, type AppState, type BlockDef, type Person, type Phase, type Post, type Status } from '../shared/domain';
 import { live, absKeysOf, hkColsOf, hkRowsOf, isAway, itemKey, kolKeysOf, rankTxt, statusLbl, type HkColDef, type HkRows } from '../shared/ranks';
 import { fileNameOf, frouraName } from '../shared/fileNames';
 import { formText, hkRowLabel, reportOf, unitKindOf, unitText } from '../shared/unit';
@@ -276,6 +276,71 @@ function extendFroura(wb: Workbook, ws: Sheet, map: FrouraMap, over: Map<FTable,
 
 // sheet: φύλλο του template (Αρχεία Excel)· κενό = αυτό που έχει την «ΚΑΤΑΣΤΑΣΗ ΥΠΗΡΕΣΙΩΝ» (ή τους πίνακες)
 // Κάθε στοιχείο γράφεται εκεί που το έχει το template (tplmap.ts): κεφαλίδα, τίτλος, Λ/Υ, Δ/Υ, πίνακες, τιμωρημένοι και απόντες
+// Ανενεργή υπηρεσία (Ρυθμίσεις › Υπηρεσίες): ο πίνακας ή η γραμμή της δεν μένει στο έντυπο. Ό,τι έχει δική του περιοχή (ορθογώνιο)
+// στο template: πίνακας του οποίου το είδος έχει ανενεργό μπλοκ και δεν κάθισε σε αυτόν καμία θέση, ΤΑΕ, Λ/Υ, Δ/Υ. Αν η περιοχή είναι
+// μόνη της στις γραμμές της σβήνονται οι γραμμές (μαζί με τις κενές που ακολουθούν αν από πάνω υπάρχει κενή) και ό,τι είναι από κάτω
+// ανεβαίνει· αλλιώς (πίνακας δίπλα σε άλλον) αδειάζει μόνο η περιοχή. Καλείται όταν έχουν γραφτεί όλα· down() = πού πήγε μια γραμμή του template.
+async function dropHiddenBlocks(wb: Workbook, ws: Sheet, name: string, map: FrouraMap, seats: Map<string, Seat>, blocks: BlockDef[], down: (r: number) => number): Promise<DropOut> {
+  const none: DropOut = { rows: [], boxes: [] };
+  const hidden = blocks.filter(b => b.hidden); if (!hidden.length) return none;
+  const keyOf = (b: BlockDef) => (b.custom || !['ly', 'th', 'op', 'mg', 'sk', 'tae'].includes(b.kind) ? 'b:' + b.id : b.kind);
+  const offKinds = new Set(hidden.map(keyOf));
+  const used = new Set([...seats.values()].map(x => x.ref)), usedTabs = new Set([...seats.values()].map(x => x.t).filter(Boolean));
+  const merges = ws.merges();
+  const vals = await wb.values(name, 600, 40);
+  const has = (r: number, c: number) => String(vals[r - 1]?.[c - 1] ?? '').trim() !== '';
+  type Box = { r1: number; r2: number; c1: number; c2: number; spacer: boolean };
+  const boxes: Box[] = [];
+  const widen = (b: Box) => { for (let i = 0; i < 2; i++) for (const m of merges) if (m.r1 >= b.r1 && m.r2 <= b.r2 && m.c2 >= b.c1 && m.c1 <= b.c2) { b.c1 = Math.min(b.c1, m.c1); b.c2 = Math.max(b.c2, m.c2); } return b; };
+  for (const t of map.tables) {
+    if (!offKinds.has(t.kind) || usedTabs.has(t)) continue;
+    const L = t.nums[t.nums.length - 1];
+    boxes.push(widen({ r1: down(t.hr), r2: down(L.r + L.h - 1), c1: Math.min(t.aa ?? t.name, t.name), c2: Math.max(t.name, t.hours ?? t.name, t.note ?? t.name), spacer: true }));
+  }
+  for (const x of map.single) {
+    if (!offKinds.has(x.kind) || used.has(refOf(x.c, x.r))) continue;
+    const r = down(x.r); let c1 = x.c; for (let c = Math.max(1, x.c - 4); c < x.c; c++) if (has(r, c)) { c1 = c; break; }   // η ετικέτα είναι αριστερά από το όνομα
+    boxes.push(widen({ r1: r, r2: r, c1, c2: x.c, spacer: false }));
+  }
+  const ly = hidden.some(b => b.posts.some(p => p.k === 'ly')), dy = hidden.some(b => b.posts.some(p => p.k === 'dy'));
+  for (const [on, cell] of [[ly, map.ly], [dy, map.dy]] as const) if (on && cell) boxes.push(widen({ r1: down(cell.r), r2: down(cell.r), c1: cell.c, c2: cell.c, spacer: false }));
+  if (!boxes.length) return none;
+  // «μόνη της»: στις γραμμές της δεν υπάρχει τίποτα έξω από τις περιοχές που φεύγουν (ούτε συγχώνευση που περνά έξω από αυτές)
+  let alone = boxes.slice();
+  for (let again = true; again;) {
+    again = false;
+    for (const b of alone.slice()) {
+      const inAny = (r: number, c: number) => alone.some(x => r >= x.r1 && r <= x.r2 && c >= x.c1 && c <= x.c2);
+      let ok = true;
+      for (let r = b.r1; r <= b.r2 && ok; r++) for (let c = 1; c <= 40 && ok; c++) if (has(r, c) && !inAny(r, c)) ok = false;
+      for (const m of merges) if (ok && m.r2 >= b.r1 && m.r1 <= b.r2 && !alone.some(x => m.r1 >= x.r1 && m.r2 <= x.r2 && m.c1 >= x.c1 && m.c2 <= x.c2)) ok = false;
+      if (!ok) { alone = alone.filter(x => x !== b); again = true; }
+    }
+  }
+  const gone = new Set<number>();
+  for (const b of alone) {
+    for (let r = b.r1; r <= b.r2; r++) gone.add(r);
+    const blank = (r: number) => r >= 1 && !merges.some(m => r >= m.r1 && r <= m.r2) && Array.from({ length: 40 }, (_, i) => has(r, i + 1)).every(v => !v);
+    if (b.spacer && b.r1 > 1 && blank(b.r1 - 1)) for (let r = b.r2 + 1; blank(r) && !alone.some(x => x !== b && r >= x.r1 && r <= x.r2); r++) gone.add(r);
+  }
+  const rows = [...gone].sort((a, b) => b - a);
+  // ο πρώτος έλεγχος αποτυγχάνει πριν αλλάξει κάτι (φύλλο με πίνακα Excel ή σχέδιο): τότε αδειάζουν οι περιοχές
+  const done = rows.length > 0 && ws.deleteRow(rows[0], wb);
+  if (done) for (const r of rows.slice(1)) ws.deleteRow(r, wb);
+  const rest = done ? boxes.filter(b => !alone.includes(b)) : boxes;
+  // οι περιοχές που μένουν πάνω από γραμμές που σβήστηκαν: οι γραμμές τους μετακινούνται
+  const up = (r: number) => r - (done ? rows.filter(x => x < r).length : 0);
+  for (const b of rest) ws.clearBox(b.c1, b.c2, up(b.r1), up(b.r2));
+  return { rows: done ? rows : [], boxes: rest };
+}
+// Τι άλλαξε: οι γραμμές που σβήστηκαν και οι περιοχές που άδειασαν (με τις γραμμές όπως ήταν πριν σβηστούν οι άλλες)
+interface DropOut { rows: number[]; boxes: { r1: number; r2: number; c1: number; c2: number }[] }
+// Ref κελιού πριν τη διαγραφή → ref μετά (ή null αν το κελί έφυγε ή άδειασε)
+const afterDrop = (ref: string, d: DropOut): string | null => {
+  const { c, r } = splitRef(ref);
+  if (d.rows.includes(r) || d.boxes.some(b => r >= b.r1 && r <= b.r2 && c >= b.c1 && c <= b.c2)) return null;
+  return colName(c) + (r - d.rows.filter(x => x < r).length);
+};
 export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Phase = s.settings.phase || 'sven', sheet?: string, sigs?: Sig[] | null, headId?: string | null): Promise<ExportResult> {
   // κατάσταση υπηρεσιών της μονάδας σε λίστα (Αντιστοίχιση… στο έντυπο ΦΡΟΥΡΑ): αν υπάρχει αποθηκευμένη αντιστοίχιση για αυτό το αρχείο γεμίζει με αυτήν, αλλιώς ό,τι ήταν πάντα
   if (s.settings.tplProfiles?.length) {
@@ -388,12 +453,13 @@ export async function fillFroura(tpl: Buffer, s: AppState, d: ISODate, phase: Ph
     }
   }
   // δικό σου έντυπο υπηρεσιών: το φύλλο του template («ΦΡΟΥΡΑ ΣΒΕΝ») παίρνει το όνομά του
+  const dropped = await dropHiddenBlocks(wb, ws, name, map, seats, blocks, down);
   const base = phaseBase(s.settings, phase);
   const shName = base !== phase && name === 'ΦΡΟΥΡΑ ' + PHASE_NAME[base] ? wb.renameSheet(name, 'ΦΡΟΥΡΑ ' + phaseName(s.settings, phase)) : name;
   const headRefs = head.slice(0, Math.max(map.head.length, s.settings.unit.filter(Boolean).length)).map(h => refOf(h.c, h.r));
   const dh = await designHead(wb, ws, s, 'froura', headId, headRefs, [], d);
   const layout = await signSheets(wb, [{ ws, key: 'main', designed: !!dh, more: dh ? headBlocks(wb, ws, dh) : [blockOf(ws, 'head', headRefs)] }], s, 'froura', sigs, warnings);
-  const empty = [...lay.cells].filter(([, names]) => !names.length).map(([ref]) => at(ref));
+  const empty = [...lay.cells].filter(([, names]) => !names.length).map(([ref]) => afterDrop(at(ref), dropped)).filter((x): x is string => !!x);
   return { name: frouraName(s.settings, phase, d), data: await wb.save(), warnings, layout, sheet: shName, empty };
 }
 // Τα κελιά της κεφαλίδας: του template, και (αν έχει λιγότερες από 3) τα κενά από κάτω της, πάνω από τη γραμμή stop
