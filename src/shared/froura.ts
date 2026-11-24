@@ -2,7 +2,7 @@
 // Κοινό για την εξαγωγή (main) και την προεπισκόπηση (UI), ώστε να γράφουν ακριβώς τα ίδια.
 import { norm } from './text';
 import type { ISODate } from './dates';
-import { TYPES, blocksOf, buildPosts, dutyStartOf, fullName, groupKey, phaseBase, type AppState, type BasePhase, type Person, type Phase, type Status } from './domain';
+import { TYPES, blockShape, blocksOf, buildPosts, dutyStartOf, fullName, groupKey, phaseBase, type AppState, type BasePhase, type Person, type Phase, type Status } from './domain';
 import { leaveName } from './hkaiText';
 import { seatMap, postsOf } from './rules';
 import { rankTxt } from './ranks';
@@ -79,6 +79,8 @@ export function frouraTables(s: AppState, lay: FrouraLayout, phase: Phase = phas
     else if (realHours(x.hours)) { row.hours = norm(x.hours); t.hours = true; }
     rowOf.set(x.block + '|' + x.g, row); t.rows.push(row);
   }
+  // ανενεργή υπηρεσία που μένει στο έντυπο (BlockDef.keep) χωρίς πίνακα στο template: άγραφος πίνακας με τα νούμερά της
+  for (const b of blocksOf(s.settings, phase)) if (b.hidden && b.keep && (b.custom || !['ly', 'th', 'op', 'mg', 'sk', 'tae'].includes(b.kind))) out.set('keep:' + b.id, { title: norm(b.name), hours: false, rows: Array.from({ length: blockShape(b).nums }, (_, i) => ({ n: (i + 1) + 'ο', name: '', hours: '' })) });
   return [...out.values()];
 }
 

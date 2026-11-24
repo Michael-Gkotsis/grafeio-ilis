@@ -134,7 +134,7 @@ export type Command =
   | { t: 'addBlock'; phase: Phase; name: string; kind?: DutyKind; armed: boolean; n: number; per?: number; hrs: string; off?: boolean; shift?: ShiftDef | null; armWeapon?: 'own' | 'post'; hkCol?: string; who?: 'cadre' | 'soldiers'; cadreGroup?: string; cadreAs?: string }
   // nums/per (Michael, 4/11): νούμερα και άτομα ανά νούμερο· το παλιό n = nums. armed/hidden/armWeapon αλλάζουν και από εδώ (όχι στον Λ/Υ-Δ/Υ)
   | { t: 'editBlock'; phase: Phase; id: string; name: string; n?: number; nums?: number; per?: number; hrs: Record<string, string>; hrsNum?: string[]; move?: number; codes?: Record<string, string>; shift?: ShiftDef | null; armed?: boolean; hidden?: boolean; hkCol?: string; armWeapon?: 'own' | 'post'; who?: 'cadre' | 'soldiers'; cadreGroup?: string; cadreAs?: string }
-  | { t: 'setBlock'; phase: Phase; id: string; patch: Partial<Pick<BlockDef, 'armed' | 'hidden' | 'armWeapon'>> }
+  | { t: 'setBlock'; phase: Phase; id: string; patch: Partial<Pick<BlockDef, 'armed' | 'hidden' | 'armWeapon' | 'keep'>> }
   | { t: 'autofillRange'; dates: ISODate[]; rooms?: number[] }
   | { t: 'swapPosts'; date: ISODate; a: string; b: string; force?: string }
   | { t: 'importRecords'; adds: Omit<Status, 'id'>[]; updates: { id: string; patch: Partial<Status> }[]; deletes?: string[]; source: string; what: string }
@@ -1619,9 +1619,9 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       // Μόνο στο έντυπο που ισχύει: οι θέσεις του άλλου εντύπου μπορεί να έχουν τα ίδια κλειδιά (θαλαμοφύλακες, μαγειρεία).
       if (c.patch.hidden && b.kind === 'ly') throw new Error('Ο Λ/Υ και ο Δ/Υ μένουν πάντα ενεργοί (χρειάζονται στην ΗΚΑΙ)');
       const { guards, gone } = c.patch.hidden && !b.hidden ? dropFutureGuards(s, ctx, c.phase, new Set(b.posts.map(p => p.k))) : { guards: s.guards, gone: 0 };
-      const what = c.patch.hidden != null ? (c.patch.hidden ? 'ανενεργή' + (gone ? ', βγήκαν ' + gone + (gone === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' από αύριο και μετά' : '') : 'ενεργή') : c.patch.armed != null ? (c.patch.armed ? 'ένοπλη' : 'άοπλη') : c.patch.armWeapon != null ? (c.patch.armWeapon === 'post' ? 'το όπλο είναι της θέσης (περνά από χέρι σε χέρι)' : 'το κάθε άτομο βγάζει το δικό του όπλο') : 'άλλαξε';
+      const what = c.patch.keep != null && c.patch.hidden == null ? (c.patch.keep ? 'ανενεργή, μένει στο έντυπο' : 'ανενεργή, φεύγει από το έντυπο') : c.patch.hidden != null ? (c.patch.hidden ? 'ανενεργή' + (gone ? ', βγήκαν ' + gone + (gone === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ' από αύριο και μετά' : '') : 'ενεργή') : c.patch.armed != null ? (c.patch.armed ? 'ένοπλη' : 'άοπλη') : c.patch.armWeapon != null ? (c.patch.armWeapon === 'post' ? 'το όπλο είναι της θέσης (περνά από χέρι σε χέρι)' : 'το κάθε άτομο βγάζει το δικό του όπλο') : 'άλλαξε';
       // «δικό του» είναι η προεπιλογή: δεν γράφεται στις ρυθμίσεις
-      const nb = (x: BlockDef): BlockDef => { const y = { ...x, ...c.patch }; if (y.armWeapon !== 'post') delete y.armWeapon; return y; };
+      const nb = (x: BlockDef): BlockDef => { const y = { ...x, ...c.patch }; if (y.armWeapon !== 'post') delete y.armWeapon; if (!y.keep || !y.hidden) delete y.keep; return y; };
       return { state: { ...s, guards, settings: withBlocks(s.settings, c.phase, list.map(x => (x.id === c.id ? nb(x) : x))) }, text: 'ΦΡΟΥΡΑ ' + phaseName(s.settings, c.phase) + ', ' + b.name + ': ' + what, files: [] };
     }
     case 'setNightTraining': {
