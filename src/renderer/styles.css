@@ -1923,3 +1923,67 @@ thead .mg-tail--n{font-size:11px}
 .asset-chip--add{padding:0 10px;border:1px dashed var(--border);background:transparent;color:var(--primary);font-family:inherit;cursor:pointer}
 .asset-chip--add:hover{background:var(--hover)}
 @media (max-width:760px){.asset-set{flex-direction:column}.asset-set__cats{width:100%}}
+
+/* Οπλισμός › Μητρώο όπλων και Υλικό (24/11): κεφαλίδα μίας γραμμής, φίλτρα, γραμμές 34px, πλαϊνή καρτέλα 420px, φόρμα σε ενότητες */
+.op__top{display:flex;align-items:center;gap:10px;margin-bottom:6px;min-height:40px}
+.op__top h1{font-size:25px;font-weight:700;line-height:1.2;margin:0}
+.op__help{display:inline-grid;place-items:center;width:28px;height:28px;padding:0;border:1px solid var(--input);border-radius:50%;background:var(--card);color:var(--muted-fg);cursor:pointer}
+.op__help:hover,.op__help:focus-visible{color:var(--foreground);border-color:var(--muted-fg)}
+.op__help svg{width:16px;height:16px}
+.op__sum{color:var(--muted-fg);font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.op__topacts{margin-left:auto;display:flex;gap:8px;align-items:center}
+.op__tabrow{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;border-bottom:1px solid var(--border);margin-bottom:10px}
+.op__tabrow .ui-tabs{border-bottom:0;overflow-x:auto}
+.op__split{display:inline-flex;margin-bottom:4px}
+.op__split > .ui-btn:first-child{border-top-right-radius:0;border-bottom-right-radius:0}
+.op__split .op__menu .ui-btn{border-top-left-radius:0;border-bottom-left-radius:0;margin-left:-1px;padding:0 10px}
+.op__menu{display:inline-flex}
+.op__tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
+.op__search{flex:0 1 280px;min-width:200px}
+.op__chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.op__count{margin-left:auto;font-size:13px;color:var(--muted-fg);white-space:nowrap}
+.op__types{min-width:200px;max-height:320px;overflow:auto;gap:8px}
+.op__bulk{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 12px;margin-bottom:8px;border-radius:var(--radius-lg);background:var(--primary);color:var(--primary-fg)}
+.op__bulk .ui-btn--outline{background:transparent;border-color:var(--primary-fg);color:var(--primary-fg)}
+.op__bulk .ui-btn--outline:hover:not(:disabled){background:var(--primary-fg);color:var(--primary)}
+.op__bulk-x{margin-left:auto;display:inline-grid;place-items:center;width:28px;height:28px;border:0;border-radius:50%;background:none;color:inherit;cursor:pointer}
+.op__bulk-x:hover{background:rgba(255,255,255,.18)}
+.op__grid{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:12px;align-items:start}
+.op__grid--solo{grid-template-columns:minmax(0,1fr)}
+.op__main{min-width:0}
+.op__table{overflow:hidden}
+.op__body{overflow-x:auto}
+.op__head,.op__row{display:grid;align-items:center}
+.op__head > span{padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px;line-height:34px}
+.ptable__row.op__row{height:34px;font-size:13px}
+.op__row > *{padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.op__row.is-sel{background:var(--secondary);box-shadow:inset 3px 0 0 var(--primary)}
+.op__chk{display:flex;align-items:center;justify-content:center;padding:0!important}
+.op__chk input{width:16px;height:16px;margin:0;cursor:pointer}
+.op__row .ui-badge{font-size:11px;padding:1px 6px}
+.op__st{display:flex;gap:3px;flex-wrap:nowrap;overflow:hidden}.op__st .ui-badge{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.op__card{padding:0;display:flex;flex-direction:column;position:sticky;top:8px;max-height:calc(100vh - 150px);font-size:13px;overflow:hidden}
+.op__card-head{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;padding:12px 14px 8px}
+.op__card h3{margin:0;font-size:18px}
+.op__x{display:inline-grid;place-items:center;width:28px;height:28px;flex:none;border:0;border-radius:50%;background:none;color:var(--muted-fg);cursor:pointer}
+.op__x:hover{background:var(--hover);color:var(--foreground)}
+.op__ptabs{padding:0 8px}.op__ptabs button{height:36px;padding:0 10px;font-size:13px}
+.op__pbody{padding:12px 14px;overflow:auto;flex:1 1 auto;min-height:80px}
+.op__accs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.op__accs li{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)}
+.op__acts{display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px;border-top:1px solid var(--border)}
+.wmenu__item.is-on{font-weight:700}.wmenu__item:disabled{opacity:.5;cursor:not-allowed}
+.op__sep{height:1px;margin:4px 0;background:var(--border)}
+@media (max-width:1100px){.op__grid{grid-template-columns:minmax(0,1fr)}.op__card{position:static;max-height:none}}
+.op__form{display:flex;flex-direction:column;gap:18px}
+.op__sec{display:flex;flex-direction:column;gap:10px}
+.op__sech{margin:0;padding-bottom:4px;border-bottom:1px solid var(--border);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--primary)}
+.op__newt{display:flex;gap:6px;align-items:center}.op__newt .ui-input{flex:1;min-width:0}
+.op__war{align-self:flex-end;padding-bottom:8px}
+.op__accg{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px 16px;align-items:center}
+.op__acc{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:32px}
+.op__addacc{justify-self:start;border-style:dashed}
+.op__step{display:inline-flex;align-items:stretch;border:1px solid var(--input);border-radius:8px;overflow:hidden;background:var(--card)}
+.op__step button{width:26px;border:0;background:none;color:inherit;font-size:15px;cursor:pointer}
+.op__step button:hover:not(:disabled){background:var(--hover)}.op__step button:disabled{opacity:.4;cursor:not-allowed}
+.op__step output{min-width:30px;display:grid;place-items:center;font-weight:700;font-size:13px;border-left:1px solid var(--input);border-right:1px solid var(--input)}

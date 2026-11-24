@@ -10,7 +10,7 @@ import { html, cx, Badge, Button, Dialog, Icon, PageHeader, Segmented, Strip, Ta
 import { Select } from '../select';
 import { MovesView, Pop, WeaponInDialog, WeaponOutDialog, WeaponState, Key, reasonLbl } from './weaponMoves';
 import { useNav, useOpenFrom, useStore } from '../store';
-import { MitrooView } from './assets';
+import { RegistryView } from './assets';
 import { ActiveFilter, DateBar, SigsMenu } from '../common';
 import { useHeadPick } from '../headPick';
 import type { Sig } from '../../shared/sigs';
@@ -333,6 +333,9 @@ export function WeaponsScreen() {
     const p: Person = items ? it.p : it; const i: number = items ? it.ri : k;
     return html`<${WRow} key=${p.id} p=${p} i=${i} style=${style} selected=${sel.has(p.id)} info=${info} pm=${pm} types=${types} lists=${lists} statuses=${liveSts(state)} date=${date} reset=${reset} onToggle=${toggle} onOpen=${openP} save=${save} commit=${commit} paste=${paste}/>`;
   };
+  const tabsEl = html`<${Tabs} value=${tab} onChange=${(v: string) => nav.set({ wtab: v })} items=${[{ value: 'weapons', label: 'Όπλα ανά άτομο (' + (armedN + secN) + ')' }, { value: 'moves', label: 'Κινήσεις' + (outN ? ' · εκτός ' + outN : '') }, { value: 'mitroo', label: 'Μητρώο όπλων' }, { value: 'yliko', label: 'Υλικό' }]}/>`;
+  // Μητρώο όπλων και Υλικό: δική τους κεφαλίδα μίας γραμμής, με τις καρτέλες μέσα (assets.ts)
+  if (tab === 'mitroo' || tab === 'yliko') return html`<${RegistryView} mode=${tab === 'yliko' ? 'material' : 'weapon'} tabs=${tabsEl}/>`;
   return html`<div>
     <${PageHeader} title="Οπλισμός" quote="«Το θέμα είναι ο οπλισμός» - Λοχαγός Μ. Γ' ΕΣΣΟ 2026" sub=${'Με όπλο ' + armedN + (secN ? ' (και ' + secN + (secN === 1 ? ' δεύτερο' : ' δεύτερα') + ' από το Μητρώο)' : '') + ' από ' + total + ' σε δύναμη, εκτός οπλοβαστού ' + (date === today ? 'τώρα' : dow(date) + ' ' + dm(date)) + ' ' + outHeadTxt(outN, awayN) + '. Πάτα ΕΚΤΟΣ ή ΕΝΤΟΣ στη γραμμή.'}>
       <div className="page-head__acts weapons__acts"><${DateBar} value=${date} onChange=${(d: string) => nav.set({ wdate: d === today ? null : d })} days=${[today, tomorrow]}/>
@@ -340,8 +343,8 @@ export function WeaponsScreen() {
       <${Button} variant="outline" disabled=${xl} onClick=${() => exportXl(false)} data-tip="Κατάσταση οπλισμού με στήλη υπογραφής, και ένα φύλλο για κάθε φίλτρο (χωρίς όπλο, άοπλοι με όπλο, ίδιος αριθμός, να παραδώσουν)">${xl ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>
       <${Button} variant="outline" disabled=${xl} onClick=${() => exportXl(true)} data-tip="Κατάσταση οπλισμού με την κεφαλίδα της ${HK()} και στήλη υπογραφής" data-tip-side="left">${Icon.print}Εκτύπωση<//>
       <${SigsMenu} form="weapons" date=${date} label="ο Οπλισμός" disabled=${xl} headId=${hp.headId} go=${exportXl}/></div><//>
-    <div style=${{ marginBottom: '12px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ wtab: v })} items=${[{ value: 'weapons', label: 'Όπλα (' + (armedN + secN) + ')' }, { value: 'moves', label: 'Κινήσεις' + (outN ? ' · εκτός ' + outN : '') }, { value: 'mitroo', label: 'Μητρώο' }]}/></div>
-    ${tab === 'mitroo' ? html`<${MitrooView}/>` : tab === 'moves' ? html`<${MovesView} date=${date} info=${info} pm=${pm} outN=${outN}/>` : html`<${Fragment}>
+    <div style=${{ marginBottom: '12px' }}>${tabsEl}</div>
+    ${tab === 'moves' ? html`<${MovesView} date=${date} info=${info} pm=${pm} outN=${outN}/>` : html`<${Fragment}>
     <div className="toolbar"><input type="search" className="ui-input" aria-label="Αναζήτηση" placeholder="Όνομα, ΑΣΜ, θάλαμος ή αριθμός όπλου (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/>
       <${Segmented} small=${true} value=${unit} onChange=${(u: string) => nav.set({ unit: u, room: room != null && u !== 'all' && unitOf({ room }, state.settings) !== u ? null : room })} items=${UNITS}/>
       <${Select} className="ui-select" aria-label="Θάλαμος" value=${room == null ? '' : String(room)} onChange=${(e: any) => { const r = e.target.value ? +e.target.value : null; nav.set({ room: r, unit: r != null && unit !== 'all' && unitOf({ room: r }, state.settings) !== unit ? 'all' : unit }); }}>

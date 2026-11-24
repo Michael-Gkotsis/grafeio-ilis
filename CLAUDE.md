@@ -57,7 +57,7 @@ src/main/       main.ts (entry, IPC handlers), db.ts (sql.js database), xlsx.ts 
                 formPreview.ts (on-screen preview = the produced file through the print layout; printSetup is shared with the print window),
                 tplLists.ts (fill + screen model of those lists; fillFroura / fillOuts call it when a saved mapping matches the file)
 src/preload/    preload.ts (IPC bridge), print.ts
-src/renderer/   app.ts (shell, nav, shortcuts), screens/*.ts (one per screen; dutyMap.ts, listMap.ts, rosterMap.ts = «Αντιστοίχιση…» dialogs; weaponMap.ts = the same for a weapons file, opened from Οπλισμός › Μητρώο), store.ts, realPreview.ts (RealPreview: pages of the real export file), mockApi.ts, styles.css
+src/renderer/   app.ts (shell, nav, shortcuts), screens/*.ts (one per screen; dutyMap.ts, listMap.ts, rosterMap.ts = «Αντιστοίχιση…» dialogs; weaponMap.ts = the same for a weapons file, opened from Οπλισμός › Μητρώο όπλων › Ενέργειες; assets.ts = the Μητρώο όπλων and Υλικό tabs, RegistryView), store.ts, realPreview.ts (RealPreview: pages of the real export file), mockApi.ts, styles.css
 templates/      the official .xlsx templates (rule 1)
 ```
 - The renderer never imports from `src/main`; it reaches main only through the preload API (`src/shared/api.ts`).

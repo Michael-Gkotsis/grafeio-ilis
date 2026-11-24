@@ -104,7 +104,7 @@ export interface Api {
   exportCadreLeave(year: number, cid?: string, sigs?: Sig[], headId?: string): Promise<ExportResult>;   // Άδειες και απαλλαγές στελεχών: νέο Excel (υπόλοιπα όλων, και η καρτέλα του στελέχους), ανοίγει μόλις γραφτεί
   exportCadrePlan(ym: string, print?: boolean, filter?: string, sigs?: Sig[], headId?: string): Promise<ExportResult>;   // Πρόγραμμα αδειών στελεχών: νέο Excel για τον μήνα ym (ΕΕΕΕ-ΜΜ)· print: προεπισκόπηση εκτύπωσης αντί για Excel
   exportCadreDuty(ym: string, print?: boolean, sigs?: Sig[], headId?: string): Promise<ExportResult>;   // Υπηρεσίες στελεχών: νέο Excel για τον μήνα ym (ΕΕΕΕ-ΜΜ), φύλλα ανά άτομο και ανά ημέρα· print: προεπισκόπηση εκτύπωσης
-  exportAssets(print?: boolean, view?: { cat?: string; filter?: string; q?: string }, sigs?: Sig[], headId?: string): Promise<ExportResult>;   // Μητρώο οπλισμού και υλικού: νέο Excel («ΜΗΤΡΩΟ ΟΠΛΙΣΜΟΥ») με ό,τι φαίνεται στην οθόνη· print: προεπισκόπηση εκτύπωσης
+  exportAssets(print?: boolean, view?: { cat?: string; filter?: string; q?: string; kind?: 'weapon' | 'material'; keys?: string[] }, sigs?: Sig[], headId?: string): Promise<ExportResult>;   // Μητρώο οπλισμού και υλικού: νέο Excel («ΜΗΤΡΩΟ ΟΠΛΙΣΜΟΥ») με ό,τι φαίνεται στην οθόνη· print: προεπισκόπηση εκτύπωσης
   exportVehicles(print?: boolean, sigs?: Sig[], headId?: string): Promise<ExportResult>;   // Οχήματα: νέο Excel («ΚΑΤΑΣΤΑΣΗ ΟΧΗΜΑΤΩΝ»), φύλλο ανά κατηγορία, ΚΑΥΣΙΜΑ και ΣΥΝΤΗΡΗΣΕΙΣ· print: προεπισκόπηση
   exportCadre(date: ISODate, sigs?: Sig[], headId?: string): Promise<ExportResult>;   // Στελέχη: ένα Excel (στελέχη, καταστάσεις, εκτός δύναμης), ανοίγει μόλις γραφτεί
   pickRoster(): Promise<ImportPreview | { ok: false; error: string } | null>;

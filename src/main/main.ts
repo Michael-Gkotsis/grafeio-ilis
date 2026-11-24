@@ -1186,10 +1186,13 @@ else {
       } catch (e) { return e instanceof LockedError ? { ok: false, error: e.message, locked: true } : fail(e); }
     });
     // Μητρώο οπλισμού και υλικού: νέο αρχείο με ό,τι φαίνεται στην οθόνη (κατηγορία, φίλτρο, αναζήτηση)· print: προεπισκόπηση εκτύπωσης
-    ipcMain.handle('export:assets', async (_e, print?: boolean, view?: { cat?: string; filter?: string; q?: string }, sigs?: Sig[], headId?: string) => {
+    ipcMain.handle('export:assets', async (_e, print?: boolean, view?: { cat?: string; filter?: string; q?: string; kind?: 'weapon' | 'material'; keys?: string[] }, sigs?: Sig[], headId?: string) => {
       try {
         const v = view && typeof view === 'object' ? view : {}; const d = today();
-        const rows = assetView(store.state, { cat: typeof v.cat === 'string' && v.cat ? v.cat : undefined, filter: ASSET_FILTER_IDS.includes(v.filter as AssetFilter) ? v.filter as AssetFilter : 'all', q: typeof v.q === 'string' ? v.q : '' }, d, registry(store.state, { day: d, hm: nowHM() }));
+        // kind: μόνο όπλα ή μόνο υλικό (καρτέλες Μητρώο όπλων / Υλικό)· keys: μόνο οι επιλεγμένες γραμμές· χωρίς αυτά, όπως πριν
+        const keys = Array.isArray(v.keys) ? new Set(v.keys.map(String)) : null;
+        const all = assetView(store.state, { cat: typeof v.cat === 'string' && v.cat ? v.cat : undefined, filter: ASSET_FILTER_IDS.includes(v.filter as AssetFilter) ? v.filter as AssetFilter : 'all', q: typeof v.q === 'string' ? v.q : '', ...(v.kind === 'weapon' || v.kind === 'material' ? { kinds: [v.kind] } : {}) }, d, registry(store.state, { day: d, hm: nowHM() }));
+        const rows = keys ? all.filter(r => keys.has(r.key)) : all;
         const r = await made('assets', d, store.state, sigs, { rows }, headId);
         const [out] = await serial(() => writeAll([{ dir: outputDir(), name: r.name, data: r.data }]));
         const warnings: string[] = [...r.warnings];

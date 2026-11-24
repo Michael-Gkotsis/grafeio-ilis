@@ -16,7 +16,7 @@ import { leaveCmdOf, sameLeave, nextCadrePid, seatMap, skipTxt, capBlock, capCel
 import { noNotes, svcColOk, svcDefault, cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, isAway, itemName, leavePhrase, listRows, rankTxt, statusLbl, weaponBack, withOrigin, type HkRowDef, type ListId, type UserLists } from './ranks';
 import { insertCadre, isManualOrder } from './cadre';
 import { clearRange, setNoDuty } from './cadrePlan';
-import { assetCfgOf, newAssetCatId, catOf, cleanAsset, doMaint, heldWarn, holderText, registry, sameHolder, STATE_TXT } from './assets';
+import { assetCfgOf, newAssetCatId, catOf, cleanAsset, doMaint, heldWarn, holderText, primaryWeapons, registry, sameHolder, STATE_TXT } from './assets';
 import { doVehMaint, driverText, kmTxt, numTxt, vehName, withKm } from './vehicles';
 import { cleanPerson, dutyCfgOf, serviceOf } from './cadreDuty';
 import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours';
@@ -57,7 +57,9 @@ export type Command =
   | { t: 'setCadreDuties'; add: Omit<CadreDuty, 'id'>[]; del: string[]; text: string; seats?: { date: ISODate; k: string; cid: string }[] }
   | { t: 'setCadreDutyOf'; cid: string; person: CadreDutyPerson | null }
   // Μητρώο οπλισμού και υλικού (shared/assets.ts): id = αληθινή εγγραφή, ή base = η εικονική γραμμή (από το Δυναμολόγιο) που γίνεται εγγραφή με την πρώτη αλλαγή
-  | { t: 'saveAsset'; asset: Omit<Asset, 'id'> & { id?: string }; date: ISODate }
+  | { t: 'saveAsset'; asset: Omit<Asset, 'id'> & { id?: string }; date: ISODate; addType?: boolean; syncPrimary?: boolean }   // syncPrimary: από τη φόρμα Αλλαγή, ο τύπος/οπλοβαστός/θέση κύριου όπλου γράφονται και στο Δυναμολόγιο· addType: ο τύπος που γράφτηκε στη φόρμα («+ Νέος τύπος…») μπαίνει και στη λίστα τύπων της κατηγορίας
+  // Πολλά είδη μαζί από το Μητρώο (επιλεγμένες γραμμές): μία εντολή, μία αναίρεση. op: χρέωση (holder, null = αχρέωτο), συντήρηση ή κατάσταση
+  | { t: 'assetBulk'; items: { id: string; base?: Asset }[]; op: { k: 'holder'; holder: AssetHolder | null } | { k: 'maint'; note?: string } | { k: 'state'; state: 'ok' | 'repair' | 'writeoff' | 'immobile'; why?: string }; date: ISODate }
   | { t: 'assetMaint'; id: string; base?: Asset; date: ISODate; note?: string; km?: number }
   | { t: 'assetState'; id: string; base?: Asset; state: 'ok' | 'repair' | 'writeoff' | 'immobile'; why?: string; date: ISODate }
   // Οχήματα (shared/vehicles.ts): γέμισμα (λίτρα + km), χιλιόμετρα, οδηγός
@@ -495,7 +497,7 @@ function syncAssets(prev: AppState, next: AppState, ctx: Ctx): AppState {
   return changed ? { ...next, assets, assetLog: log } : next;
 }
 // Μητρώο οπλισμού και υλικού: κάθε αλλαγή είναι εντολή (αναίρεση) και γράφει γεγονός στο ιστορικό της εγγραφής
-function assetCmd(s: AppState, c: Extract<Command, { t: 'saveAsset' | 'assetMaint' | 'assetState' | 'assetHolder' | 'assetGone' | 'deleteAsset' | 'assetFuel' | 'assetKm' | 'assetDriver' }>, ctx: Ctx): Result {
+function assetCmd(s: AppState, c: Extract<Command, { t: 'saveAsset' | 'assetBulk' | 'assetMaint' | 'assetState' | 'assetHolder' | 'assetGone' | 'deleteAsset' | 'assetFuel' | 'assetKm' | 'assetDriver' }>, ctx: Ctx): Result {
   const list = s.assets || []; const log = s.assetLog || []; const cfg = assetCfgOf(s.settings);
   const ev = (aid: string, date: ISODate, what: AssetEvent['what'], text?: string, more?: Pick<AssetEvent, 'litres' | 'km'>): AssetEvent => ({ id: 'e' + ctx.newId(), aid, date, what, ...(text ? { text } : {}), ...(more || {}) });
   const label = (a: Asset) => [a.type, a.no].filter(Boolean).join(' ');
@@ -505,10 +507,33 @@ function assetCmd(s: AppState, c: Extract<Command, { t: 'saveAsset' | 'assetMain
   }
   if (c.t === 'saveAsset') {
     const old = c.asset.id ? list.find(x => x.id === c.asset.id) : undefined;
-    const x = cleanAsset(c.asset, old?.id || 'a' + ctx.newId()); if (!x.no) throw new Error('Γράψε τον αριθμό');
+    const x = cleanAsset(c.asset, old?.id || 'a' + ctx.newId()); if (!x.no && !(catOf(cfg, x.cat)?.kind === 'material' && x.type)) throw new Error('Γράψε τον αριθμό');   // υλικό χωρίς σειριακό (ποσότητα) χρειάζεται τουλάχιστον το είδος
     if (!x.cat) throw new Error('Διάλεξε κατηγορία');
-    const out = old ? { ...s, assets: list.map(y => (y === old ? x : y)) } : { ...s, assets: [...list, x] };
+    let out: AppState = old ? { ...s, assets: list.map(y => (y === old ? x : y)) } : { ...s, assets: [...list, x] };
+    // «+ Νέος τύπος…» της φόρμας: ο τύπος μπαίνει και στη λίστα τύπων της κατηγορίας
+    const cat = catOf(cfg, x.cat);
+    if (c.addType && x.type && cat && cat.kind !== 'vehicle' && !cat.types.some(t => normGreek(t) === normGreek(x.type))) out = { ...out, settings: { ...out.settings, assets: { ...out.settings.assets, cats: cfg.cats.map(y => (y.id === cat.id ? { ...y, types: [...y.types, x.type] } : y)) } } };
+    // κύριο όπλο ατόμου/στελέχους: ο τύπος, ο οπλοβαστός και η θέση ζουν στο Δυναμολόγιο, οπότε η αλλαγή από τη φόρμα πηγαίνει εκεί (αλλιώς δεν φαινόταν πουθενά)
+    const pr = c.syncPrimary && (!cat || cat.kind === 'weapon') && weaponKey(x.no) ? primaryWeapons(out).filter(y => weaponKey(y.no) === weaponKey(x.no)).sort((a, b) => Number(b.active) - Number(a.active))[0] : undefined;
+    if (pr) {
+      const ch = { ...(normWeapon(x.type).toUpperCase() !== normWeapon(pr.type).toUpperCase() ? { wtype: x.type } : {}), ...((x.rack || '') !== pr.rack ? { rack: x.rack || '' } : {}), ...((x.wpos || '') !== pr.wpos ? { wpos: x.wpos || '' } : {}) };
+      if (Object.keys(ch).length) {
+        if (pr.h.k === 'person') out = run(out, { t: 'setWeapons', changes: [{ pid: pr.h.pid, ...ch }], what: 'μητρώο' }, ctx).state;
+        else { const cid = pr.h.cid; out = { ...out, cadreList: out.cadreList.map(q => { if (q.id !== cid) return q; const n = { ...q }; if (ch.wtype !== undefined) { const v = normWeapon(ch.wtype); if (v) n.wtype = v; else delete n.wtype; } if (ch.rack !== undefined) { const v = normRack(ch.rack); if (v) n.rack = v; else delete n.rack; } if (ch.wpos !== undefined) { const v = normPos(ch.wpos); if (v) n.wpos = v; else delete n.wpos; } return n; }) }; }
+      }
+    }
     return { state: { ...out, assetLog: [...log, ev(x.id, c.date, 'note', old ? 'άλλαξαν τα στοιχεία' : 'καταχωρήθηκε')] }, text: 'Μητρώο: ' + (old ? 'αλλαγή ' : 'νέο ') + label(x), files: [] };
+  }
+  // πολλά μαζί: κάθε είδος περνά από την ίδια εντολή που θα έτρεχε μόνο του (ίδιοι κανόνες Δυναμολογίου), όλα σε μία εντολή και μία αναίρεση
+  if (c.t === 'assetBulk') {
+    if (!c.items.length) throw new Error('Διάλεξε είδη');
+    let st = s;
+    for (const it of c.items) {
+      const sub = c.op.k === 'holder' ? { t: 'assetHolder' as const, ...it, holder: c.op.holder, date: c.date } : c.op.k === 'maint' ? { t: 'assetMaint' as const, ...it, date: c.date, note: c.op.note } : { t: 'assetState' as const, ...it, state: c.op.state, why: c.op.why, date: c.date };
+      st = assetCmd(st, sub, ctx).state;
+    }
+    const what = c.op.k === 'holder' ? (c.op.holder ? 'χρέωση σε ' + holderText(st, c.op.holder) : 'αχρέωτα') : c.op.k === 'maint' ? 'συντήρηση' : STATE_TXT[c.op.state].toLowerCase();
+    return { state: st, text: 'Μητρώο: ' + what + ' σε ' + c.items.length + (c.items.length === 1 ? ' είδος' : ' είδη'), files: [] };
   }
   // οι υπόλοιπες: η αληθινή εγγραφή ή η εικονική γραμμή που γίνεται εγγραφή τώρα (ίδιος αριθμός, κάτοχος, τύπος, οπλοβαστός)
   const cur = list.find(x => x.id === c.id);
@@ -866,7 +891,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const people = s.people.map(p => (hw(p) ? (n++, { ...p, wtype: up }) : p)); const cadreList = s.cadreList.map(p => (hw(p) ? (n++, { ...p, wtype: up }) : p));
       return { state: { ...s, settings: { ...s.settings, assets: { ...s.settings.assets, cats } }, assets: s.assets ? assets : s.assets, people, cadreList }, text: 'Μητρώο: ο τύπος «' + from + '» της κατηγορίας ' + cat.name + ' έγινε «' + to + '»' + (n ? ' (' + n + ' εγγραφές)' : ''), files: [] };
     }
-    case 'saveAsset': case 'assetMaint': case 'assetState': case 'assetHolder': case 'assetGone': case 'deleteAsset': case 'assetFuel': case 'assetKm': case 'assetDriver': return assetCmd(s, c, ctx);
+    case 'saveAsset': case 'assetBulk': case 'assetMaint': case 'assetState': case 'assetHolder': case 'assetGone': case 'deleteAsset': case 'assetFuel': case 'assetKm': case 'assetDriver': return assetCmd(s, c, ctx);
     case 'addRequest': case 'updateRequest': {
       const p = pm.get(c.req.pid); if (!p) throw new Error('Δεν βρέθηκε το άτομο');
       const lv = c.req.leave;
