@@ -1797,10 +1797,11 @@ thead .mg-tail--n{font-size:11px}
 .mg-menu__note{padding:4px 8px;font-size:12px;color:var(--muted-fg)}
 .cdset__svc{border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;margin:8px 0;display:flex;flex-direction:column;gap:6px}
 .duty .mg-name{width:150px;min-width:150px;max-width:150px}
-.duty .mg-d,.duty .mg-c{width:21px;min-width:21px}
+.duty .mg-d,.duty .mg-c{width:28px;min-width:28px}
 .duty .mg-tail--n{width:40px!important;min-width:40px}
 .duty .mg-who{font-size:11.5px}
-.mg-c.mg-s3{font-size:9.5px;letter-spacing:-.3px}.mg-c.mg-s4{font-size:8px;letter-spacing:-.6px}.duty .mg-c{overflow:hidden}
+.mg-c.mg-s3{font-size:10.5px;letter-spacing:-.2px}.mg-c.mg-s4{font-size:9.5px;letter-spacing:-.3px}
+.mg-sw--code{width:auto;min-width:18px;padding:0 4px}.duty .mg-c{overflow:hidden}
 
 /* Μητρώο οπλισμού και υλικού (Οπλισμός › Μητρώο): κατηγορίες | πίνακας | καρτέλα, χωράει σε 1366 χωρίς οριζόντια κύλιση της σελίδας */
 .mit__grid{display:grid;grid-template-columns:168px minmax(0,1fr) 330px;gap:12px;align-items:start;margin-top:10px}

@@ -44,7 +44,7 @@ function PersonMenu({ c, days, onPick, onRemove, onInfo }: { c: Cadre; days: ISO
       ${!cfg.groups.length && html`<p className="note" style=${{ margin: '4px 8px' }}>Δεν υπάρχουν υπηρεσίες στελεχών. Φτιάξ' τες στις Ρυθμίσεις › Υπηρεσίες στελεχών.</p>`}
       ${list.map(({ g, items }) => html`<div key=${g.id} className="mg-menu__grp">${(cfg.groups.length > 1 || all) && html`<small>${g.name}</small>`}
         ${items.map(({ v, ds, reasons }) => html`<button type="button" role="menuitem" key=${v.id} className="mg-menu__it" disabled=${!ds.length} onClick=${() => onPick(v, reasons)}
-          data-tip=${reasons.length ? reasonTip(reasons) + '\n(γράφεται με αιτία)' : ds.length ? undefined : 'Δεν γίνεται αυτές τις μέρες'} data-tip-side="right"><i className="mg-sw mg-duty">${v.short.slice(0, 3)}</i><span>${v.name}</span>${reasons.length > 0 && html`<b className=${'mg-menu__warn' + (reasons.some(r => r.strong) ? ' is-strong' : '')} aria-label="Προειδοποίηση">⚠</b>`}</button>`)}</div>`)}
+          data-tip=${reasons.length ? reasonTip(reasons) + '\n(γράφεται με αιτία)' : ds.length ? undefined : 'Δεν γίνεται αυτές τις μέρες'} data-tip-side="right"><i className="mg-sw mg-sw--code mg-duty">${v.short}</i><span>${v.name}</span>${reasons.length > 0 && html`<b className=${'mg-menu__warn' + (reasons.some(r => r.strong) ? ' is-strong' : '')} aria-label="Προειδοποίηση">⚠</b>`}</button>`)}</div>`)}
       ${mine && html`<button type="button" role="menuitem" className="mg-menu__it" onClick=${() => setAll(!all)}><span className="muted">${all ? 'Μόνο της ομάδας του' : 'Όλες οι υπηρεσίες…'}</span></button>`}
       <div className="mg-menu__sep"></div>
       <button type="button" role="menuitem" className="mg-menu__it" disabled=${!has} data-tip=${has ? undefined : 'Δεν έχει υπηρεσία του προγράμματος σε αυτές τις μέρες'} onClick=${onRemove}><i className="mg-sw mg-clr">⌫</i><span>Βγάλε</span></button>
@@ -108,11 +108,13 @@ function FillDialog({ fill, ym, onClose, onApply }: { fill: AutoFillResult; ym: 
 function cellOf(x: DutyCell): GridCell {
   const tips: string[] = [];
   for (const r of x.roster) tips.push((r.svc?.name || r.id) + (r.duty.why ? ' · αιτία: ' + r.duty.why : '') + (r.duty.auto ? ' (αυτόματη)' : ''));
-  for (const q of x.seat) tips.push('Υπηρεσία στρατιωτών: ' + q.label);
+  for (const q of x.seat) tips.push(q.svc ? q.svc.name + ' (από τις υπηρεσίες των στρατιωτών: ' + q.label + ')' : 'Υπηρεσία στρατιωτών: ' + q.label);
   if (x.state) tips.push(x.state.name + ' · ' + rangeTxt(x.state));
   if (x.noDuty) tips.push('Δεν θέλει υπηρεσία');
   const tip = tips.join('\n') || undefined;
-  if (x.roster.length) return { text: cellCode(x), cls: 'mg-duty ' + (cellCode(x).length > 3 ? 'mg-s4' : cellCode(x).length === 3 ? 'mg-s3' : 'mg-s2') + (x.seat.length || x.roster.length > 1 ? ' mg-dbl' : '') + (x.roster.some(r => r.duty.why) ? ' mg-why' : ''), tip, mark: x.noDuty };
+  // θέση «μόνο για στελέχη»: φαίνεται και μετρά ως η υπηρεσία του προγράμματος που αντιστοιχεί (ΑΥΔΜ), όχι ως «Σ»
+  const code = cellCode(x);
+  if (x.roster.length || x.seat.some(q => q.svc)) return { text: code, cls: 'mg-duty ' + (code.length > 3 ? 'mg-s4' : code.length === 3 ? 'mg-s3' : 'mg-s2') + (x.seat.length + x.roster.length > 1 ? ' mg-dbl' : '') + (x.roster.some(r => r.duty.why) ? ' mg-why' : ''), tip, mark: x.noDuty };
   if (x.seat.length) return { text: 'Σ', cls: 'mg-seat', tip, mark: x.noDuty };
   if (x.state) return { text: x.state.code, cls: 'mg-' + x.state.fam + ' mg-faint', tip, mark: x.noDuty };
   return x.noDuty ? { tip, mark: true } : {};

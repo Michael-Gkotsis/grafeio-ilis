@@ -62,21 +62,24 @@ export function restrictedIn(p: CadreDutyPerson, ym: string): boolean {
 }
 
 // ---- ευρετήριο: οι υπηρεσίες κάθε στελέχους ανά μέρα (πρόγραμμα + θέσεις στρατιωτών) ----
-export interface DayDuty { roster: CadreDuty[]; seat: { k: string; label: string }[] }
-const idxCache = new WeakMap<Map<number, DutyStat>, { duties?: CadreDuty[]; cl: Cadre[]; idx: Map<string, Map<ISODate, DayDuty>> }>();
+// seat.svc: η υπηρεσία του προγράμματος στελεχών που μετρά η θέση, όταν η θέση είναι «μόνο για στελέχη» (Michael, 24/11: μετρά και φαίνεται ως η υπηρεσία του, π.χ. ΑΥΔΜ, όχι ως «Σ»)
+export interface DayDuty { roster: CadreDuty[]; seat: { k: string; label: string; svc?: CadreService }[] }
+const idxCache = new WeakMap<Map<number, DutyStat>, { duties?: CadreDuty[]; cl: Cadre[]; set: Settings; idx: Map<string, Map<ISODate, DayDuty>> }>();
 const NO_DUTIES: CadreDuty[] = [];
 const NO_ABS: object = [];
 export function dutyIndex(s: AppState): Map<string, Map<ISODate, DayDuty>> {
   const st = dutyStats(s); const hit = idxCache.get(st);
-  if (hit && hit.duties === s.cadreDuties && hit.cl === s.cadreList) return hit.idx;
+  if (hit && hit.duties === s.cadreDuties && hit.cl === s.cadreList && hit.set === s.settings) return hit.idx;
   const idx = new Map<string, Map<ISODate, DayDuty>>();
   const day = (cid: string, d: ISODate) => { let m = idx.get(cid); if (!m) { m = new Map(); idx.set(cid, m); } let x = m.get(d); if (!x) { x = { roster: [], seat: [] }; m.set(d, x); } return x; };
+  const co = cadreOnlyOf(s.settings); const cfg = co.size ? dutyCfgOf(s.settings) : null;
+  const svcOf = (k: string): CadreService | undefined => { const o = k && co.get(k); if (!o || !cfg) return undefined; const g = cfg.groups.find(x => x.id === o.group); return g?.services.find(x => x.id === o.as) || g?.services[0]; };
   for (const c of s.cadreList || []) {
     if (c.pid == null) continue;
-    for (const e of st.get(c.pid)?.log || []) day(c.id, e.d).seat.push({ k: e.k, label: (e.k && postBy(s, e.k)?.label) || (KIND_NAME as Record<string, string>)[e.kind] || e.kind });
+    for (const e of st.get(c.pid)?.log || []) { const v = svcOf(e.k); day(c.id, e.d).seat.push({ k: e.k, label: (e.k && postBy(s, e.k)?.label) || (KIND_NAME as Record<string, string>)[e.kind] || e.kind, ...(v ? { svc: v } : {}) }); }
   }
   for (const x of s.cadreDuties || NO_DUTIES) day(x.cid, x.date).roster.push(x);
-  idxCache.set(st, { duties: s.cadreDuties, cl: s.cadreList, idx });
+  idxCache.set(st, { duties: s.cadreDuties, cl: s.cadreList, set: s.settings, idx });
   return idx;
 }
 export const dayOf = (s: AppState, cid: string, d: ISODate): DayDuty | undefined => dutyIndex(s).get(cid)?.get(d);
@@ -191,15 +194,17 @@ export function eligibility(s: AppState, c: Cadre, date: ISODate, svc?: CadreSer
 }
 
 // ---- κελιά του πλέγματος ----
-export interface DutyCell { roster: { svc: CadreService | undefined; id: string; duty: CadreDuty }[]; seat: { label: string }[]; state?: PlanCell; noDuty: boolean }
+export interface DutyCell { roster: { svc: CadreService | undefined; id: string; duty: CadreDuty }[]; seat: { label: string; svc?: CadreService }[]; state?: PlanCell; noDuty: boolean }
 export function personCells(s: AppState, c: Cadre, index: MonthIndex): DutyCell[] {
   const cfg = dutyCfgOf(s.settings); const m = dutyIndex(s).get(c.id); const cs = index.cells.get(c.id), nd = index.noDuty.get(c.id);
   return index.days.map((d, i) => {
     const x = m?.get(d.d);
-    return { roster: (x?.roster || []).map(r => ({ svc: serviceOf(cfg, r.svc)?.svc, id: r.svc, duty: r })), seat: (x?.seat || []).map(y => ({ label: y.label })), ...(cs?.[i] ? { state: cs[i] } : {}), noDuty: !!nd?.[i] };
+    return { roster: (x?.roster || []).map(r => ({ svc: serviceOf(cfg, r.svc)?.svc, id: r.svc, duty: r })), seat: (x?.seat || []).map(y => ({ label: y.label, ...(y.svc ? { svc: y.svc } : {}) })), ...(cs?.[i] ? { state: cs[i] } : {}), noDuty: !!nd?.[i] };
   });
 }
-export const cellCode = (x: DutyCell): string => (x.roster.length ? x.roster.map(r => r.svc?.short || '?').join('/') + (x.seat.length ? '/Σ' : '') : x.seat.length ? 'Σ' : x.state?.code || '');
+// θέση «μόνο για στελέχη»: ο κωδικός της υπηρεσίας που μετρά (ΑΥΔΜ)· κάθε άλλη θέση στρατιωτών: ένα «Σ»
+const seatCodes = (x: DutyCell): string[] => { const l = x.seat.filter(y => y.svc).map(y => y.svc!.short); return x.seat.some(y => !y.svc) ? [...l, 'Σ'] : l; };
+export const cellCode = (x: DutyCell): string => (x.roster.length || x.seat.length ? [...x.roster.map(r => r.svc?.short || '?'), ...seatCodes(x)].join('/') : x.state?.code || '');
 
 // ---- γραμμές: ομάδες, χωρίς ομάδα, περιορισμοί ----
 export interface DutySection { id: string; name: string; kind: 'group' | 'free' | 'restr'; people: Cadre[] }
