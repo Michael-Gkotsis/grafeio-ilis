@@ -830,6 +830,7 @@ table.legend td { padding: 6px; border-bottom: 1px solid var(--border); vertical
 .hkmap{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:12px}
 .hkmap h3{font-size:14px;margin:10px 0 6px}
 .hkmap h3:first-child{margin-top:0}
+.hkmap .ui-input[aria-invalid="true"]{border-color:var(--bad);box-shadow:0 0 0 1px var(--bad)}
 .hkmap__row{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:2px 0;font-size:13px}
 .hkmap__row .ui-input{width:90px;height:30px}
 @media (max-width:760px){.mapper{grid-template-columns:1fr}.mapper__fields{max-height:none}}

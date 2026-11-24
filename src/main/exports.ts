@@ -13,7 +13,7 @@ import { formText, hkRowLabel, reportOf, unitKindOf, unitText } from '../shared/
 import { seatMap, dutyMin, hkaiCounts, outMinOn, postBy, postsOf, statusesFrom } from '../shared/rules';
 import { DAY_GROUPS, dayBook, whenList, type DayGroup, type DayRow } from '../shared/outsDay';
 import { Workbook, colName, colNum, sheetSafe, splitRef, unesc, type Sheet, type XlValue } from './xlsx';
-import { HK_COLS, detectHkai, type HkaiMap } from '../shared/sources';
+import { HK_COLS, cleanHkaiCells, detectHkai, type HkaiMap } from '../shared/sources';
 import { hkOffText } from '../shared/cadre';
 import { foreignBack, hkaiAdaptive } from './tplAdapt';
 import { listsFill } from './tplLists';
@@ -503,9 +503,10 @@ async function fillHkaiClassic(tpl: Buffer, s: AppState, d: ISODate, opts: HkaiO
   if (!bkName) for (const n of names) if (textCells(await wb.values(n, 120, 40)).some(x => backRe.test(x.t))) { bkName = n; break; }
   if (!bkName) bkName = names.find(n => n !== frName && det.get(n)!.found === 0) || frName;
   const fr = await wb.sheet(frName); const bk = await wb.sheet(bkName);
-  const c = opts.cells; const m0 = opts.map || det.get(frName)!.map;
+  const { cells: c, bad: badCells } = cleanHkaiCells(opts.cells); const m0 = opts.map || det.get(frName)!.map;
   const m: HkaiMap = { title: c?.title || m0.title, date: c?.date || m0.date, rows: { ...m0.rows, ...(c?.rows || {}) }, cols: { ...m0.cols, ...(c?.cols || {}) } };
   const pm = seatMap(s); const warnings: string[] = [];
+  if (badCells.length) warnings.push('Η αντιστοίχιση κελιών της ΗΚΑΙ έχει μη έγκυρες τιμές (' + badCells.join(', ') + '): χρησιμοποιήθηκαν αυτές που βρέθηκαν μόνες τους. Διόρθωσέ τες στα Αρχεία Excel › Template.');
   const hk = hkaiCounts(s, d);
   // δικές σου στήλες (Ρυθμίσεις › Μονάδα και έντυπα): νέα στήλη στο τέλος της ομάδας, πριν από το σύνολό της (πριν από τις γραμμές, για να τις πάρουν και οι νέες γραμμές)
   const ownCols = addHkCols(fr, m, hkColsOf(s.settings.lists), s, warnings, wb);

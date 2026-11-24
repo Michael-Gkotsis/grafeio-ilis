@@ -611,6 +611,8 @@ function FormDialog({ form, info, current, onClose, onSave, onMap }: P) {
   const [map, setMap] = useState<HkaiMap | null>(i.hkai ? i.hkai.map : null);
   const hk = i.hkai;
   const two = form === 'hkai' || form === 'outs';
+  const badCell = (v: string) => !!v && !/^[A-Z]+[1-9]\d*$/.test(v);   // κελί σαν Β2: μόνο «2» ή «Β» δεν φτάνει
+  const badMap = !!map && (badCell(map.title) || badCell(map.date) || Object.values(map.cols).some(v => !!v && !/^[A-Z]{1,3}$/.test(v)));
   const save = () => {
     const b: FormBinding = { ...current, file: i.custom ? i.file : undefined, sheet, sheet2: two ? sheet2 : undefined };
     if (form === 'hkai' && map && hk) {
@@ -625,7 +627,7 @@ function FormDialog({ form, info, current, onClose, onSave, onMap }: P) {
     onSave(b);
   };
   return html`<${Dialog} size=${form === 'hkai' ? 'xl' : 'lg'} title=${'Template: ' + base(i.file)} description=${i.file} onClose=${onClose}
-    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${save}>Αποθήκευση<//>`}>
+    footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} disabled=${badMap} why=${badMap ? 'Γράψε κελί σαν Β2 στον Τίτλο και στον Τόπο/ημερομηνία, και γράμμα στήλης σαν Β' : undefined} onClick=${save}>Αποθήκευση<//>`}>
     <div className="field-row">
       <div className="field"><label className="field__label" htmlFor="fd-s1">${form === 'hkai' ? 'Μπροστινή σελίδα' : form === 'outs' ? 'Φύλλο εξοδούχων' : 'Φύλλο του εντύπου'}</label>
         <${Select} id="fd-s1" className="ui-input" value=${sheet} onChange=${(e: any) => setSheet(e.target.value)}>${i.sheets.map(s => html`<option key=${s} value=${s}>${s}</option>`)}<//></div>
@@ -640,8 +642,8 @@ function FormDialog({ form, info, current, onClose, onSave, onMap }: P) {
       <div className="hkmap">
         <div><h3>Γραμμή ανά βαθμό</h3>${HK_RANKS.map(r => html`<label key=${r} className="hkmap__row"><span>${r}</span><input className="ui-input" type="number" min="1" value=${map.rows[r] || ''} onChange=${(e: any) => setMap({ ...map, rows: { ...map.rows, [r]: +e.target.value || 0 } })}/></label>`)}
           <h3>Κελιά</h3>
-          <label className="hkmap__row"><span>Τίτλος (ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ…)</span><input className="ui-input" value=${map.title} onChange=${(e: any) => setMap({ ...map, title: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })}/></label>
-          <label className="hkmap__row"><span>Τόπος και ημερομηνία</span><input className="ui-input" value=${map.date} onChange=${(e: any) => setMap({ ...map, date: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })}/></label></div>
+          <label className="hkmap__row"><span>Τίτλος (ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ…)</span><input className="ui-input" value=${map.title} aria-invalid=${badCell(map.title) || undefined} placeholder="π.χ. Β2" onChange=${(e: any) => setMap({ ...map, title: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })}/></label>
+          <label className="hkmap__row"><span>Τόπος και ημερομηνία</span><input className="ui-input" value=${map.date} aria-invalid=${badCell(map.date) || undefined} placeholder="π.χ. Β9" onChange=${(e: any) => setMap({ ...map, date: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })}/></label></div>
         <div><h3>Στήλη ανά είδος</h3>${HK_COLS.map(([k, label]) => html`<label key=${k} className="hkmap__row"><span>${label}</span><input className="ui-input" value=${map.cols[k] || ''} onChange=${(e: any) => setMap({ ...map, cols: { ...map.cols, [k]: e.target.value.toUpperCase().replace(/[^A-Z]/g, '') } })}/></label>`)}</div>
       </div></div>`}
   <//>`;

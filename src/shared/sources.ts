@@ -995,6 +995,18 @@ export function detectHkai(sheet: RawSheet, place = 'Αυλώνας', own: strin
   }
   return { map, found, total: HK_RANKS.length + HK_COLS.length + 2, missing };
 }
+// Η αντιστοίχιση της ΗΚΑΙ που αποθήκευσε ο χρήστης (Αρχεία Excel › Template): κρατιούνται μόνο έγκυρες τιμές (κελί Β2, στήλη Β, γραμμή 5)·
+// όσες δεν είναι (π.χ. «2» στον Τίτλο) παραλείπονται και γυρίζουν στο bad, ώστε να μη σταματά η εξαγωγή/προεπισκόπηση με «Λάθος κελί: 2»
+export function cleanHkaiCells(cells?: Partial<HkaiMap>): { cells: Partial<HkaiMap> | undefined; bad: string[] } {
+  if (!cells) return { cells: undefined, bad: [] };
+  const bad: string[] = []; const out: Partial<HkaiMap> = {};
+  const ref = (v: unknown, what: string): string | undefined => { if (!v) return undefined; if (typeof v === 'string' && /^[A-Z]+[1-9]\d*$/.test(v)) return v; bad.push(what + ' «' + String(v) + '»'); return undefined; };
+  const t = ref(cells.title, 'Τίτλος'); if (t) out.title = t;
+  const d = ref(cells.date, 'Τόπος και ημερομηνία'); if (d) out.date = d;
+  if (cells.rows) { const r: Record<string, number> = {}; for (const [k, v] of Object.entries(cells.rows)) { if (Number.isInteger(v) && v > 0) r[k] = v; else if (v) bad.push('Γραμμή ' + k + ' «' + String(v) + '»'); else r[k] = 0; } if (Object.keys(r).length) out.rows = r; }
+  if (cells.cols) { const c: Record<string, string> = {}; for (const [k, v] of Object.entries(cells.cols)) { if (typeof v === 'string' && /^[A-Z]{1,3}$/.test(v)) c[k] = v; else if (v) bad.push('Στήλη ' + k + ' «' + String(v) + '»'); } if (Object.keys(c).length) out.cols = c; }
+  return { cells: Object.keys(out).length ? out : undefined, bad };
+}
 export const hkaiMapOf = (cells?: Partial<HkaiMap>): HkaiMap => ({
   title: cells?.title || HKAI_DEFAULT.title, date: cells?.date || HKAI_DEFAULT.date,
   rows: { ...HKAI_DEFAULT.rows, ...(cells?.rows || {}) }, cols: { ...HKAI_DEFAULT.cols, ...(cells?.cols || {}) }
