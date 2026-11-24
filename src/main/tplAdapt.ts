@@ -4,9 +4,6 @@
 //   hkaiAdaptive                          called by fillHkai: when the unit's template has a saved profile and the old path cannot fill it completely, the fill is fillAdaptive
 // The original file is never changed: .xls goes through the converter (cached copy), everything else is read. Nothing here writes to disk except the one copy the user saves.
 import fs from 'fs';
-import os from 'os';
-import path from 'path';
-import crypto from 'crypto';
 import { modelOfBuffer } from './bookModel';
 import { convertXls } from './xlsConvert';
 import { oldFormatError } from './sources';
@@ -31,13 +28,9 @@ import type { ISODate } from '../shared/dates';
 // An .xlsx path for any file: the file itself, or for an .xls the converted copy (kept in the temp folder, keyed by path + time + size)
 export async function xlsxFile(file: string): Promise<string> {
   if (!/\.xls$/i.test(file)) return file;
-  const st = fs.statSync(file); const key = crypto.createHash('sha1').update(path.resolve(file) + '|' + st.mtimeMs + '|' + st.size).digest('hex').slice(0, 20);
-  const dir = path.join(os.tmpdir(), 'grafeio-xls-cache'); const cached = path.join(dir, key + '.xlsx');
-  if (fs.existsSync(cached)) return cached;
-  const conv = await convertXls(file);
+  const conv = await convertXls(file);        // one conversion at a time, kept per path + time + size (xlsConvert.ts)
   if (!conv) throw oldFormatError(file);
-  try { fs.mkdirSync(dir, { recursive: true }); fs.copyFileSync(conv.file, cached); } finally { conv.cleanup(); }
-  return cached;
+  return conv.file;
 }
 export async function xlsxBuffer(file: string): Promise<Buffer> { return fs.promises.readFile(await xlsxFile(file)); }
 

@@ -4,6 +4,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import crypto from 'crypto';
 import { execFile } from 'child_process';
 
 // A converter gets the path of a COPY of the .xls and the output folder; it returns the path of the .xlsx it made, or null
@@ -65,7 +66,42 @@ export const libreOfficeConverter: XlsConverter = {
 export const DEFAULT_CONVERTERS: XlsConverter[] = [excelConverter, libreOfficeConverter];
 
 // Converts file (an .xls) with the first converter that works. Returns null when none does.
+// With the default converters (the app): one conversion at a time (Excel and LibreOffice do not like to be started in parallel, and a stuck
+// one blocks the screen that waits for it), a converted copy kept per path + time + size so the same .xls is converted once (the previews,
+// «Αρχεία Excel» and «Αντιστοίχιση» all read it), and a failed conversion is not retried for a minute (otherwise every click waits again).
+// cleanup() of a kept copy does nothing. Other converters (tests, own) run as before, without all this.
+const FAIL_MS = 60000;
+let convQueue: Promise<unknown> = Promise.resolve();
+const convFlight = new Map<string, Promise<Converted | null>>();
+const convFailed = new Map<string, number>();
+export const xlsCacheDir = () => path.join(os.tmpdir(), 'grafeio-xls-cache');
+export function xlsCacheKey(file: string): string {
+  const st = fs.statSync(file);
+  return crypto.createHash('sha1').update(path.resolve(file) + '|' + st.mtimeMs + '|' + st.size).digest('hex').slice(0, 20);
+}
+export function resetXlsCacheState() { convFlight.clear(); convFailed.clear(); }
 export async function convertXls(file: string, converters: XlsConverter[] = DEFAULT_CONVERTERS): Promise<Converted | null> {
+  if (converters !== DEFAULT_CONVERTERS) return convertOnce(file, converters);
+  let key: string;
+  try { key = xlsCacheKey(file); } catch { return null; }
+  const cached = path.join(xlsCacheDir(), key + '.xlsx');
+  const keep = (converter: string): Converted => ({ file: cached, converter, cleanup() { /* the kept copy is reused */ } });
+  if (exists(cached)) return keep('cache');
+  const bad = convFailed.get(key); if (bad && Date.now() - bad < FAIL_MS) return null;
+  let p = convFlight.get(key);
+  if (!p) {
+    p = (convQueue = convQueue.then(async () => {
+      if (exists(cached)) return keep('cache');
+      const r = await convertOnce(file, converters);
+      if (!r) { convFailed.set(key, Date.now()); return null; }
+      try { fs.mkdirSync(xlsCacheDir(), { recursive: true }); fs.copyFileSync(r.file, cached); } catch { return r; }   // no room for the copy: the caller uses the temp one
+      const name = r.converter; r.cleanup(); convFailed.delete(key); return keep(name);
+    }, () => null)) as Promise<Converted | null>;
+    convFlight.set(key, p); void p.finally(() => convFlight.delete(key));
+  }
+  return p;
+}
+async function convertOnce(file: string, converters: XlsConverter[]): Promise<Converted | null> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'grafeio-xls-'));
   const cleanup = () => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* temp folder: the OS cleans it later */ } };
   try {
