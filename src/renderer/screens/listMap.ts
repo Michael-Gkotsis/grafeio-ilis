@@ -127,7 +127,7 @@ export function ListMapDialog({ form, file, sheet, onClose, onSaved }: { form: P
   const { state, run, refresh } = useStore(); const toast = useToast();
   const [model, setModel] = useState<ListModel | null>(null); const [err, setErr] = useState('');
   const [e, setE] = useState<Edits>(noEdits()); const [step, setStep] = useState<Step>('posts'); const [trial, setTrial] = useState<ListTryRes | null>(null); const [dirty, setDirty] = useState(false);
-  const load = (sh?: string) => { window.api.listModel(form, file, sh).then((m: P) => { if (!m.ok) setErr(m.error); else { setErr(''); setModel(m); setStep(m.svc ? 'posts' : 'cols'); } }); };
+  const load = (sh?: string) => { window.api.listModel(form, file, sh).then((m: P) => { if (!m.ok) setErr(m.error); else { setErr(''); setModel(m); setStep(m.svc ? 'posts' : 'cols'); } }).catch((e: P) => setErr('Δεν διαβάστηκε το αρχείο: ' + (e?.message || e))); };
   useEffect(() => { load(sheet); }, []);
   const edit = (f: (x: Edits) => Edits) => { setDirty(true); setTrial(null); setE(f); };
   const setPost = (b: SvcBlockView, v: string) => edit(x => { const creates = { ...x.creates }; delete creates[b.labelKey]; return { ...x, creates, posts: { ...x.posts, [b.labelKey]: v } }; });
@@ -161,7 +161,7 @@ export function ListMapDialog({ form, file, sheet, onClose, onSaved }: { form: P
       <${Button} disabled=${!model?.found} why="Δεν βρέθηκε λίστα στο φύλλο" onClick=${save}>Αποθήκευση<//>`}>
     ${model && model.sheets.length > 1 && html`<div className="field" style=${{ maxWidth: '280px' }}><label className="field__label" htmlFor="lm-sh">Φύλλο</label>
       <${Select} id="lm-sh" className="ui-input" value=${model.sheet} onChange=${(ev: P) => { setE(noEdits()); setTrial(null); load(ev.target.value); }}>${model.sheets.map((n: string) => html`<option key=${n} value=${n}>${n}</option>`)}<//></div>`}
-    ${err ? html`<${Alert} tone="bad"><span>${err}</span><//>` : !model ? html`<p className="note">Διαβάζεται το αρχείο…</p>`
+    ${err ? html`<${Alert} tone="bad"><span>${err}</span><//>` : !model ? html`<p className="note">Διαβάζεται το αρχείο… (ένα παλιό .xls μετατρέπεται πρώτα με το Excel, μπορεί να πάρει λίγο)</p>`
       : html`<${ListMapBody} model=${model} step=${step} e=${e} trial=${trial} onStep=${goStep} setPost=${setPost} setCreate=${setCreate} setCol=${setCol} setRoom=${setRoom}/>`}
   <//>`;
 }
