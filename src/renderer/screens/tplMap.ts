@@ -316,7 +316,7 @@ export function TplMapDialog({ form, file, sheet, onClose, onSaved }: { form: P;
   const [ch, setCh] = useState<Choices>(emptyChoices()); const [creates, setCreates] = useState<Record<string, TplCreate>>({});
   const [step, setStep] = useState<Step>('cols'); const [sel, setSel] = useState<number | null>(null);
   const [trial, setTrial] = useState<TryRes | null>(null); const [busy, setBusy] = useState(false); const [dirty, setDirty] = useState(false);
-  useEffect(() => { let live = true; window.api.tplModel(form, file, sheet).then((m: P) => { if (!live) return; if (!m.ok) setErr(m.error); else { setModel(m); setCh(m.choices); if (m.noFront) setStep('cols'); } }); return () => { live = false; }; }, []);
+  useEffect(() => { let live = true; window.api.tplModel(form, file, sheet).then((m: P) => { if (!live) return; if (!m.ok) setErr(m.error); else { setModel(m); setCh(m.choices); if (m.noFront) setStep('cols'); } }).catch((e: P) => { if (live) setErr('Δεν διαβάστηκε το αρχείο: ' + (e?.message || e)); }); return () => { live = false; }; }, []);
   const edit = (f: () => void) => { setDirty(true); setTrial(null); f(); };
   const setCol = (c: number, x: ColChoice | null) => edit(() => { setCh(p => { const cols = { ...p.cols }; if (x) cols[c] = x; else delete cols[c]; return { ...p, cols }; }); if (!x || x.k !== 'keys') setCreates(p => { const n = { ...p }; delete n['c:' + c]; return n; }); });
   const setRow = (r: number, x: P) => edit(() => { setCh(p => { const rows = { ...p.rows }; if (x) rows[r] = x; else delete rows[r]; return { ...p, rows }; }); if (!x || x.k !== 'row') setCreates(p => { const n = { ...p }; delete n['r:' + r]; return n; }); });
@@ -339,7 +339,7 @@ export function TplMapDialog({ form, file, sheet, onClose, onSaved }: { form: P;
     footer=${html`<span className="tm__foot">Ό,τι μένει άγνωστο δεν γράφεται στο αρχείο, και η εφαρμογή σου το λέει κάθε φορά που βγάζεις ${HK()}.</span>
       <${Button} variant="outline" disabled=${!model || model.noFront} onClick=${() => goStep('try')}>Δοκιμαστικό γέμισμα με τα σημερινά<//>
       <${Button} disabled=${!model || model.noFront || dups.length > 0} why=${dups.length ? 'Δύο στήλες μετρούν το ίδιο' : 'Δεν υπάρχει πίνακας στο αρχείο'} onClick=${save}>Αποθήκευση προφίλ μονάδας<//>`}>
-    ${err ? html`<${Alert} tone="bad"><span>${err}</span><//>` : !model ? html`<p className="note">Διαβάζεται το αρχείο…</p>`
+    ${err ? html`<${Alert} tone="bad"><span>${err}</span><//>` : !model ? html`<p className="note">Διαβάζεται το αρχείο… (ένα παλιό .xls μετατρέπεται πρώτα με το Excel, μπορεί να πάρει λίγο)</p>`
       : html`<${TplMapBody} model=${model} ch=${ch} creates=${creates} step=${step} sel=${sel} trial=${trial} busy=${busy} onStep=${goStep} onSel=${setSel} setCol=${setCol} setRow=${setRow} setWord=${setWord} setSkip=${setSkip} setBack=${setBack} accept=${accept} setCreate=${setCreate} onTry=${runTry} onRestore=${restore}/>`}
   <//>`;
 }
