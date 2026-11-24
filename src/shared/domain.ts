@@ -62,6 +62,7 @@ export interface Person {
   email?: string;        // E-mail, e-mail συγγενή, ομάδα αίματος (shared/personal.ts): φύλλο ΘΑΛΑΜΟΙ του Δυναμολογίου και στήλες στα Έντυπα
   relEmail?: string;
   blood?: string;        // Α+, Α-, Β+, Β-, ΑΒ+, ΑΒ-, 0+, 0- (ή κείμενο όπως ήρθε από το Excel)
+  eid?: string;          // Ειδικότητα (Michael, 24/11): από τη λίστα Ρυθμίσεις › Λίστες › Ειδικότητες (όπως των στελεχών, Cadre.eid)· καρτέλα, φίλτρο και στήλη στα Έντυπα, φίλτρο στο Προσωπικό· καμία επίδραση σε υπηρεσίες/ΗΚΑΙ, δεν γράφεται στο Excel του Δυναμολογίου
   religion?: string;     // Θρήσκευμα (Michael, 18/11): από τη λίστα Ρυθμίσεις › Λίστες › Θρησκεύματα· καρτέλα, φίλτρο στο Προσωπικό και στα Έντυπα, στήλη στα Έντυπα· καμία επίδραση σε υπηρεσίες/ΗΚΑΙ, δεν γράφεται στα Excel του Δυναμολογίου
 }
 
@@ -533,7 +534,7 @@ export interface Settings {
   sigs?: Partial<Record<SigForm, Sig[]>>;  // υπογραφές ανά έντυπο, από αριστερά προς τα δεξιά (κενό = όπως το έντυπο), sigs.ts
   layout?: Partial<Record<LayoutForm, Layout>>;  // πού μετακίνησες υπογραφές, κεφαλίδα, ημερομηνία πάνω στο χαρτί, layout.ts
   outputDir: string;                     // φάκελος για τα Excel (κενό = προεπιλογή)
-  fixed: Partial<Record<'ly' | 'dy', number>>; // μόνιμος Λ/Υ και Δ/Υ: μπαίνουν μόνοι τους, εκτός σειράς
+  fixed: Partial<Record<string, number>>;   // μόνιμο άτομο ανά θέση (κλειδί θέσης: 'ly', 'dy', 'Θ1α'…): μπαίνει μόνο του κάθε μέρα, εκτός σειράς (Michael, 24/11: κάθε υπηρεσία)
   rev: number;                           // έκδοση ρυθμίσεων, για τις αλλαγές προεπιλογών
   views?: SavedView[];                   // αποθηκευμένες λίστες στο Προσωπικό (π.χ. «Θαλαμάρχες»)
   sources?: Partial<Record<ListKind, SourceBinding>>;   // από ποιο Excel/φύλλο/πίνακα διαβάζει κάθε είδος και πού γράφει
@@ -765,7 +766,8 @@ export interface CadreDutyGroup { id: string; name: string; services: CadreServi
 export interface CadreDutyCfg { groups: CadreDutyGroup[]; limits: { off: { base: number; extra: number }; nco: { base: number; extra: number } }; rest: number; carry: boolean; fairHol: boolean }
 // none: ελαφράς, καμία υπηρεσία · only: ελαφράς, μόνο αυτές · no24: όχι 24ωρες (π.χ. μητέρα) · until: ως ποια μέρα (κενό = χωρίς λήξη) · noDow: μέρες εβδομάδας που δεν θέλει (0 = Κυρ)
 export interface CadreDutyPerson { group?: string; limit?: number; none?: { until?: ISODate }; only?: { services: string[]; until?: ISODate }; no24?: { until?: ISODate; why?: string }; noDow?: number[] }
-export interface CadreDuty { id: string; date: ISODate; svc: string; cid: string; auto?: boolean; why?: string }
+// via: η θέση «μόνο για στελέχη» (κλειδί θέσης στις Υπηρεσίες) που είναι δεμένη με αυτή την υπηρεσία: η μία πλευρά γράφει και σβήνει την άλλη (cadreDuty.ts syncLinked)
+export interface CadreDuty { id: string; date: ISODate; svc: string; cid: string; auto?: boolean; why?: string; via?: string }
 // Καταστάσεις στελέχους = οι στήλες της ΗΚΑΙ (Michael, 17/10: «οι καταστάσεις τους να αφορούν τις καταστάσεις της ΗΚΑΙ»):
 // [κωδικός, όνομα, στήλη ΗΚΑΙ]. Πρώτα οι κωλυόμενοι, μετά οι απόντες, όπως στο έντυπο· «Άλλο» μένει μόνο στη λίστα.
 // Οι παλιοί κωδικοί (ka, an, eid, nos, fp, ekp, allh, other) κρατούν το ίδιο όνομα, για όσες έχουν ήδη γραφτεί.

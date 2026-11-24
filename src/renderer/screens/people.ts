@@ -143,6 +143,7 @@ function PeopleList() {
     if (!place(p, f)) return false;
     if (f.filter.startsWith('sub:')) return p.active && subKeyOf(p) === f.filter.slice(4);   // μονάδα: ένας Λόχος / Ίλη
     if (f.filter.startsWith('esso:')) return p.active && essoKeyOf(p) === f.filter.slice(5);   // μονάδα: μία ΕΣΣΟ
+    if (f.filter.startsWith('eid:')) return p.active && !!p.eid && itemKey(p.eid) === f.filter.slice(4);   // ειδικότητα (Michael, 24/11)
     if (f.filter.startsWith('rel:')) return p.active && !!p.religion && itemKey(p.religion) === f.filter.slice(4);   // θρήσκευμα (Michael, 18/11)
     const ss = ssOf.get(p.id) || [];
     return ROSTER_FILTERS.some(([k]) => k === f.filter) ? rosterMatch(f.filter as RosterFilter, p, ss) : p.active && legacyMatch(f.filter, ss, state.settings.lists);
@@ -155,6 +156,7 @@ function PeopleList() {
       if (!place(p, { unit, room, filter: 'all' })) return;
       const ss = ssOf.get(p.id) || [];
       for (const [k] of ROSTER_FILTERS) if (rosterMatch(k, p, ss)) n[k] = (n[k] || 0) + 1;
+      if (p.active && p.eid) { const k = 'eid:' + itemKey(p.eid); n[k] = (n[k] || 0) + 1; }
       if (p.active && p.religion) { const k = 'rel:' + itemKey(p.religion); n[k] = (n[k] || 0) + 1; }
       if (unitMode && p.active) { const k = 'esso:' + essoKeyOf(p); n[k] = (n[k] || 0) + 1; if (p.sub) { const s = 'sub:' + subKeyOf(p); n[s] = (n[s] || 0) + 1; } }
     });
@@ -164,6 +166,11 @@ function PeopleList() {
   const relList = useMemo(() => {
     const used = new Map<string, string>(); active.forEach(p => { if (p.religion && !used.has(itemKey(p.religion))) used.set(itemKey(p.religion), p.religion); });
     const base = listOf(state.settings.lists, 'religions').filter(g => used.has(itemKey(g)));
+    return [...base.map(g => ({ key: itemKey(g), name: g })), ...[...used].filter(([k]) => !base.some(g => itemKey(g) === k)).map(([key, name]) => ({ key, name }))];
+  }, [active, state.settings.lists]);
+  const eidList = useMemo(() => {   // ειδικότητα: φίλτρο (dropdown) μόνο όταν κάποιος έχει δηλωμένη, με τη σειρά της λίστας
+    const used = new Map<string, string>(); active.forEach(p => { if (p.eid && !used.has(itemKey(p.eid))) used.set(itemKey(p.eid), p.eid); });
+    const base = listOf(state.settings.lists, 'eids').filter(g => used.has(itemKey(g)));
     return [...base.map(g => ({ key: itemKey(g), name: g })), ...[...used].filter(([k]) => !base.some(g => itemKey(g) === k)).map(([key, name]) => ({ key, name }))];
   }, [active, state.settings.lists]);
   const essoList = useMemo(() => (unitMode ? essoRows(active) : []), [unitMode, active]);
@@ -190,7 +197,7 @@ function PeopleList() {
   const delView = async (v: SavedView) => { if (await run({ t: 'setSettings', settings: { views: views.filter(x => x.id !== v.id) }, text: 'διαγραφή λίστας «' + v.name + '»' }, false)) toast({ text: 'Διαγράφηκε η λίστα «' + v.name + '»', actions: [undoMark()] }); };
   const dateLbl = date === today ? '' : dayName(date, today);
   const filtered = unit !== 'all' || room != null || filter !== 'all' || !!dq.trim();
-  const fLabel = filter.startsWith('sub:') ? (subList.find(r => itemKey(r.name) === filter.slice(4))?.name || filter.slice(4)) : filter.startsWith('esso:') ? 'ΕΣΣΟ ' + filter.slice(5) : filter.startsWith('rel:') ? 'Θρήσκευμα: ' + (relList.find(r => r.key === filter.slice(4))?.name || filter.slice(4)) : (ROSTER_FILTERS.find(([k]) => k === filter) || [, filter])[1];
+  const fLabel = filter.startsWith('sub:') ? (subList.find(r => itemKey(r.name) === filter.slice(4))?.name || filter.slice(4)) : filter.startsWith('esso:') ? 'ΕΣΣΟ ' + filter.slice(5) : filter.startsWith('eid:') ? 'Ειδικότητα: ' + (eidList.find(r => r.key === filter.slice(4))?.name || filter.slice(4)) : filter.startsWith('rel:') ? 'Θρήσκευμα: ' + (relList.find(r => r.key === filter.slice(4))?.name || filter.slice(4)) : (ROSTER_FILTERS.find(([k]) => k === filter) || [, filter])[1];
   // sigs: υπογραφές μόνο για αυτή τη φορά («Υπογραφές…»)
   const exportXl = async (sigs?: Sig[], hid?: string) => {
     setXl(true);
@@ -225,6 +232,7 @@ function PeopleList() {
       <${Select} className="ui-select" aria-label="Θάλαμος" value=${room == null ? '' : String(room)} onChange=${(e: any) => setRoom(e.target.value ? +e.target.value : null)}>
         <option value="">Όλοι οι θάλαμοι</option>${rooms.map(([r, n]) => html`<option key=${r} value=${String(r)}>Θάλαμος ${r} · ${n}</option>`)}<//>
       ${unitMode && !subChips && html`<${Select} className="ui-select" aria-label="Λόχος / Ίλη" value=${filter.startsWith('sub:') ? filter : ''} onChange=${(e: any) => setFilter(e.target.value || 'all')}><option value="">Όλοι οι Λόχοι / Ίλες</option>${subList.map(r => html`<option key=${r.name} value=${'sub:' + itemKey(r.name)}>${r.name} · ${counts['sub:' + itemKey(r.name)] || 0}</option>`)}<//>`}
+      ${eidList.length > 0 && html`<${Select} className="ui-select" aria-label="Ειδικότητα" value=${filter.startsWith('eid:') ? filter : ''} onChange=${(e: any) => setFilter(e.target.value || 'all')}><option value="">Όλες οι ειδικότητες</option>${eidList.map(r => html`<option key=${r.key} value=${'eid:' + r.key}>${r.name} · ${counts['eid:' + r.key] || 0}</option>`)}<//>`}
       ${relList.length > 0 && html`<${Select} className="ui-select" aria-label="Θρήσκευμα" value=${filter.startsWith('rel:') ? filter : ''} onChange=${(e: any) => setFilter(e.target.value || 'all')}><option value="">Όλα τα θρησκεύματα</option>${relList.map(r => html`<option key=${r.key} value=${'rel:' + r.key}>${r.name} · ${counts['rel:' + r.key] || 0}</option>`)}<//>`}
       ${dateSel}</div>
     <div className="filters"><${Strip} role="group" aria-label="Γρήγορα φίλτρα">${ROSTER_FILTERS.map(([k, l]) => html`<button key=${k} type="button" className="ui-chip" aria-pressed=${!curView && filter === k} data-tip=${k === 'leave' || k === 'pun' ? (k === 'leave' ? 'Σε άδεια ' : 'Με ποινή ') + (dateLbl ? dateLbl.toLowerCase() : 'σήμερα') : undefined} onClick=${() => setFilter(filter === k && k !== 'all' ? 'all' : k)}>${l}<span className="cnt">${counts[k] || 0}</span></button>`)}

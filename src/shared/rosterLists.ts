@@ -32,6 +32,7 @@ export function rosterMatch(f: RosterFilter, p: Person, on: Status[]): boolean {
   if (!p.active) return false;
   if (f === 'all') return true;
   if (f.startsWith('rel:')) return !!p.religion && itemKey(p.religion) === f.slice(4);   // αποθηκευμένη λίστα με θρήσκευμα (Προσωπικό)
+  if (f.startsWith('eid:')) return !!p.eid && itemKey(p.eid) === f.slice(4);   // αποθηκευμένη λίστα με ειδικότητα (Προσωπικό, Michael 24/11)
   if (f === 'post') return !!p.post;
   if (f === 'dnright') return !!p.dn;
   return !!filterStatus(f, on);

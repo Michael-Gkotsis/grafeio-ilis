@@ -18,7 +18,7 @@ import { insertCadre, isManualOrder } from './cadre';
 import { clearRange, setNoDuty } from './cadrePlan';
 import { assetCfgOf, newAssetCatId, catOf, cleanAsset, doMaint, heldWarn, holderText, primaryWeapons, registry, sameHolder, STATE_TXT } from './assets';
 import { doVehMaint, driverText, kmTxt, numTxt, vehName, withKm } from './vehicles';
-import { cleanPerson, dutyCfgOf, serviceOf } from './cadreDuty';
+import { cleanPerson, dutyCfgOf, serviceOf, syncLinked } from './cadreDuty';
 import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours';
 import { fitDeprivations, isDeprivation, punLbl, servedDays } from './punish';
 import { normPos, normRack, normWeapon, weaponKey, WT_CAT } from './weapons';
@@ -168,7 +168,7 @@ export type Command =
   | { t: 'setPersonMove'; pid: number; field: 'inOn' | 'outOn'; date: ISODate | null }
   // Οπλισμός: αριθμοί όπλων, πολλοί μαζί με μία αναίρεση (επικόλληση στήλης, μεταφορά από άλλον). '' = χωρίς όπλο / παρέδωσε
   | { t: 'setWeapons'; changes: WeaponChange[]; what?: string }
-  | { t: 'setPersonal'; pid?: number; cid?: string; iban?: string; amka?: string; afm?: string; email?: string; relEmail?: string; blood?: string; religion?: string }   // θρήσκευμα (στρατιώτη ή στελέχους, Michael 18/11)· IBAN/ΑΜΚΑ/ΑΦΜ από την καρτέλα (οπλίτη ή στελέχους)· e-mail, e-mail συγγενή, ομάδα αίματος μόνο οπλίτη
+  | { t: 'setPersonal'; pid?: number; cid?: string; iban?: string; amka?: string; afm?: string; email?: string; relEmail?: string; blood?: string; religion?: string; eid?: string }   // ειδικότητα (στρατιώτη ή στελέχους, Michael 24/11)· θρήσκευμα (στρατιώτη ή στελέχους, Michael 18/11)· IBAN/ΑΜΚΑ/ΑΦΜ από την καρτέλα (οπλίτη ή στελέχους)· e-mail, e-mail συγγενή, ομάδα αίματος μόνο οπλίτη
   // Έξοδος και είσοδος όπλων από τον οπλοβαστό (Michael, 18/10). Ώρα ΩΩ:ΛΛ (η φόρμα βάζει την τωρινή). Είσοδος χωρίς reason:
   // ο λόγος εισαγωγής κάθε εξόδου από τη λίστα (ΕΚΠ → ΛΗΞ ΕΚΠ)
   | { t: 'weaponOut'; pids: number[]; reason: string; day: ISODate; time: string; note?: string }
@@ -472,7 +472,7 @@ function stampMoves(prev: AppState, next: AppState, c: Command, today: ISODate):
 }
 export function apply(s: AppState, c: Command, ctx: Ctx): Result {
   const r = run(s, c, ctx);
-  const state = syncAssets(s, fitDeprivations(noPending(stampMoves(s, r.state, c, ctx.today))), ctx);
+  const state = syncAssets(s, syncLinked(s, fitDeprivations(noPending(stampMoves(s, r.state, c, ctx.today))), () => ctx.newId()), ctx);
   return state === r.state ? r : { ...r, state, files: r.files.includes('Ποινές') ? r.files : [...r.files, 'Ποινές'] };
 }
 // Μητρώο ↔ Δυναμολόγιο (sweep 17/11): όταν αλλάζει ο αριθμός όπλου ενός ατόμου/στελέχους (Οπλισμός, Excel, καρτέλα), η αληθινή εγγραφή του παλιού
@@ -1377,8 +1377,8 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     case 'setPersonal': {
       // Έξτρα στοιχεία (IBAN, ΑΜΚΑ, ΑΦΜ, e-mail, ομάδα αίματος): γράφονται μόνα τους στο Δυναμολόγιο/ΣΤΕΛΕΧΗ (kindsForPeople)· όχι τα νούμερα στο ιστορικό ενεργειών
       const keys = ['iban', 'amka', 'afm'] as const;
-      const patch = <T extends Person | Cadre>(o: T): T => { const q: T = { ...o }; for (const k of keys) { if (c[k] === undefined) continue; const v = normPersonal(k, c[k]); if (v) q[k] = v; else delete q[k]; } if (c.religion !== undefined) { const v = itemName(c.religion, 'religions'); if (v) q.religion = v; else delete q.religion; } return q; };
-      const same = (a: Person | Cadre, b: Person | Cadre) => keys.every(k => a[k] === b[k]) && a.religion === b.religion && XKEYS.every(k => (a as Person)[k] === (b as Person)[k]);
+      const patch = <T extends Person | Cadre>(o: T): T => { const q: T = { ...o }; for (const k of keys) { if (c[k] === undefined) continue; const v = normPersonal(k, c[k]); if (v) q[k] = v; else delete q[k]; } if (c.religion !== undefined) { const v = itemName(c.religion, 'religions'); if (v) q.religion = v; else delete q.religion; } if (c.eid !== undefined) { const v = itemName(c.eid, 'eids'); if (v) q.eid = v; else delete q.eid; } return q; };
+      const same = (a: Person | Cadre, b: Person | Cadre) => keys.every(k => a[k] === b[k]) && a.religion === b.religion && a.eid === b.eid && XKEYS.every(k => (a as Person)[k] === (b as Person)[k]);
       if (c.cid) {
         const o = s.cadreList.find(x => x.id === c.cid); if (!o) throw new Error('Δεν βρέθηκε το στέλεχος');
         const q = patch(o); if (same(o, q)) return { state: s, text: '', files: [] };

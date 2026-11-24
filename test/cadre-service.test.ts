@@ -151,10 +151,11 @@ describe('3. μηνιαίο πρόγραμμα στελεχών (Αυτόματ�
   it('γεμίζει υπηρεσίες προγράμματος και θέση, χωρίς διπλή υπηρεσία, με ανάπαυση και μέσα στα όρια', () => {
     const { s: s0, k, cl } = setup(6, CFG(12));
     const r = autoFill(s0, YM);
-    expect(r.seats).toHaveLength(31); expect(r.seatEmpty).toEqual([]); expect(r.add).toHaveLength(31);
+    expect(r.seats).toHaveLength(31); expect(r.seatEmpty).toEqual([]);
+    expect(r.add).toHaveLength(0);   // η θέση είναι η υπηρεσία «ΑΥΔΜ» του προγράμματος (αμφίδρομη σχέση, 24/11): ένα άτομο ανά μέρα, όχι δύο
     const s = run(s0, { t: 'setCadreDuties', add: r.add, del: [], text: 'δοκιμή', seats: r.seats });
     expect(picks(s, k, 31)).toHaveLength(31);
-    expect(cl.reduce((a, c) => a + monthCount(s, c.id, YM).seat, 0)).toBe(31);
+    expect(cl.reduce((a, c) => a + monthCount(s, c.id, YM).done, 0)).toBe(31);   // και στο πρόγραμμα στελεχών: η ίδια υπηρεσία, μία φορά
     // κανένα στέλεχος δύο υπηρεσίες την ίδια μέρα ή σε συνεχόμενες μέρες (ανάπαυση 1) από πρόγραμμα + θέση μαζί
     const idx = dutyIndex(s);
     for (const c of cl) {
@@ -162,14 +163,14 @@ describe('3. μηνιαίο πρόγραμμα στελεχών (Αυτόματ�
       for (let i = 1; i < days.length; i++) expect(days[i] - days[i - 1]).toBeGreaterThanOrEqual(2);
       const l = monthLimit(s, c, YM); expect(l.done).toBeLessThanOrEqual(l.effBase + l.extra);
     }
-    // ίδια δικαιοσύνη: ίσο μοίρασμα των 62 υπηρεσιών
-    const tot = cl.map(c => monthCount(s, c.id, YM).done); expect(tot.reduce((a, b) => a + b, 0)).toBe(62); expect(Math.max(...tot) - Math.min(...tot)).toBeLessThanOrEqual(1);
+    // ίδια δικαιοσύνη: ίσο μοίρασμα των 31 υπηρεσιών
+    const tot = cl.map(c => monthCount(s, c.id, YM).done); expect(tot.reduce((a, b) => a + b, 0)).toBe(31); expect(Math.max(...tot) - Math.min(...tot)).toBeLessThanOrEqual(1);
     // δεύτερη φορά: τίποτα να γεμίσει
     const r2 = autoFill(s, YM); expect(r2.add).toEqual([]); expect(r2.seats).toEqual([]);
   });
   it('η μέρα με τη μέρα συμπλήρωση σέβεται και τις υπηρεσίες του προγράμματος στελεχών', () => {
     const { s: s0, k, cl } = setup(6, CFG(12));
-    const r = autoFill(s0, YM, { }); const roster = run(s0, { t: 'setCadreDuties', add: r.add, del: [], text: 'δοκιμή' });
+    const r = autoFill(s0, YM, { }); const roster = r.add.length ? run(s0, { t: 'setCadreDuties', add: r.add, del: [], text: 'δοκιμή' }) : s0;   // η υπηρεσία του προγράμματος είναι η ίδια η θέση
     const { s } = fillDays(roster, 31);
     const idx = dutyIndex(s);
     for (const c of cl) for (const [, x] of idx.get(c.id) || []) expect(x.roster.length + x.seat.length).toBeLessThanOrEqual(1);

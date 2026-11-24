@@ -39,7 +39,7 @@ export function optionsOf(base: readonly string[], seen: Iterable<string | null 
 // Λίστες που συμπληρώνει ο χρήστης (Ρυθμίσεις › Λίστες, Michael 13/10). Στις ρυθμίσεις μένουν μόνο οι προσθήκες
 // και όσα βασικά έκρυψε: οι βασικές λίστες είναι εδώ, οπότε χωρίς προσθήκες όλα μένουν όπως πριν.
 // ---------------------------------------------------------------------------
-export type ListId = 'soldierRanks' | 'cadreRanks' | 'origins' | 'specs' | 'punKinds' | 'leaveKinds' | 'cadreAbs' | 'medKinds' | 'siUnarmed' | 'weaponTypes' | 'weaponOut' | 'subUnits' | 'religions' | 'moveWhys';
+export type ListId = 'soldierRanks' | 'cadreRanks' | 'origins' | 'specs' | 'punKinds' | 'leaveKinds' | 'cadreAbs' | 'medKinds' | 'siUnarmed' | 'weaponTypes' | 'weaponOut' | 'subUnits' | 'religions' | 'eids' | 'moveWhys';
 // hk: γραμμή της ΗΚΑΙ όπου μετρά ο βαθμός · col: στήλη της ΗΚΑΙ (άδεια, απουσία στελέχους· κενό = μόνο στη λίστα)
 // acc: πώς γράφεται η ποινή στο κείμενο («με δύο (02) ημέρες …») · max: ανώτατες ημέρες (προειδοποίηση)
 // like: βασικός τύπος ιατρικού (ΕΑ/ΕΥ/ΕΟ/ΕΑΡΒ): στην ΗΚΑΙ μετρά μόνο ο ΕΥ· υπηρεσίες και έξοδος στον πίνακα Καταστάσεων.
@@ -73,14 +73,15 @@ export const LIST_BASE: Record<ListId, readonly string[]> = {
   weaponOut: WEAPON_OUT.map(x => x[0]),
   subUnits: [],   // Λόχοι / Ίλες της μονάδας: μόνο δικές σου (λειτουργία μονάδας)
   religions: RELIGIONS,
+  eids: [],   // Ειδικότητες (Michael, 24/11): μόνο δικές σου· οι τιμές που είχαν ήδη τα στελέχη μπαίνουν μόνες τους (seedEids)
   moveWhys: MOVE_WHYS
 };
-export const LIST_NAME: Record<ListId, string> = { moveWhys: 'Λόγοι κίνησης', soldierRanks: 'Βαθμοί στρατιωτών', cadreRanks: 'Βαθμοί στελεχών', origins: 'Προελεύσεις', specs: 'Ο/Σ (όπλα και σώματα)', punKinds: 'Είδη ποινής', leaveKinds: 'Είδη άδειας', cadreAbs: 'Καταστάσεις στελεχών', medKinds: 'Ιατρικά', siUnarmed: 'Σ.Ι. άοπλων', weaponTypes: 'Τύποι όπλων', weaponOut: 'Λόγοι εξόδου όπλου', subUnits: 'Λόχοι / Ίλες', religions: 'Θρησκεύματα' };
+export const LIST_NAME: Record<ListId, string> = { moveWhys: 'Λόγοι κίνησης', soldierRanks: 'Βαθμοί στρατιωτών', cadreRanks: 'Βαθμοί στελεχών', origins: 'Προελεύσεις', specs: 'Ο/Σ (όπλα και σώματα)', punKinds: 'Είδη ποινής', leaveKinds: 'Είδη άδειας', cadreAbs: 'Καταστάσεις στελεχών', medKinds: 'Ιατρικά', siUnarmed: 'Σ.Ι. άοπλων', weaponTypes: 'Τύποι όπλων', weaponOut: 'Λόγοι εξόδου όπλου', subUnits: 'Λόχοι / Ίλες', religions: 'Θρησκεύματα', eids: 'Ειδικότητες' };
 // ίδιο κλειδί για «Ε.Π.Ο.Π στρ» και «ΕΠΟΠ ΣΤΡ»: χωρίς τόνους, τελείες και διπλά κενά, λατινικά που μοιάζουν → ελληνικά
 export const itemKey = (v: string) => normGreek(v).replace(/\./g, '').replace(/\s+/g, ' ').trim();
 // βαθμοί, προελεύσεις, Ο/Σ και ιατρικά με κεφαλαία, όπως στα Excel· είδη ποινής, άδειας, απουσίας όπως γράφτηκαν
 const UPPER: ListId[] = ['soldierRanks', 'cadreRanks', 'origins', 'specs', 'medKinds', 'siUnarmed', 'weaponTypes', 'weaponOut', 'moveWhys'];
-export const itemName = (v: string, id: ListId = 'specs') => { const t = v.trim().replace(/\s+/g, ' '); return UPPER.includes(id) ? t.toUpperCase() : t; };
+export const itemName = (v: string, id: ListId = 'specs') => { const t = v.trim().replace(/\s+/g, ' '); return id === 'eids' ? upper(t) : UPPER.includes(id) ? t.toUpperCase() : t; };   // ειδικότητα: upper (χωρίς τόνους), όπως την είχαν ήδη τα στελέχη
 export interface ListRow extends ListItem { builtin: boolean; hidden: boolean }
 // Όλες οι γραμμές μιας λίστας για την κάρτα: πρώτα οι βασικές, μετά οι δικές σου με τη σειρά που μπήκαν
 export function listRows(lists: UserLists | undefined, id: ListId): ListRow[] {
@@ -150,6 +151,19 @@ export function splitOrigins(s: AppState): AppState | null {
   }
   const same = people.every((p, i) => p === s.people[i]) && cadreList.every((c, i) => c === (s.cadreList || [])[i]) && next === lists;
   return same ? null : { ...s, people, cadreList, settings: next === lists ? s.settings : { ...s.settings, lists: next } };
+}
+// Στο άνοιγμα της βάσης (db.ts), όσες φορές κι αν τρέξει: η ειδικότητα που είχαν ήδη τα στελέχη (πεδίο «Ειδικότητα» της φόρμας
+// τους και του Excel τους) μπαίνει στη λίστα Ρυθμίσεις › Λίστες › Ειδικότητες, για να τη βρίσκεις και στην επιλογή και στο φίλτρο
+// (Michael, 24/11). Τα στελέχη κρατούν την τιμή τους όπως ήταν. null: τίποτα να προστεθεί
+export function seedEids(s: AppState): AppState | null {
+  const lists = s.settings.lists; const have = new Set(listRows(lists, 'eids').map(r => itemKey(r.name))); const add: ListItem[] = [];
+  for (const c of s.cadreList || []) {
+    const n = itemName(c.eid || '', 'eids'); const k = itemKey(n);
+    if (!k || have.has(k) || /[,"]/.test(n)) continue;
+    have.add(k); add.push({ name: n });
+  }
+  if (!add.length) return null;
+  return { ...s, settings: { ...s.settings, lists: { ...lists, eids: { ...(lists?.eids || {}), add: [...(lists?.eids?.add || []), ...add] } } } };
 }
 // Λόγος εισαγωγής όπλου για έναν λόγο εξόδου: του βασικού (ΕΚΠ → ΛΗΞ ΕΚΠ), όποιον όρισες στον δικό σου, αλλιώς «ΛΗΞ <λόγος>»
 export function weaponBack(reason: string, lists?: UserLists): string {

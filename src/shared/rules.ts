@@ -90,7 +90,7 @@ export function monthDuties(s: AppState, date: ISODate, pid: number, idx?: Map<n
   if (ds) for (const d of ds) if ((withDay || d !== date) && d.slice(0, 7) === ym) n++;
   // στέλεχος: μετρούν μαζί και οι υπηρεσίες του προγράμματος στελεχών (Michael, 17/11: «μετρούν μαζί»), όπως στο cadreDuty.ts monthCount
   const c = pid < 0 ? cadreOf(s, pid) : undefined;
-  if (c && s.cadreDuties) for (const x of s.cadreDuties) if (x.cid === c.id && (withDay || x.date !== date) && x.date.slice(0, 7) === ym) n++;
+  if (c && s.cadreDuties) for (const x of s.cadreDuties) if (x.cid === c.id && !x.via && (withDay || x.date !== date) && x.date.slice(0, 7) === ym) n++;
   return n;
 }
 // Το όριο του μήνα ενός στελέχους σε θέση στρατιωτών (Michael, 24/11): ΕΝΑ όριο από τα δύο που υπήρχαν χωριστά. Πρώτα το δικό του
@@ -568,9 +568,15 @@ export function statusWarn(s: AppState, date: ISODate, pid: number): string | nu
   const st = statusesOn(live(s), pid, date).find(x => medWarns(x, s.settings.lists));
   return st ? statusLbl(st, s.settings.lists) + untilTxt(st, date) + ': έλεγξε αν μπορεί να κάνει υπηρεσία' : null;
 }
-// Μόνιμος Λ/Υ ή Δ/Υ: μπαίνει μόνος του κάθε μέρα, χωρίς κανόνες ανάπαυσης και σειρά δικαιοσύνης
-export const isFixed = (s: AppState, pid: number, k?: string | null) => !!k && (k === 'ly' || k === 'dy') && s.settings.fixed?.[k] === pid;
-export const fixedIds = (s: AppState) => new Set(Object.values(s.settings.fixed || {}).filter((x): x is number => !!x));
+// Μόνιμο άτομο μιας θέσης (Λ/Υ, Δ/Υ και, από 24/11, κάθε θέση κάθε υπηρεσίας): μπαίνει μόνο του κάθε μέρα, χωρίς κανόνες ανάπαυσης και σειρά δικαιοσύνης.
+// Μετρούν μόνο όσες θέσεις υπάρχουν στο έντυπο που ισχύει (μια ξεχασμένη εγγραφή άλλου εντύπου ή σβησμένης θέσης δεν βγάζει κανέναν από τη σειρά)
+export const isFixed = (s: AppState, pid: number, k?: string | null) => !!k && s.settings.fixed?.[k] === pid;
+export const fixedIds = (s: AppState) => {
+  const f = s.settings.fixed; const out = new Set<number>(); if (!f) return out;
+  const live = new Set(postsOf(s.settings).map(x => x.k));
+  for (const [k, v] of Object.entries(f)) if (v && live.has(k)) out.add(v);
+  return out;
+};
 // Η θέση κάποιου μια μέρα: ευρετήριο άτομο → θέσεις ανά αντικείμενο μέρας (καλείται για κάθε υποψήφιο σε κάθε θέση)
 const dayIdx = new WeakMap<object, Map<number, string[]>>();
 const keysOn = (g: Record<string, number>, pid: number): string[] | undefined => {
@@ -615,7 +621,7 @@ function twoFits(a: Post, b: Post, gap: number): boolean {
 // στέλεχος με υπηρεσία του προγράμματος στελεχών την ίδια μέρα: ειδοποίηση ⚠ χωρίς αιτία (δεν μπλοκάρει, όπως η 2η υπηρεσία)
 export function rosterSameDay(s: AppState, date: ISODate, pid: number): string | null {
   const cd = pid < 0 ? cadreOf(s, pid) : undefined; if (!cd) return null;
-  const same = (s.cadreDuties || []).filter(x => x.cid === cd.id && x.date === date); if (!same.length) return null;
+  const same = (s.cadreDuties || []).filter(x => x.cid === cd.id && x.date === date && !x.via); if (!same.length) return null;   // via = η ίδια θέση, ήδη στις θέσεις
   const svcs = (s.settings.cadreDuty?.groups || []).flatMap(g => g.services || []);
   return 'Έχει ήδη υπηρεσία ' + same.map(y => svcs.find(v => v.id === y.svc)?.name || y.svc).join(', ') + ' αυτή τη μέρα (πρόγραμμα στελεχών)';
 }
@@ -936,7 +942,7 @@ function fillDay0(s: AppState, date: ISODate, rooms?: readonly number[] | null):
   // τότε η θέση γεμίζει με τη σειρά, όπως όλες, και η προειδοποίηση λέει γιατί.
   const fixedWarn: string[] = []; const pm0 = personMap(s.people);
   for (const x of posts) {
-    const f = (x.k === 'ly' || x.k === 'dy') ? s.settings.fixed?.[x.k] : undefined;
+    const f = s.settings.fixed?.[x.k];
     if (g[x.k] || !f || !all.some(p => p.id === f)) continue;
     const who = 'Μόνιμος ' + x.label + ' ' + shortName(pm0.get(f)!);
     // «Ήδη σε άλλη θέση» κρίνεται χωριστά: άλλος λόγος (μέρα χωρίς υπηρεσία, εξαίρεση, όριο) δεν το κρύβει, ώστε να μη μπει δύο φορές
