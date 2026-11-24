@@ -176,7 +176,7 @@ function RulesDialog({ onClose, onTab, onFixed }: P) {
       caps: act.filter(p => Object.values(state.caps[p.id] || {}).some(v => typeof v === 'string')).length,
       skips: act.reduce((n, p) => n + (p.skips?.filter(k => k.from <= end && k.to >= today).length || 0), 0),
       off: act.filter(p => p.offDays?.length).length, post: act.filter(p => p.post).length,
-      fixed: (['ly', 'dy'] as const).filter(k => fx[k] && pm.get(fx[k]!)).map(k => (k === 'ly' ? 'Λ/Υ ' : 'Δ/Υ ') + shortName(pm.get(fx[k]!)!)),
+      fixed: postsOf(state.settings).filter(x => fx[x.k] && pm.get(fx[x.k]!)).map(x => x.label + ' ' + shortName(pm.get(fx[x.k]!)!)),
       cadre: (state.cadreList || []).filter(c => c.active && c.monthMax).length
     };
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -228,7 +228,7 @@ function RulesDialog({ onClose, onTab, onFixed }: P) {
         ${item('Εξαιρέσεις', html`<span>${info.skips} τις επόμενες 7 μέρες <${TabLink} onGo=${() => onTab('skips')}>Άνοιγμα<//></span>`)}
         ${item('Μέρες χωρίς υπηρεσία', html`<span>${ppl(info.off)} <${GoLink} view="people">Στρατιώτες<//></span>`)}
         ${item('Πόστα', html`<span>${ppl(info.post)}, μόνο με το χέρι (ούτε Λ/Υ-Δ/Υ) <${GoLink} view="people">Στρατιώτες<//></span>`)}
-        ${item('Μόνιμοι Λ/Υ-Δ/Υ', html`<span>${info.fixed.length ? info.fixed.join(', ') + ' · μπαίνουν μόνοι τους' : 'κανένας'} <${TabLink} onGo=${onFixed}>Όρισε<//></span>`)}
+        ${item('Μόνιμα άτομα', html`<span>${info.fixed.length ? info.fixed.join(', ') + ' · μπαίνουν μόνοι τους' : 'κανένας'} <${TabLink} onGo=${onFixed}>Όρισε<//></span>`)}
         ${item('ΕΠΟΠ/ΟΒΑ', html`<span>μόνο με το χέρι, ${info.cadre} με όριο τον μήνα <${GoLink} view="cadre">Στελέχη<//></span>`)}
       </div>
       <span className="note">Πάντα: ένας άνθρωπος σε μία θέση τη μέρα · όχι όποιος έχει άδεια ή λείπει. Οι αναθέσεις που υπάρχουν δεν αλλάζουν· όσες παραβαίνουν τους νέους κανόνες φαίνονται με ⚠.</span>
@@ -343,7 +343,7 @@ export function GuardScreen() {
   const locked = date < today && !unlocked[date];
   const [addOpen, setAddOpen] = useState(false);
   const [clearAsk, setClearAsk] = useState(false);
-  const [fixedOpen, setFixedOpen] = useState(false);
+  const [fixedOpen, setFixedOpen] = useState<string | false>(false);   // id της υπηρεσίας που ορίζεις μόνιμο άτομο
   // κάρτες που κλείνουν: πλήρη μπλοκ κλειστά, με κενά ανοιχτά. Ό,τι αλλάξεις με το χέρι μένει όσο δουλεύεις.
   const [fold, setFold] = useState<Record<string, boolean>>({});
   const flip = (id: string, open: boolean) => setFold(f => ({ ...f, [id]: !open }));
@@ -449,7 +449,7 @@ export function GuardScreen() {
         const names = ps.map(x => (g[x.k] ? shortName(pm.get(g[x.k])!) : null)).filter(Boolean).join(', ');
         return html`<section key=${b.id} className=${cx('gblock', !open && 'is-closed')}>
           <h2 className="gblock__hd"><button type="button" aria-expanded=${open} onClick=${() => flip(b.id, open)}>${Icon.chev}<span>${b.name}</span><span className="gblock__meta" data-tip=${b.armed ? 'Ένοπλη: δεν μπαίνουν ΕΑ, ΕΥ, ΕΟ, ΝΟΣ, ΣΤΕΠ (Κ-01)' : 'Άοπλη: μπαίνουν και όσοι έχουν ΕΑ, ΕΟ'}>· ${b.armed ? 'Ένοπλη' : 'Άοπλη'}</span>${blockShape(b).per > 1 && html`<span className="gblock__meta" data-tip="Κάθε νούμερο έχει περισσότερα από ένα άτομα, με τις ίδιες ώρες">· ${blockShape(b).nums} ${blockShape(b).nums === 1 ? 'νούμερο' : 'νούμερα'} × ${blockShape(b).per}</span>`}<span className=${cx('gblock__meta', emp && 'is-bad')}>· ${emp ? emp + ' ' + (emp === 1 ? 'κενή' : 'κενές') : 'πλήρης'}</span></button>${!open && names && html`<span className="gblock__sum">${names}</span>`}</h2>
-          ${open && html`<ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; const first = ps.find((y: Post) => groupKey(y) === groupKey(x)); return html`<${PostRow} key=${x.k} onOpen=${nav.openPerson} x=${x} same=${first && first !== x ? first.short : ''} pid=${pid} pm=${pm} date=${date} lists=${state.settings.lists} statuses=${live(state)} duty=${d ? (d.byKind[fairKey(state, x)] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, date, pid, x) || ruleBlock(state, date, pid, undefined, x.k) || lastResort(state.statuses, date, pid, x, state.settings.lists) || statusWarn(state, date, pid) || secondDuty(state, date, pid, x.k) : null} why=${pid ? why[x.k] || '' : ''} locked=${locked} onAssign=${assign} onNext=${next} onBlocked=${blocked} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)} hint=${epopHint} pickFrom=${pickPeople(state)}/>`; })}</ul>${b.id === 'ly' && html`<${FixedLine} onEdit=${() => setFixedOpen(true)}/>`}`}
+          ${open && html`<ul className="posts">${ps.map((x: Post) => { const pid = g[x.k]; const d = pid ? st.get(pid) || emptyStat() : null; const first = ps.find((y: Post) => groupKey(y) === groupKey(x)); return html`<${PostRow} key=${x.k} onOpen=${nav.openPerson} x=${x} same=${first && first !== x ? first.short : ''} pid=${pid} pm=${pm} date=${date} lists=${state.settings.lists} statuses=${live(state)} duty=${d ? (d.byKind[fairKey(state, x)] || 0) + ' / ' + d.total : ''} ruleWarn=${pid ? capBlock(state, date, pid, x) || ruleBlock(state, date, pid, undefined, x.k) || lastResort(state.statuses, date, pid, x, state.settings.lists) || statusWarn(state, date, pid) || secondDuty(state, date, pid, x.k) : null} why=${pid ? why[x.k] || '' : ''} locked=${locked} onAssign=${assign} onNext=${next} onBlocked=${blocked} unavailable=${(p: Person) => guardUnavailable(state, date, p.id, x.k)} hint=${epopHint} pickFrom=${pickPeople(state)}/>`; })}</ul>${b.who !== 'cadre' && html`<${FixedLine} posts=${ps} ly=${b.id === 'ly'} onEdit=${() => setFixedOpen(b.id)}/>`}`}
         </section>`; })}
     </div>
     ${!locked && Object.values(g).some(Boolean) && html`<div className="gb-clear"><${Button} size="sm" variant="ghost" onClick=${() => setClearAsk(true)} data-tip="Βγάζει όλους από τις θέσεις αυτής της μέρας (ρωτά πρώτα)">Άδειασε τη μέρα…<//></div>`}
@@ -506,9 +506,9 @@ export function GuardScreen() {
     ${cur === 'skips' ? html`<${SkipsView} onPerson=${setProf}/>` : cur === 'who' ? whoTab : mobile ? (cur === 'posts' ? left : cur === 'check' ? check : xl) : (cur === 'posts' ? html`<div className="guard">${left}${side}</div>` : check)}
     ${preview && html`<${Dialog} size="xl" title=${'Προεπισκόπηση · ' + fileName} description="Είναι το ίδιο αρχείο που βγαίνει στο Excel." onClose=${() => setPreview(false)}
       footer=${html`<${Button} variant="outline" onClick=${() => setPreview(false)}>Κλείσε<//><${PrintButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών" variant="outline" take=${hpF.take}/>${hpF.nodeAt('pv')}<${Button} disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>`}>${sheet()}<//>`}
-    ${rules && html`<${RulesDialog} onClose=${() => setRules(false)} onTab=${setTab} onFixed=${() => { setTab('posts'); setFixedOpen(true); }}/>`}
+    ${rules && html`<${RulesDialog} onClose=${() => setRules(false)} onTab=${setTab} onFixed=${() => { setTab('posts'); setFixedOpen('ly'); }}/>`}
     ${roomsOpen && html`<${RoomsDialog} value=${onlyRooms} onSave=${setOnlyRooms} onClose=${() => setRoomsOpen(false)}/>`}
-    ${fixedOpen && html`<${FixedDialog} onClose=${() => setFixedOpen(false)}/>`}${addOpen && html`<${AddBlockDialog} onClose=${() => setAddOpen(false)}/>`}
+    ${fixedOpen && html`<${FixedDialog} block=${fixedOpen} onClose=${() => setFixedOpen(false)}/>`}${addOpen && html`<${AddBlockDialog} onClose=${() => setAddOpen(false)}/>`}
     ${force && html`<${Dialog} title=${force.swapWith ? 'Ανταλλαγή παρά τον κανόνα;' : force.move ? rkShort(force.p) + ' είναι ήδη σε άλλη θέση' : 'Βάλε τον ' + rkShort(force.p) + ' παρά τον κανόνα;'} description=${force.why} onClose=${() => setForce(null)}
       footer=${html`<${Button} variant="outline" onClick=${() => setForce(null)}>Άκυρο<//>${force.move
         ? html`<${Button} variant="outline" disabled=${!force.reason.trim()} why="Γράψε πρώτα την αιτία" onClick=${async () => { const f = force; setForce(null); await assign(f.k, f.p.id, g[f.k], f.reason.trim()); }} data-tip="Μένει και στην άλλη θέση">Και στις δύο<//><${Button} onClick=${async () => { const f = force; setForce(null); await assign(f.k, f.p.id, g[f.k], f.reason.trim() || undefined, f.move); }}>Μετακίνησέ τον εδώ<//>`
@@ -521,25 +521,30 @@ export function GuardScreen() {
 
 // Νέα υπηρεσία (γραφέας, 10/10): σκοπιά, πύλη, ΤΑΕ ή ό,τι άλλο. Μπαίνει στο έντυπο που ισχύει, σε δική της γραμμή.
 // Μόνιμος Λ/Υ και Δ/Υ (λοχίας, 10/10): μπαίνουν μόνοι τους κάθε μέρα, εκτός σειράς· η αλλαγή για μία μέρα γίνεται με «Αλλαγή»
-function FixedLine({ onEdit }: P) {
+function FixedLine({ onEdit, posts, ly }: { onEdit: () => void; posts: Post[]; ly?: boolean }) {
   const { state } = useStore(); const pm = personMap(state.people); const f = state.settings.fixed || {};
   const nm = (id?: number) => (id && pm.get(id) ? shortName(pm.get(id)!) : '—');
-  return html`<div className="fixedline"><span>Μόνιμοι: Λ/Υ <b>${nm(f.ly)}</b> · Δ/Υ <b>${nm(f.dy)}</b></span><${Button} size="sm" variant="ghost" onClick=${onEdit} data-tip="Μπαίνουν μόνοι τους κάθε μέρα, εκτός σειράς δικαιοσύνης. Για μία μέρα άλλαξέ τους με «Αλλαγή» στη θέση· ο αντικαταστάτης μετρά υπηρεσία κανονικά.">${f.ly || f.dy ? 'Άλλαξε' : 'Όρισε μόνιμους'}<//></div>`;
+  const set = posts.filter(x => f[x.k] && pm.get(f[x.k]!));
+  const txt = ly ? posts.map(x => x.short + ' ' + nm(f[x.k])) : set.map(x => x.short + ' ' + nm(f[x.k]));
+  return html`<div className="fixedline"><span>${txt.length ? html`Μόνιμοι: ${txt.map((x, i) => html`${i ? ' · ' : ''}<b key=${i}>${x}</b>`)}` : 'Μόνιμο άτομο: κανένα'}</span><${Button} size="sm" variant="ghost" onClick=${onEdit} data-tip="Μπαίνει μόνο του κάθε μέρα στη θέση, εκτός σειράς δικαιοσύνης. Για μία μέρα άλλαξέ τον με «Αλλαγή» στη θέση· ο αντικαταστάτης μετρά υπηρεσία κανονικά.">${set.length ? 'Άλλαξε' : 'Όρισε μόνιμο'}<//></div>`;
 }
-export function FixedDialog({ onClose }: P) {
+export function FixedDialog({ onClose, block }: { onClose: () => void; block: string }) {
   const { state, run } = useStore(); const toast = useToast(); const pm = personMap(state.people);
-  const [f, setF] = useState<{ ly?: number; dy?: number }>({ ...(state.settings.fixed || {}) });
-  const row = (k: 'ly' | 'dy', label: string) => html`<div className="field"><label className="field__label" htmlFor=${'fx-' + k}>${label}</label>
-    ${f[k] && pm.get(f[k]!) ? html`<div className="fixedline"><b><${RkName} p=${pm.get(f[k]!)!}/></b><${Button} size="sm" variant="ghost" onClick=${() => setF({ ...f, [k]: undefined })}>Κανένας<//></div>` :
-      html`<${PersonPicker} id=${'fx-' + k} value=${null} onChange=${(id: number) => setF({ ...f, [k]: id })} unavailable=${(p: Person) => (!p.active ? 'Εκτός δύναμης' : p.id === f[k === 'ly' ? 'dy' : 'ly'] ? 'Ήδη μόνιμος' : null)}/>`}</div>`;
+  const b = blocksOf(state.settings).find(x => x.id === block); const ps = postsOf(state.settings).filter(x => x.block === block);
+  const [f, setF] = useState<Record<string, number | undefined>>({ ...(state.settings.fixed || {}) });
+  const taken = (k: string, id: number) => Object.entries(f).some(([q, v]) => q !== k && v === id);
+  const row = (x: Post) => html`<div className="field" key=${x.k}><label className="field__label" htmlFor=${'fx-' + x.k}>${x.label}</label>
+    ${f[x.k] && pm.get(f[x.k]!) ? html`<div className="fixedline"><b><${RkName} p=${pm.get(f[x.k]!)!}/></b><${Button} size="sm" variant="ghost" onClick=${() => setF({ ...f, [x.k]: undefined })}>Κανένας<//></div>` :
+      html`<${PersonPicker} id=${'fx-' + x.k} value=${null} onChange=${(id: number) => setF({ ...f, [x.k]: id })} unavailable=${(p: Person) => (!p.active ? 'Εκτός δύναμης' : taken(x.k, p.id) ? 'Ήδη μόνιμος αλλού' : null)}/>`}</div>`;
   const save = async () => {
-    const fixed: { ly?: number; dy?: number } = {}; if (f.ly) fixed.ly = f.ly; if (f.dy) fixed.dy = f.dy;
-    const txt = 'μόνιμος Λ/Υ ' + (fixed.ly ? shortName(pm.get(fixed.ly)!) : 'κανένας') + ', Δ/Υ ' + (fixed.dy ? shortName(pm.get(fixed.dy)!) : 'κανένας');
-    if (await run({ t: 'setSettings', settings: { fixed }, text: txt }, false)) { onClose(); toast({ text: 'Αποθηκεύτηκε: ' + txt + '. Μπαίνουν μόνοι τους με την αυτόματη συμπλήρωση.' }); }
+    const fixed: Record<string, number> = {}; for (const [k, v] of Object.entries(f)) if (v) fixed[k] = v;
+    const name = (k: string) => postsOf(state.settings).find(x => x.k === k)?.label || k;
+    const txt = 'μόνιμα άτομα: ' + (Object.keys(fixed).length ? Object.entries(fixed).map(([k, v]) => name(k) + ' ' + (pm.get(v) ? shortName(pm.get(v)!) : '')).join(', ') : 'κανένα');
+    if (await run({ t: 'setSettings', settings: { fixed }, text: txt }, false)) { onClose(); toast({ text: 'Αποθηκεύτηκε: ' + txt + '. Μπαίνουν μόνα τους με την αυτόματη συμπλήρωση.' }); }
   };
-  return html`<${Dialog} title="Μόνιμοι Λ/Υ και Δ/Υ" description="Μπαίνουν μόνοι τους κάθε μέρα και δεν μπαίνουν στη σειρά για άλλες υπηρεσίες. Αν λείπει κάποιος, η θέση γεμίζει με τη σειρά. Για μία μέρα, άλλαξέ τον με «Αλλαγή» στη θέση." onClose=${onClose}
+  return html`<${Dialog} title=${'Μόνιμο άτομο: ' + (b?.name || '')} description="Μπαίνει μόνο του κάθε μέρα στη θέση και δεν μπαίνει στη σειρά για άλλες υπηρεσίες. Αν λείπει, η θέση γεμίζει με τη σειρά. Για μία μέρα, άλλαξέ τον με «Αλλαγή» στη θέση." onClose=${onClose}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Άκυρο<//><${Button} onClick=${save}>Αποθήκευση<//>`}>
-    ${row('ly', 'Λ/Υ')}${row('dy', 'Δ/Υ')}
+    ${ps.map(row)}
   <//>`;
 }
 // Έντυπο υπηρεσιών (Michael, 22/10): λίστα με ΣΒΕΝ, ΣΠΕΝ και τα δικά σου, και στο τέλος «Νέο έντυπο υπηρεσιών…»

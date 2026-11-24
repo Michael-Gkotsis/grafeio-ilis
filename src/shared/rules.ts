@@ -568,9 +568,15 @@ export function statusWarn(s: AppState, date: ISODate, pid: number): string | nu
   const st = statusesOn(live(s), pid, date).find(x => medWarns(x, s.settings.lists));
   return st ? statusLbl(st, s.settings.lists) + untilTxt(st, date) + ': έλεγξε αν μπορεί να κάνει υπηρεσία' : null;
 }
-// Μόνιμος Λ/Υ ή Δ/Υ: μπαίνει μόνος του κάθε μέρα, χωρίς κανόνες ανάπαυσης και σειρά δικαιοσύνης
-export const isFixed = (s: AppState, pid: number, k?: string | null) => !!k && (k === 'ly' || k === 'dy') && s.settings.fixed?.[k] === pid;
-export const fixedIds = (s: AppState) => new Set(Object.values(s.settings.fixed || {}).filter((x): x is number => !!x));
+// Μόνιμο άτομο μιας θέσης (Λ/Υ, Δ/Υ και, από 24/11, κάθε θέση κάθε υπηρεσίας): μπαίνει μόνο του κάθε μέρα, χωρίς κανόνες ανάπαυσης και σειρά δικαιοσύνης.
+// Μετρούν μόνο όσες θέσεις υπάρχουν στο έντυπο που ισχύει (μια ξεχασμένη εγγραφή άλλου εντύπου ή σβησμένης θέσης δεν βγάζει κανέναν από τη σειρά)
+export const isFixed = (s: AppState, pid: number, k?: string | null) => !!k && s.settings.fixed?.[k] === pid;
+export const fixedIds = (s: AppState) => {
+  const f = s.settings.fixed; const out = new Set<number>(); if (!f) return out;
+  const live = new Set(postsOf(s.settings).map(x => x.k));
+  for (const [k, v] of Object.entries(f)) if (v && live.has(k)) out.add(v);
+  return out;
+};
 // Η θέση κάποιου μια μέρα: ευρετήριο άτομο → θέσεις ανά αντικείμενο μέρας (καλείται για κάθε υποψήφιο σε κάθε θέση)
 const dayIdx = new WeakMap<object, Map<number, string[]>>();
 const keysOn = (g: Record<string, number>, pid: number): string[] | undefined => {
@@ -936,7 +942,7 @@ function fillDay0(s: AppState, date: ISODate, rooms?: readonly number[] | null):
   // τότε η θέση γεμίζει με τη σειρά, όπως όλες, και η προειδοποίηση λέει γιατί.
   const fixedWarn: string[] = []; const pm0 = personMap(s.people);
   for (const x of posts) {
-    const f = (x.k === 'ly' || x.k === 'dy') ? s.settings.fixed?.[x.k] : undefined;
+    const f = s.settings.fixed?.[x.k];
     if (g[x.k] || !f || !all.some(p => p.id === f)) continue;
     const who = 'Μόνιμος ' + x.label + ' ' + shortName(pm0.get(f)!);
     // «Ήδη σε άλλη θέση» κρίνεται χωριστά: άλλος λόγος (μέρα χωρίς υπηρεσία, εξαίρεση, όριο) δεν το κρύβει, ώστε να μη μπει δύο φορές
