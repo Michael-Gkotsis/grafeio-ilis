@@ -298,7 +298,9 @@ export interface PostDef { k: string; label: string; short: string; rot?: number
 // «post» = ένα όπλο της θέσης, που περνά από χέρι σε χέρι στις αλλαγές (armed.ts)
 // hkCol (Michael, 17/11): η στήλη της ΗΚΑΙ όπου μετρούν όσοι είναι στην υπηρεσία (κλειδί από HK_K ή HK_A, ranks.ts svcColOf). Λείπει = όπως πάντα
 // (μαγειρεία 'mag', οι άλλες 'yp'). Στήλη απόντων = η υπηρεσία είναι εκτός στρατοπέδου: απόντες στην ΗΚΑΙ, στη Δύναμη και στο Σήμερα, και το όπλο ΑΠΩΝ
-export interface BlockDef { id: string; kind: DutyKind; name: string; armed: boolean; posts: PostDef[]; custom?: boolean; hidden?: boolean; shift?: ShiftDef | null; armWeapon?: 'own' | 'post'; hkCol?: string }
+export interface BlockDef { id: string; kind: DutyKind; name: string; armed: boolean; posts: PostDef[]; custom?: boolean; hidden?: boolean; shift?: ShiftDef | null; armWeapon?: 'own' | 'post'; hkCol?: string; who?: 'cadre'; cadreGroup?: string; cadreAs?: string }
+// who (Michael, 24/11): «Μόνο στελέχη» = η υπηρεσία γεμίζει μόνο με στελέχη της ομάδας cadreGroup (id από τις ομάδες του προγράμματος στελεχών, shared/cadreDuty.ts)·
+// cadreAs = η υπηρεσία του προγράμματος στελεχών που μετρά ως (π.χ. 24ωρη με ανάπαυση), από προεπιλογή η πρώτη της ομάδας. Λείπει = στρατιώτες, όπως πάντα
 // Έντυπο υπηρεσιών: ΣΒΕΝ, ΣΠΕΝ ή δικό σου (Michael, 22/10: «dropdown και λίστα»). Το δικό σου έχει δικές του
 // υπηρεσίες και βγαίνει στο Excel με το έντυπο της ΣΒΕΝ ή της ΣΠΕΝ (base), με το όνομά του.
 export type BasePhase = 'sven' | 'spen';

@@ -54,7 +54,7 @@ export type Command =
   // Υπηρεσίες στελεχών (shared/cadreDuty.ts): μία υπηρεσία του προγράμματος (id: αλλαγή), πολλές μαζί (προσθήκες και διαγραφές, για την αυτόματη συμπλήρωση), στοιχεία ανά στέλεχος (null: καθαρισμός)
   | { t: 'saveCadreDuty'; duty: Omit<CadreDuty, 'id'> & { id?: string } }
   | { t: 'deleteCadreDuty'; id: string }
-  | { t: 'setCadreDuties'; add: Omit<CadreDuty, 'id'>[]; del: string[]; text: string }
+  | { t: 'setCadreDuties'; add: Omit<CadreDuty, 'id'>[]; del: string[]; text: string; seats?: { date: ISODate; k: string; cid: string }[] }
   | { t: 'setCadreDutyOf'; cid: string; person: CadreDutyPerson | null }
   // Μητρώο οπλισμού και υλικού (shared/assets.ts): id = αληθινή εγγραφή, ή base = η εικονική γραμμή (από το Δυναμολόγιο) που γίνεται εγγραφή με την πρώτη αλλαγή
   | { t: 'saveAsset'; asset: Omit<Asset, 'id'> & { id?: string }; date: ISODate }
@@ -127,9 +127,9 @@ export type Command =
   | { t: 'addPhase'; name: string; from: Phase }
   | { t: 'renamePhase'; id: Phase; name: string }
   | { t: 'delPhase'; id: Phase }
-  | { t: 'addBlock'; phase: Phase; name: string; kind?: DutyKind; armed: boolean; n: number; per?: number; hrs: string; off?: boolean; shift?: ShiftDef | null; armWeapon?: 'own' | 'post'; hkCol?: string }
+  | { t: 'addBlock'; phase: Phase; name: string; kind?: DutyKind; armed: boolean; n: number; per?: number; hrs: string; off?: boolean; shift?: ShiftDef | null; armWeapon?: 'own' | 'post'; hkCol?: string; who?: 'cadre' | 'soldiers'; cadreGroup?: string; cadreAs?: string }
   // nums/per (Michael, 4/11): νούμερα και άτομα ανά νούμερο· το παλιό n = nums. armed/hidden/armWeapon αλλάζουν και από εδώ (όχι στον Λ/Υ-Δ/Υ)
-  | { t: 'editBlock'; phase: Phase; id: string; name: string; n?: number; nums?: number; per?: number; hrs: Record<string, string>; hrsNum?: string[]; move?: number; codes?: Record<string, string>; shift?: ShiftDef | null; armed?: boolean; hidden?: boolean; hkCol?: string; armWeapon?: 'own' | 'post' }
+  | { t: 'editBlock'; phase: Phase; id: string; name: string; n?: number; nums?: number; per?: number; hrs: Record<string, string>; hrsNum?: string[]; move?: number; codes?: Record<string, string>; shift?: ShiftDef | null; armed?: boolean; hidden?: boolean; hkCol?: string; armWeapon?: 'own' | 'post'; who?: 'cadre' | 'soldiers'; cadreGroup?: string; cadreAs?: string }
   | { t: 'setBlock'; phase: Phase; id: string; patch: Partial<Pick<BlockDef, 'armed' | 'hidden' | 'armWeapon'>> }
   | { t: 'autofillRange'; dates: ISODate[]; rooms?: number[] }
   | { t: 'swapPosts'; date: ISODate; a: string; b: string; force?: string }
@@ -252,6 +252,13 @@ function noteCmd(s: AppState, c: Extract<Command, { t: 'addNote' | 'editNote' | 
   return put(n, 'Άλλαξε σημείωση' + label(n) + (n.rem !== old.rem ? (n.rem ? ' · υπενθύμιση ' + dm(n.rem) : ' · χωρίς υπενθύμιση') : ''));
 }
 // Όλα τα κλειδιά θέσεων όλων των εντύπων (νέα κλειδιά μοναδικά, Michael 4/11)
+// «Ποιοι την κάνουν» (Michael, 24/11): μόνο στελέχη → ομάδα που υπάρχει στο πρόγραμμα στελεχών και (προαιρετικά) υπηρεσία της ομάδας που μετρά ως
+const cadreOnlyFor = (s: AppState, who: 'cadre' | 'soldiers' | undefined, group?: string, as?: string): Pick<BlockDef, 'who' | 'cadreGroup' | 'cadreAs'> | null => {
+  if (who !== 'cadre') return null;
+  const g = dutyCfgOf(s.settings).groups.find(x => x.id === group);
+  if (!g) throw new Error('Διάλεξε ομάδα στελεχών για την υπηρεσία «Μόνο στελέχη» (Ρυθμίσεις › Υπηρεσίες στελεχών)');
+  return { who: 'cadre', cadreGroup: g.id, ...(as && g.services.some(v => v.id === as) ? { cadreAs: as } : {}) };
+};
 // Στήλη ΗΚΑΙ υπηρεσίας (BlockDef.hkCol): άκυρη ή ίδια με την προεπιλογή του είδους = δεν γράφεται (undefined)
 const hkColFor = (kind: string, v: unknown, lists?: UserLists): string | undefined => { const c = svcColOk(v, lists); return c && c !== svcDefault(kind) ? c : undefined; };
 const usedKeys = (st: Settings) => new Set(everyBlock(st).flatMap(b => b.posts.map(p => p.k)));
@@ -827,9 +834,16 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
         const duty: CadreDuty = { id: 'd' + ctx.newId(), date: d.date, svc: d.svc, cid: d.cid, ...(d.auto ? { auto: true } : {}), ...(why ? { why } : {}) };
         if (dup >= 0 && dup < list.length) list[dup] = { ...duty, id: list[dup].id }; else if (dup < 0) adds.push(duty);
       }
-      if (!dels.size && !adds.length) throw new Error('Δεν υπάρχει αλλαγή');
+      // θέσεις μόνο για στελέχη (Michael, 24/11): γράφονται στις Υπηρεσίες όπως όταν διαλέγεις στέλεχος με το χέρι, μόνο σε κενές θέσεις
+      let guards = s.guards; let cadreList = s.cadreList; const sd = new Set<string>();
+      for (const x of c.seats || []) {
+        const cd = cadreList.find(y => y.id === x.cid); if (!cd || !postBy(s, x.k) || !/^\d{4}-\d{2}-\d{2}$/.test(x.date) || guards[x.date]?.[x.k]) continue;
+        let pid = cd.pid; if (pid == null) { pid = nextCadrePid(cadreList); cadreList = cadreList.map(y => (y === cd ? { ...cd, pid } : y)); }
+        guards = { ...guards, [x.date]: { ...(guards[x.date] || {}), [x.k]: pid } }; sd.add(x.date);
+      }
+      if (!dels.size && !adds.length && !sd.size) throw new Error('Δεν υπάρχει αλλαγή');
       const hk = [...c.add.map(d => d.svc), ...(s.cadreDuties || []).filter(y => dels.has(y.id)).map(y => y.svc)].some(id => serviceOf(cfg, id)?.svc.hkCol);
-      return { state: { ...s, cadreDuties: [...list, ...adds] }, text: 'Υπηρεσίες στελεχών: ' + c.text, files: hk ? [HK()] : [] };
+      return { state: { ...s, cadreDuties: [...list, ...adds], ...(sd.size ? { guards, cadreList } : {}) }, text: 'Υπηρεσίες στελεχών: ' + c.text, files: [...(hk || sd.size ? [HK()] : []), ...[...sd].sort().map(d => 'Υπηρεσίες ' + dm(d))] };
     }
     case 'setCadreDutyOf': {
       const x = s.cadreList.find(y => y.id === c.cid); if (!x) throw new Error('Δεν βρέθηκε το στέλεχος');
@@ -1012,12 +1026,12 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       // ΠΣΚ: μία μέρα μετά την άλλη, ώστε οι κανόνες (ανάπαυση, νούμερα, ΣΚ) να ισχύουν και ανάμεσά τους
       let st = s; const parts: string[] = []; let empty = 0; const warn: string[] = [];
       const rm = roomsOnly(c.rooms);
-      for (const d of c.dates) { const r = fillDay(st, d, rm); st = { ...st, guards: r.guards }; parts.push(dayName(d, ctx.today).toLowerCase() + ' ' + r.n); empty += r.empty.length; warn.push(...r.warn); }
+      for (const d of c.dates) { const r = fillDay(st, d, rm); st = { ...st, guards: r.guards, ...(r.cadreList ? { cadreList: r.cadreList } : {}) }; parts.push(dayName(d, ctx.today).toLowerCase() + ' ' + r.n); empty += r.empty.length; warn.push(...r.warn); }
       return { state: st, text: 'Υπηρεσίες ΠΣΚ ' + range(c.dates[0], c.dates[c.dates.length - 1]) + ': αυτόματη συμπλήρωση' + roomsTxt(rm) + ' (' + parts.join(', ') + ')' + (empty ? ', ' + empty + ' έμειναν κενές (κανείς δεν επιτρέπεται)' : '') + (warn.length ? '. Χωρίς άλλη επιλογή: ' + warn.join('· ') : ''), files: c.dates.map(d => 'Υπηρεσίες ' + dm(d)).concat('Έλεγχος υπηρεσιών') };
     }
     case 'autofill': {
       const rm = roomsOnly(c.rooms); const r = fillDay(s, c.date, rm);
-      return { state: { ...s, guards: r.guards }, text: 'Υπηρεσίες ' + dm(c.date) + ': αυτόματη συμπλήρωση ' + r.n + ' θέσεων' + roomsTxt(rm) + (r.empty.length ? ', ' + r.empty.length + ' έμειναν κενές (κανείς δεν επιτρέπεται)' : '') + (r.warn.length ? '. Χωρίς άλλη επιλογή: ' + r.warn.join('· ') : ''), files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
+      return { state: { ...s, guards: r.guards, ...(r.cadreList ? { cadreList: r.cadreList } : {}) }, text: 'Υπηρεσίες ' + dm(c.date) + ': αυτόματη συμπλήρωση ' + r.n + ' θέσεων' + roomsTxt(rm) + (r.empty.length ? ', ' + r.empty.length + ' έμειναν κενές (κανείς δεν επιτρέπεται)' : '') + (r.warn.length ? '. Χωρίς άλλη επιλογή: ' + r.warn.join('· ') : ''), files: ['Υπηρεσίες ' + dm(c.date), 'Έλεγχος υπηρεσιών'] };
     }
     case 'clearDay': {
       const guards = { ...s.guards }; delete guards[c.date];
@@ -1499,7 +1513,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       // κάθε δική σου υπηρεσία μετρά ως δική της (Michael, 22/10): είδος «άλλη», με δική της στήλη στον έλεγχο και στη σειρά
       // νούμερα × άτομα (Michael, 4/11): ίδιο σχήμα με την επεξεργασία (reshapeBlock)
       const seed: BlockDef = { id, kind: c.kind || 'other', name, armed: c.armed, custom: true, ...(c.armed && c.armWeapon === 'post' ? { armWeapon: 'post' as const } : {}), ...(hkColFor(c.kind || 'other', c.hkCol, s.settings.lists) ? { hkCol: hkColFor(c.kind || 'other', c.hkCol, s.settings.lists) } : {}), posts: [{ k: id + '_1', label: name, short: name, hrs: c.hrs.trim() || 'ημέρα' }] };
-      const b: BlockDef = { ...seed, ...(c.off ? { hidden: true } : {}), ...(sh ? { shift: sh } : {}), posts: reshapeBlock(seed, n, per, name, usedKeys(s.settings)) };
+      const b: BlockDef = { ...seed, ...(c.off ? { hidden: true } : {}), ...(sh ? { shift: sh } : {}), ...(cadreOnlyFor(s, c.who, c.cadreGroup, c.cadreAs) || {}), posts: reshapeBlock(seed, n, per, name, usedKeys(s.settings)) };
       return { state: { ...s, settings: fillCodes(withBlocks(s.settings, c.phase, [...blocksOf(s.settings, c.phase), b]), c.phase, id) }, text: 'Νέα υπηρεσία στη ΦΡΟΥΡΑ ' + phaseName(s.settings, c.phase) + ': ' + name + ' (' + shapeTxt(n, per) + (c.armed ? ', ένοπλη' : '') + (c.off ? ', ανενεργή' : '') + ')', files: [] };
     }
     case 'editBlock': {
@@ -1527,6 +1541,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
         if (c.armWeapon != null) { if (c.armWeapon === 'post') nb.armWeapon = 'post'; else delete nb.armWeapon; }
         if (c.hidden != null) { if (c.hidden) nb.hidden = true; else delete nb.hidden; }
         if (c.hkCol !== undefined) { const hk = hkColFor(nb.kind, c.hkCol, s.settings.lists); if (hk) nb.hkCol = hk; else delete nb.hkCol; }
+        if (c.who !== undefined) { const co = cadreOnlyFor(s, c.who, c.cadreGroup, c.cadreAs); delete nb.who; delete nb.cadreGroup; delete nb.cadreAs; if (co) Object.assign(nb, co); }
       }
       // βάρδιες (Michael, 20/10): null = όπως πριν (οι βάρδιες 2 ωρών του εντύπου, ή οι ώρες κάθε θέσης)
       // δικές μου βάρδιες (Michael, 24/10): το νούμερο κάθε βάρδιας μέσα στα νούμερα της υπηρεσίας
