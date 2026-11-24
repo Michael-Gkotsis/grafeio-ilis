@@ -7,7 +7,7 @@ import { MONTHS, addDays, dm, dmy, weekday, type ISODate } from './dates';
 import { KIND_NAME, type AppState, type Cadre, type CadreDuty, type CadreDutyCfg, type CadreDutyGroup, type CadreDutyPerson, type CadreService, type Settings } from './domain';
 import { hkRowsOf, rankTxt } from './ranks';
 import { cadreStatusOn, orderedCadre } from './cadre';
-import { cadreOnlyOf, dutyStats, isHol, postBy, setCadreFiller, type CadreOnly, type CadreSeatFill, type DutyStat } from './rules';
+import { cadreOf, cadreOnlyOf, dutyStats, nextCadrePid, isHol, postBy, setCadreFiller, type CadreOnly, type CadreSeatFill, type DutyStat } from './rules';
 import { daysOfMonth, monthIndex, monthOf, planDays, shiftMonth, type MonthIndex, type PlanCell, type PlanDay } from './cadrePlan';
 import { upper } from './text';
 
@@ -72,15 +72,68 @@ export function dutyIndex(s: AppState): Map<string, Map<ISODate, DayDuty>> {
   if (hit && hit.duties === s.cadreDuties && hit.cl === s.cadreList && hit.set === s.settings) return hit.idx;
   const idx = new Map<string, Map<ISODate, DayDuty>>();
   const day = (cid: string, d: ISODate) => { let m = idx.get(cid); if (!m) { m = new Map(); idx.set(cid, m); } let x = m.get(d); if (!x) { x = { roster: [], seat: [] }; m.set(d, x); } return x; };
-  const co = cadreOnlyOf(s.settings); const cfg = co.size ? dutyCfgOf(s.settings) : null;
-  const svcOf = (k: string): CadreService | undefined => { const o = k && co.get(k); if (!o || !cfg) return undefined; const g = cfg.groups.find(x => x.id === o.group); return g?.services.find(x => x.id === o.as) || g?.services[0]; };
+  const svcOf = (k: string) => linkedSvc(s.settings, k);
+  for (const x of s.cadreDuties || NO_DUTIES) day(x.cid, x.date).roster.push(x);
   for (const c of s.cadreList || []) {
     if (c.pid == null) continue;
-    for (const e of st.get(c.pid)?.log || []) { const v = svcOf(e.k); day(c.id, e.d).seat.push({ k: e.k, label: (e.k && postBy(s, e.k)?.label) || (KIND_NAME as Record<string, string>)[e.kind] || e.kind, ...(v ? { svc: v } : {}) }); }
+    for (const e of st.get(c.pid)?.log || []) { const v = svcOf(e.k); if (v && day(c.id, e.d).roster.some(r => r.via === e.k)) continue; day(c.id, e.d).seat.push({ k: e.k, label: (e.k && postBy(s, e.k)?.label) || (KIND_NAME as Record<string, string>)[e.kind] || e.kind, ...(v ? { svc: v } : {}) }); }
   }
-  for (const x of s.cadreDuties || NO_DUTIES) day(x.cid, x.date).roster.push(x);
   idxCache.set(st, { duties: s.cadreDuties, cl: s.cadreList, set: s.settings, idx });
   return idx;
+}
+// ---- «Μόνο στελέχη» ↔ υπηρεσία στελεχών (Michael, 24/11): αμφίδρομη σχέση ----
+// Η θέση «μόνο για στελέχη» μετρά ως μία υπηρεσία του προγράμματος στελεχών (BlockDef.cadreAs, αλλιώς η πρώτη της ομάδας). Όταν βάλεις στέλεχος στη θέση,
+// μπαίνει και στο πρόγραμμα στελεχών ως αυτή η υπηρεσία· όταν βάλεις την υπηρεσία στο πρόγραμμα, γεμίζει η κενή θέση· και τα δύο σβήνουν μαζί.
+// Στο πρόγραμμα (cadreDuties) η εγγραφή έχει via = κλειδί της θέσης· οι υπόλοιποι υπολογισμοί (ΗΔ, ΗΚΑΙ, απαλλαγές) διαβάζουν μόνο το πρόγραμμα.
+export function linkedSvc(st: Settings, k: string): CadreService | undefined {
+  const o = k ? cadreOnlyOf(st).get(k) : undefined; if (!o) return undefined;
+  const g = dutyCfgOf(st).groups.find(x => x.id === o.group); return g?.services.find(x => x.id === o.as) || g?.services[0];
+}
+const ISO = /^\d{4}-\d{2}-\d{2}$/;
+export function syncLinked(prev: AppState, next: AppState, newId: () => string): AppState {
+  const co = cadreOnlyOf(next.settings); const was0 = prev.cadreDuties || NO_DUTIES; const list0 = next.cadreDuties || NO_DUTIES;
+  if (!co.size && !list0.some(x => x.via)) return next;
+  if (prev.guards === next.guards && was0 === list0 && prev.settings === next.settings) return next;
+  let guards = next.guards, cadreList = next.cadreList; let list = list0;
+  const was = new Set(was0); const have = new Set(list0.map(x => x.id));
+  const cadreAt = (g: typeof guards, d: ISODate, k: string) => { const pid = g[d]?.[k]; return pid != null && pid < 0 ? cadreOf({ cadreList }, pid) : undefined; };
+  const setList = (f: (x: CadreDuty) => CadreDuty | null) => { const a: CadreDuty[] = []; let ch = false; for (const x of list) { const y = f(x); if (y !== x) ch = true; if (y) a.push(y); } if (ch) list = a; };
+  const full = prev.settings !== next.settings;
+  // 1) εγγραφή του προγράμματος με via που σβήστηκε → φεύγει και το στέλεχος από τη θέση
+  for (const x of was0) {
+    if (!x.via || have.has(x.id) || cadreAt(guards, x.date, x.via)?.id !== x.cid) continue;
+    const g = { ...(guards[x.date] || {}) }; delete g[x.via]; guards = { ...guards, [x.date]: g };
+  }
+  // 2) θέση που άλλαξε → ίδια αλλαγή στο πρόγραμμα
+  const dates = new Set<ISODate>();
+  for (const d of Object.keys(guards)) if (full || guards[d] !== prev.guards[d]) dates.add(d);
+  for (const d of Object.keys(prev.guards)) if (!guards[d]) dates.add(d);
+  for (const d of dates) for (const k of co.keys()) {
+    const v = linkedSvc(next.settings, k); const c = v ? cadreAt(guards, d, k) : undefined;
+    const pb = prev.guards[d]?.[k]; const before = pb != null && pb < 0 ? cadreOf({ cadreList: prev.cadreList }, pb) : undefined;
+    if (before && (!c || c.id !== before.id)) setList(x => (x.date === d && x.cid === before.id && x.via === k ? null : x));
+    if (!v || !c) continue;
+    const hit = list.find(x => x.date === d && x.cid === c.id && x.svc === v.id);
+    if (!hit) list = [...list, { id: 'd' + newId(), date: d, svc: v.id, cid: c.id, via: k }];
+    else if (hit.via !== k) setList(x => (x === hit ? { ...x, via: k } : x));
+  }
+  // μετά από αλλαγή ρυθμίσεων: εγγραφές που δεν έχουν πια θέση (άλλαξε η υπηρεσία της θέσης, έπαψε να είναι «μόνο στελέχη»)
+  if (full) setList(x => (x.via && (linkedSvc(next.settings, x.via)?.id !== x.svc || cadreAt(guards, x.date, x.via)?.id !== x.cid) ? null : x));
+  // 3) εγγραφή που μπήκε στο πρόγραμμα για υπηρεσία δεμένη με θέση → γεμίζει η θέση (πρώτη κενή, αλλιώς μένει μόνο στο πρόγραμμα)
+  const posts = new Map<string, string[]>(); for (const k of co.keys()) { const v = linkedSvc(next.settings, k); if (v) posts.set(v.id, [...(posts.get(v.id) || []), k]); }
+  for (const x of [...list]) {
+    if (x.via || was.has(x) || !posts.has(x.svc) || !ISO.test(x.date)) continue;
+    const ks = posts.get(x.svc)!; const mine = ks.find(k => cadreAt(guards, x.date, k)?.id === x.cid);
+    const k = mine || ks.find(q => guards[x.date]?.[q] == null); if (!k) continue;
+    if (!mine) {
+      const cd = cadreList.find(y => y.id === x.cid); if (!cd) continue;
+      let pid = cd.pid; if (pid == null) { pid = nextCadrePid(cadreList); cadreList = cadreList.map(y => (y === cd ? { ...cd, pid } : y)); }
+      guards = { ...guards, [x.date]: { ...(guards[x.date] || {}), [k]: pid } };
+    }
+    setList(y => (y === x ? { ...y, via: k } : y));
+  }
+  if (guards === next.guards && cadreList === next.cadreList && list === list0) return next;
+  return { ...next, ...(guards !== next.guards ? { guards } : {}), ...(cadreList !== next.cadreList ? { cadreList } : {}), ...(list !== list0 ? { cadreDuties: list } : {}) };
 }
 export const dayOf = (s: AppState, cid: string, d: ISODate): DayDuty | undefined => dutyIndex(s).get(cid)?.get(d);
 
@@ -333,6 +386,7 @@ export function autoFill(s: AppState, ym: string, opts: { fairHol?: boolean; onl
   const add: AutoFillResult['add'] = [], empty: AutoFillResult['empty'] = [], extra: AutoFillResult['extra'] = [];
   const seats: SeatFill[] = [], seatEmpty: { date: ISODate; k: string }[] = [], seatExtra: SeatFill[] = [];
   const co = cadreOnlyOf(s.settings); const seatsBy = new Map<string, { k: string; svc: CadreService }[]>();
+  const linkedBy = new Map<string, string[]>(); for (const k of co.keys()) { const sv = linkedSvc(s.settings, k); if (sv) linkedBy.set(sv.id, [...(linkedBy.get(sv.id) || []), k]); }
   for (const [k, v] of co) { const l = seatsBy.get(v.group); const x = { k, svc: seatService(cfg, v) }; if (l) l.push(x); else seatsBy.set(v.group, [x]); }
   const people = orderedCadre(s.cadreList || []).filter(c => c.active);
   const ord = new Map(people.map((c, i) => [c.id, i]));
@@ -405,7 +459,9 @@ export function autoFill(s: AppState, ym: string, opts: { fairHol?: boolean; onl
       const mem = members.get(g.id) || [];
       if (!opts.seatsOnly) for (const v of g.services) {
         if (!runsOn(v, d)) continue;
-        const missing = v.perDay - (by.get(d + '|' + v.id)?.length || 0);
+        // θέση «μόνο στελέχη» δεμένη με αυτή την υπηρεσία = ένα από τα άτομά της (γεμίζει από το πέρασμα των θέσεων παρακάτω)· όσες θέσεις έχουν ήδη εγγραφή (via) μετρούν ήδη
+        const have = by.get(d + '|' + v.id) || []; const lk = (linkedBy.get(v.id) || []).filter(k => !have.some(x => x.via === k)).length;
+        const missing = v.perDay - have.length - lk;
         for (let slot = 0; slot < missing; slot++) {
           const { best, isExtra } = pick(v, mem);
           if (!best) { empty.push({ date: d, svc: v.id }); continue; }

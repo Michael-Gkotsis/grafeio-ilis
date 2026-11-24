@@ -765,7 +765,8 @@ export interface CadreDutyGroup { id: string; name: string; services: CadreServi
 export interface CadreDutyCfg { groups: CadreDutyGroup[]; limits: { off: { base: number; extra: number }; nco: { base: number; extra: number } }; rest: number; carry: boolean; fairHol: boolean }
 // none: ελαφράς, καμία υπηρεσία · only: ελαφράς, μόνο αυτές · no24: όχι 24ωρες (π.χ. μητέρα) · until: ως ποια μέρα (κενό = χωρίς λήξη) · noDow: μέρες εβδομάδας που δεν θέλει (0 = Κυρ)
 export interface CadreDutyPerson { group?: string; limit?: number; none?: { until?: ISODate }; only?: { services: string[]; until?: ISODate }; no24?: { until?: ISODate; why?: string }; noDow?: number[] }
-export interface CadreDuty { id: string; date: ISODate; svc: string; cid: string; auto?: boolean; why?: string }
+// via: η θέση «μόνο για στελέχη» (κλειδί θέσης στις Υπηρεσίες) που είναι δεμένη με αυτή την υπηρεσία: η μία πλευρά γράφει και σβήνει την άλλη (cadreDuty.ts syncLinked)
+export interface CadreDuty { id: string; date: ISODate; svc: string; cid: string; auto?: boolean; why?: string; via?: string }
 // Καταστάσεις στελέχους = οι στήλες της ΗΚΑΙ (Michael, 17/10: «οι καταστάσεις τους να αφορούν τις καταστάσεις της ΗΚΑΙ»):
 // [κωδικός, όνομα, στήλη ΗΚΑΙ]. Πρώτα οι κωλυόμενοι, μετά οι απόντες, όπως στο έντυπο· «Άλλο» μένει μόνο στη λίστα.
 // Οι παλιοί κωδικοί (ka, an, eid, nos, fp, ekp, allh, other) κρατούν το ίδιο όνομα, για όσες έχουν ήδη γραφτεί.
