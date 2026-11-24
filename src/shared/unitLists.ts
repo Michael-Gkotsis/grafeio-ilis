@@ -7,9 +7,10 @@
 import { Grid, key as cellKey, type SheetModel } from './sheetModel';
 import { buildLexicon, type Lexicon } from './lexicon';
 import { normGreek, upper } from './text';
-import { blocksOf, blockGroups, fullName, groupKey, type AppState, type BlockDef, type Person, type Post, type PostDef } from './domain';
-import { seatMap, activePeople } from './rules';
-import { rankTxt } from './ranks';
+import { blocksOf, blockGroups, coversDay, fullName, groupKey, TYPES, type AppState, type BlockDef, type Person, type Post, type PostDef, type Status, type TypeKey } from './domain';
+import { seatMap, activePeople, dutyMin } from './rules';
+import { isAway, rankTxt } from './ranks';
+import { backBy } from './hours';
 import { dmy, type ISODate } from './dates';
 import { Evaluator, UNSUPPORTED, type Val } from './sheetEval';
 import type { ListProfile, TplProfile } from './tplStore';
@@ -151,6 +152,54 @@ export function svcTargets(s: AppState, posts: Post[], phase?: string): SvcTarge
   for (const k of ['ly', 'dy']) { const p = posts.find(x => x.k === k); if (p) out.push({ value: 'post:' + k, label: k === 'ly' ? 'Λ/Υ' : 'Δ/Υ', kind: 'ly', groups: [[p]], posts: [p] }); }
   return out;
 }
+// ---- καταστάσεις: λίστες ΑΤΟΜΩΝ κάτω από τις υπηρεσίες (ΑΠΕΣΠΑΣΜΕΝΟΙ, ΝΟΣΟΚΟΜΕΙΟ, Ε.Υ…), όπως οι ΤΙΜΩΡΗΜΕΝΟΙ / ΑΠΟΝΤΕΣ της δικής μας ΦΡΟΥΡΑΣ.
+// Δεν είναι υπηρεσίες: δεν έχουν θέσεις της εφαρμογής, γεμίζουν με όσους είναι σε αυτή την κατάσταση τη μέρα του εντύπου (τιμές «st:…» στο προφίλ).
+export const ST = 'st:';
+export interface StateTarget { value: string; label: string; types: TypeKey[] | 'abs' }
+export const STATE_TARGETS: StateTarget[] = [
+  { value: 'st:APS', label: 'Αποσπασμένοι', types: ['APS'] },
+  { value: 'st:NOS', label: 'Νοσοκομείο', types: ['NOS'] },
+  { value: 'st:EY', label: 'Ε.Υ (ελεύθεροι υπηρεσίας)', types: ['EY'] },
+  { value: 'st:EA', label: 'Ε.Α (ελεύθεροι ασκήσεων)', types: ['EA'] },
+  { value: 'st:EO', label: 'Ε.Ο (ελεύθεροι ορθοστασίας)', types: ['EO'] },
+  { value: 'st:STEP', label: 'Εισαγωγή ΣΤΕΠ', types: ['STEP'] },
+  { value: 'st:PUN', label: 'Τιμωρημένοι', types: ['PUN'] },
+  { value: 'st:LEAVE', label: 'Σε κανονική άδεια', types: ['LEAVE'] },
+  { value: 'st:SICK', label: 'Σε αναρρωτική άδεια', types: ['SICK'] },
+  { value: 'st:ADIK', label: 'Άγνοια, λιποταξία, αδικαιολόγητη απουσία', types: ['AGN', 'LIP', 'ADK'] },
+  { value: 'st:ABS', label: 'Όλοι οι απόντες (άδειες, αναρρωτικές, νοσοκομείο…)', types: 'abs' }
+];
+// Οι λέξεις του αρχείου (μετά το nk και την αφαίρεση σημείων στίξης): ακριβής λέξη = σίγουρο, λέξη μέσα στη φράση = πρόταση («ΚΙΧΝΕ- ΕΥ» δεν το ξέρω ολόκληρο)
+const STATE_WORDS: [string, RegExp, RegExp][] = [
+  ['st:APS', /^(ΑΠΕΣΠΑΣΜΕΝΟΙ|ΑΠΟΣΠΑΣΜΕΝΟΙ|ΑΠΕΣΠΑΣΜΕΝΟΙ ΣΕ ΑΛΛΗ ΜΟΝΑΔΑ|ΑΠΟΣΠΑΣΗ|ΑΠΟΣΠΑΣΕΙΣ)$/, /ΑΠΕΣΠΑΣΜ|ΑΠΟΣΠΑΣΜ|ΑΠΟΣΠΑΣ/],
+  ['st:NOS', /^(ΝΟΣΟΚΟΜΕΙΟ|ΝΟΣΟΚΟΜΕΙΑ|ΝΟΣΗΛΕΥΟΜΕΝΟΙ|ΝΟΣ|ΕΙΣΑΓΩΓΗ ΣΕ ΝΟΣΟΚΟΜΕΙΟ|ΝΟΣΗΛΕΙΑ)$/, /ΝΟΣΟΚΟΜ|ΝΟΣΗΛΕΥ|ΝΟΣΗΛΕΙΑ/],
+  ['st:EY', /^(Ε Υ|ΕΥ|ΕΛΕΥΘΕΡΟΙ ΥΠΗΡΕΣΙΑΣ|ΕΛΕΥΘΕΡΟΙ ΥΠΗΡΕΣΙΑΣ Ε Υ)$/, /(^| )(Ε Υ|ΕΥ)( |$)|ΕΛΕΥΘΕΡΟΙ ΥΠΗΡ/],
+  ['st:EA', /^(Ε Α|ΕΑ|ΕΛΕΥΘΕΡΟΙ ΑΣΚΗΣΕΩΝ)$/, /(^| )(Ε Α|ΕΑ)( |$)|ΕΛΕΥΘΕΡΟΙ ΑΣΚ/],
+  ['st:EO', /^(Ε Ο|ΕΟ|ΕΛΕΥΘΕΡΟΙ ΟΡΘΟΣΤΑΣΙΑΣ)$/, /(^| )(Ε Ο|ΕΟ)( |$)|ΕΛΕΥΘΕΡΟΙ ΟΡΘΟΣΤ/],
+  ['st:STEP', /^(ΣΤΕΠ|ΕΙΣΑΓΩΓΗ ΣΤΕΠ)$/, /(^| )ΣΤΕΠ( |$)/],
+  ['st:PUN', /^(ΤΙΜΩΡΗΜΕΝΟΙ|ΤΙΜΩΡΙΕΣ|ΠΟΙΝΕΣ)$/, /ΤΙΜΩΡ|ΠΟΙΝΕΣ/],
+  ['st:LEAVE', /^(ΑΔΕΙΟΥΧΟΙ|ΣΕ ΑΔΕΙΑ|ΑΔΕΙΕΣ|ΣΕ ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ)$/, /ΑΔΕΙΟΥΧ|ΑΔΕΙΑ|ΑΔΕΙΕΣ/],
+  ['st:SICK', /^(ΑΝΑΡΡΩΤΙΚΗ|ΑΝΑΡΡΩΤΙΚΕΣ|ΣΕ ΑΝΑΡΡΩΤΙΚΗ ΑΔΕΙΑ)$/, /ΑΝΑΡΡΩΤ/],
+  ['st:ADIK', /^(ΑΓΝΟΟΥΜΕΝΟΙ|ΑΔΙΚΑΙΟΛΟΓΗΤΗ ΑΠΟΥΣΙΑ|ΛΙΠΟΤΑΚΤΕΣ)$/, /ΑΓΝΟΟΥΜ|ΑΔΙΚΑΙΟΛΟΓΗΤ|ΛΙΠΟΤΑΚΤ/],
+  ['st:ABS', /^(ΑΠΟΝΤΕΣ|ΑΠΟΝΤΕΣ ΑΔΕΙΕΣ|ΑΠΟΥΣΙΕΣ)$/, /ΑΠΟΝΤ/]
+];
+const stateLabel = (v: string): string => STATE_TARGETS.find(x => x.value === v)?.label || '';
+// Ποιοι είναι σε αυτή την κατάσταση τη μέρα d: οπλίτες (όχι στελέχη), όχι όποιος γυρίζει ως την ώρα έναρξης υπηρεσιών (όπως οι ΑΠΟΝΤΕΣ της ΦΡΟΥΡΑΣ)
+export function stateWho(s: AppState, d: ISODate, value: string): Person[] {
+  const t = STATE_TARGETS.find(x => x.value === value); if (!t) return [];
+  const pm = new Map(activePeople(s).map(p => [p.id, p])); const dm = dutyMin(s.settings);
+  const ok = (x: Status) => !x.pending && coversDay(x, d) && !(TYPES[x.type].away && backBy(x, d, dm));
+  const pick = (x: Status) => (t.types === 'abs' ? isAway(x, s.settings.lists) && TYPES[x.type].cat !== 'out' : t.types.includes(x.type));
+  const ids = new Set<number>(); for (const x of s.statuses) if (ok(x) && pick(x) && pm.has(x.pid)) ids.add(x.pid);
+  return [...ids].map(id => pm.get(id)!).sort((a, b) => a.last.localeCompare(b.last, 'el') || a.first.localeCompare(b.first, 'el'));
+}
+// Οι γραμμές ενός μπλοκ-κατάστασης: όσες είδε η ανίχνευση και όσες καλύπτει το συγχωνευμένο κελί της λέξης (γραμμές χωρίς τίποτα μέσα, π.χ. καθαρό πρότυπο)
+export function stateRows(g: Grid, b: SvcBlock, labelCol: number | null, end: number): number[] {
+  const rs = new Set(b.rows.map(x => x.r));
+  const m = labelCol != null ? g.mergeOf(b.r, labelCol) : null;
+  if (m && m.r1 === b.r) for (let r = m.r1; r <= Math.min(m.r2, end - 1); r++) rs.add(r);
+  return [...rs].sort((a, c) => a - c);
+}
 const KIND_WORDS: [string, RegExp, RegExp][] = [
   ['th', /^ΘΑΛΑΜΟΦΥΛΑΚ(ΕΣ|ΑΣ)?$/, /ΘΑΛΑΜΟΦΥΛΑΚ/], ['op', /^ΟΠΛΟΦΥΛΑΚ(ΕΣ|ΑΣ)?$/, /ΟΠΛΟΦΥΛΑΚ/], ['mg', /^(ΜΑΓΕΙΡΕΙΑ|ΜΑΓΕΙΡΟΙ)$/, /ΜΑΓΕΙΡ/], ['sk', /^(ΣΚΟΠΟΙ|ΣΚΟΠΙΕΣ)$/, /ΣΚΟΠ(ΟΣ|ΟΙ|ΙΕΣ|ΙΑ)/], ['tae', /^ΤΑΕ$/, /(^|\s)ΤΑΕ($|\s)/]
 ];
@@ -185,6 +234,8 @@ export function matchSvc(det: SvcSheet, targets: SvcTarget[], profile: ListProfi
         }
       }
     }
+    // λίστα ατόμων σε κατάσταση (ΑΠΕΣΠΑΣΜΕΝΟΙ, ΝΟΣΟΚΟΜΕΙΟ…) και όχι υπηρεσία
+    if (!value && !ly && !dy) { const sw = STATE_WORDS.find(([, strict, loose]) => strict.test(k) || loose.test(k)); if (sw) { value = sw[0]; sure = sw[1].test(k) ? 'sure' : 'suggest'; why = sure === 'sure' ? '' : 'Η λέξη μοιάζει με κατάσταση ατόμων («' + stateLabel(sw[0]) + '»), όχι με υπηρεσία. Έλεγξε αν είναι αυτή.'; } }
     // το ίδιο μπλοκ της εφαρμογής δεν είναι «σίγουρο» για δύο λέξεις του αρχείου
     if (value) { const n = (taken.get(value) || 0) + 1; taken.set(value, n); if (n > 1 && sure === 'sure') { sure = 'suggest'; why = 'Την ίδια υπηρεσία της εφαρμογής την έδειξε ήδη άλλη λέξη του αρχείου.'; } }
     // λιγότερα ή περισσότερα νούμερα από της εφαρμογής: δεν είναι αρκετό για «σίγουρο»
@@ -195,7 +246,7 @@ export function matchSvc(det: SvcSheet, targets: SvcTarget[], profile: ListProfi
 }
 
 export interface SvcPlan {
-  writes: Write[]; placed: { post: string; pid: number; sheet: string; r: number }[];
+  writes: Write[]; placed: { post: string; pid: number; sheet: string; r: number; block?: string }[];
   unplaced: { post: string; label: string; who: string }[];      // η εφαρμογή βάζει άτομο σε θέση που η λίστα της μονάδας δεν έχει (ή δεν αντιστοιχίστηκε)
   cleared: number; kept: number; warnings: string[];
 }
@@ -244,13 +295,31 @@ export function planSvc(sh: SheetModel, det: SvcSheet, matches: SvcMatch[], targ
       });
     });
   }
+  // μπλοκ-καταστάσεις: όσοι είναι σε αυτή την κατάσταση τη μέρα, από πάνω προς τα κάτω. Γραμμή με δικό σου κείμενο ή τύπο στο όνομα παραλείπεται (ο επόμενος παίρνει την επόμενη)·
+  // όσοι δεν χωράνε αναφέρονται, δεν προστίθενται γραμμές στο αρχείο σου
+  for (const m of matches) {
+    if (!m.value.startsWith(ST) || !STATE_TARGETS.some(x => x.value === m.value)) continue;
+    const b = m.block; const who = stateWho(s, date, m.value); let i = 0;
+    for (const r of stateRows(g2, b, det.cols.label.c, det.end)) {
+      if (done.has(r + '')) continue; done.add(r + '');
+      const own = nc != null ? (() => { const at = sit(r, nc); const cur = txt(sh.rows[at.r]?.[at.c]); return sh.fx.has(cellKey(at.r, at.c)) || (!!cur && cur !== ours[oursKey(sh.name, at.r, at.c)]); })() : true;
+      if (own) { plan.kept++; continue; }
+      const p = who[i++];
+      if (p) { put(r, rc, rankTxt(p), 'rank'); put(r, nc, seatName(p), 'name'); plan.placed.push({ post: m.value, pid: p.id, sheet: sh.name, r, block: b.label }); }
+      else for (const c of [rc, nc]) {
+        if (c == null) continue; const at = sit(r, c); const cur = txt(sh.rows[at.r]?.[at.c]);
+        if (cur && cur === ours[oursKey(sh.name, at.r, at.c)]) { plan.writes.push({ sheet: sh.name, r: at.r, c: at.c, value: null }); plan.cleared++; } else if (cur) plan.kept++;
+      }
+    }
+    for (; i < who.length; i++) plan.unplaced.push({ post: m.value, label: b.label, who: seatName(who[i]) });
+  }
   // άτομα της εφαρμογής σε θέσεις που κανένα μπλοκ δεν πήρε
   for (const k of Object.keys(g)) {
     if (assigned.has(k)) continue; const p = pm.get(g[k]); if (!p) continue;
     if (plan.unplaced.some(x => x.post === k)) continue;
     const post = posts.find(x => x.k === k); plan.unplaced.push({ post: k, label: post?.label || k, who: seatName(p) });
   }
-  for (const u of plan.unplaced) plan.warnings.push('Η θέση «' + u.label + '» (' + u.who + ') δεν γράφτηκε: δεν υπάρχει στη λίστα της μονάδας, δεν αντιστοιχίστηκε ή το κελί έχει δικό σου κείμενο.');
+  for (const u of plan.unplaced) if (u.post.startsWith(ST)) plan.warnings.push('Στη λίστα «' + u.label + '» δεν υπάρχει γραμμή για τον/την ' + u.who + ' (δεν προστίθενται γραμμές στο αρχείο σου): δεν γράφτηκε.'); else plan.warnings.push('Η θέση «' + u.label + '» (' + u.who + ') δεν γράφτηκε: δεν υπάρχει στη λίστα της μονάδας, δεν αντιστοιχίστηκε ή το κελί έχει δικό σου κείμενο.');
   return plan;
 }
 export const oursKey = (sheet: string, r: number, c: number) => sheet + '|' + r + ':' + c;

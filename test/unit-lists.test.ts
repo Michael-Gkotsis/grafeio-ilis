@@ -21,7 +21,7 @@ import { upper } from '../src/shared/text';
 import { modelOfBuffer } from '../src/main/bookModel';
 import { listsFill, listModelOf, listTry } from '../src/main/tplLists';
 import { fillFroura, fillOuts } from '../src/main/exports';
-import { detectOuts, detectRooms, detectSvc, matchSvc, planRooms, svcTargets } from '../src/shared/unitLists';
+import { detectOuts, detectRooms, detectSvc, matchSvc, planRooms, STATE_TARGETS, stateWho, svcTargets } from '../src/shared/unitLists';
 import { Evaluator } from '../src/shared/sheetEval';
 import type { TplProfile } from '../src/shared/tplStore';
 import { genOutsLists, genRoomLists, genSvcList, svcBuf, type SvcTargetIn } from './mockgen';
@@ -124,6 +124,48 @@ describe('κατάσταση υπηρεσιών σε λίστα', () => {
     }
     console.log('svc: seeds', N, 'blocks', blocks, 'sure', sures, 'sure cols', colsSure, 'cells written', written, 'wrongSure', wrongSure, 'wrongPlace', wrong, 'unsafe', unsafe, 'unreported', unreported);
     expect(wrongSure).toBe(0); expect(wrong).toBe(0); expect(unsafe).toBe(0); expect(unreported).toBe(0); expect(written).toBeGreaterThan(0);
+  }, 600000);
+  it('καταστάσεις ατόμων (ΑΠΕΣΠΑΣΜΕΝΟΙ, ΝΟΣΟΚΟΜΕΙΟ, ΚΙΧΝΕ- ΕΥ): αναγνωρίζονται, γεμίζουν με όσους είναι σε αυτή την κατάσταση και τίποτα άλλο δεν αλλάζει', async () => {
+    let filled = 0, extra = 0, wrongSure = 0, unsafe = 0, merged = 0;
+    const WORDS: { value: string; label: string; sure: boolean }[] = [{ value: 'st:APS', label: 'ΑΠΕΣΠΑΣΜΕΝΟΙ', sure: true }, { value: 'st:NOS', label: 'ΝΟΣΟΚΟΜΕΙΟ', sure: true }, { value: 'st:EY', label: 'ΚΙΧΝΕ- ΕΥ', sure: false }, { value: 'st:PUN', label: 'ΤΙΜΩΡΗΜΕΝΟΙ', sure: true }];
+    for (let seed = 1; seed <= N; seed++) {
+      let s = svcState(seed); const ppl = [...s.people].filter(p => p.active);
+      // αλήθεια: ποιος σε ποια κατάσταση τη μέρα D· άλλοι έχουν λήξει ή δεν έχουν αρχίσει
+      const types: Record<string, string> = { 'st:APS': 'APS', 'st:NOS': 'NOS', 'st:EY': 'EY', 'st:PUN': 'PUN' }; const want = new Map<string, number[]>(); let id = 0;
+      const sts = [...s.statuses];
+      ppl.forEach((p, i) => { const w = WORDS[i % WORDS.length]; const k = i % 7; if (k === 6) return; const on = k < 4; sts.push({ id: 'z' + ++id, pid: p.id, type: types[w.value] as never, from: on ? '2026-11-10' : '2026-10-01', to: on ? '2026-11-20' : '2026-10-05' }); if (on) { const l = want.get(w.value) || []; l.push(p.id); want.set(w.value, l); } });
+      s = { ...s, statuses: sts };
+      const m = genSvcList(seed, targetsOf(s), { states: WORDS.slice(0, 2 + (seed % 3)).map(({ value, label }) => ({ value, label })) });
+      const buf = await svcBuf(m); const sheets = await modelOfBuffer(buf); const sh = sheets[0]; const det = detectSvc(sh); expect(det, 'seed ' + seed).not.toBeNull();
+      const auto = matchSvc(det!, svcTargets(s, postsOf(s.settings)), null);
+      const posts: Record<string, string> = {};
+      for (const a of auto) {
+        const tr = m.blocks.find(x => x.rows[0].r === a.block.r)!;
+        if (tr.state) { const w = WORDS.find(x => x.value === tr.truth)!; if (a.sure === 'sure' && !w.sure) wrongSure++; if (a.sure !== 'sure' && w.sure) wrongSure++; if (a.value !== tr.truth) wrongSure++; posts[a.labelKey] = tr.truth!; }
+        else if (a.sure === 'sure' && a.value.startsWith('st:')) wrongSure++;
+        else posts[a.labelKey] = 'ignore';
+      }
+      const out = await listsFill(buf, s, D, { kind: 'services', profile: prof('services', { sheet: 'ΥΠΗΡΕΣΙΕΣ', posts, cols: { rank: m.rankCol, name: m.nameCol } }) });
+      expect(out, 'seed ' + seed).not.toBeNull(); const after = await rowsOf(out!.data, 'ΥΠΗΡΕΣΙΕΣ');
+      const exp = new Map<string, string>();
+      for (const b of m.blocks) {
+        if (!b.state) continue;
+        const ids = [...new Set(want.get(b.truth!) || [])]; const who = ids.map(i => s.people.find(p => p.id === i)!).sort((a, c) => a.last.localeCompare(c.last, 'el') || a.first.localeCompare(c.first, 'el'));
+        // ανεξάρτητος έλεγχος: η συνάρτηση της εφαρμογής δίνει τους ίδιους ανθρώπους
+        expect(stateWho(s, D, b.truth!).map(p => p.id), 'seed ' + seed + ' ' + b.label).toEqual(who.map(p => p.id));
+        if (b.rows.length < who.length) { extra += who.length - b.rows.length; expect(out!.warnings.some(w => w.includes(b.label)), 'warn ' + b.label).toBe(true); }
+        who.slice(0, b.rows.length).forEach((p, i) => { exp.set(b.rows[i].r + ':' + m.nameCol, upper(fullName(p))); exp.set(b.rows[i].r + ':' + m.rankCol, upper(rankTxt(p))); filled++; });
+        if (sh.rows[b.rows[0].r + 1] && !sh.rows[b.rows[0].r + 1][m.rankCol] && b.rows.length > 1) merged++;
+      }
+      const wid = Math.max(...sh.rows.map(r => r?.length || 0), ...after.rows.map(r => r?.length || 0));
+      for (let r = 0; r < Math.max(sh.rows.length, after.rows.length); r++) for (let c = 0; c < wid; c++) {
+        const b0 = txt(sh.rows[r]?.[c]), a0 = txt(after.rows[r]?.[c]); if (b0 === a0) continue;
+        if (r === m.titleRow && c === 0) continue;
+        if (exp.get(r + ':' + c) === a0) continue; unsafe++;
+      }
+    }
+    console.log('states: seeds', N, 'filled rows', filled, 'not fitting', extra, 'rows in merged blocks', merged, 'wrongSure', wrongSure, 'unsafe', unsafe);
+    expect(wrongSure).toBe(0); expect(unsafe).toBe(0); expect(filled).toBeGreaterThan(0); void STATE_TARGETS;
   }, 600000);
   it('χωρίς αντιστοίχιση ή με άλλο αρχείο: η παλιά διαδρομή (ίδια bytes)', async () => {
     const s = apply(fakeState(40), { t: 'autofill', date: D }, ctx).state;

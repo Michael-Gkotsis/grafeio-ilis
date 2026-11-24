@@ -1,7 +1,7 @@
 // Το μοντέλο της οθόνης «Αντιστοίχιση…» για τις λίστες ΑΛΛΗΣ μονάδας (3β): κατάσταση υπηρεσιών σε λίστα (ΦΡΟΥΡΑ), εξοδούχοι/αδειούχοι (Εξοδούχοι)
 // και θαλαμιζόμενοι. Καθαρές συναρτήσεις· το αρχείο το διαβάζει το main (src/main/tplLists.ts), εδώ μόνο το σχήμα των απαντήσεων και το προφίλ από τις επιλογές.
 import { PROFILE_VERSION, type ListProfile, type ProfileKind, type TplProfile } from './tplStore';
-import { NEW_SVC, SVC_ROLE_LABEL, OUTS_ROLE_LABEL, matchSvc, svcKeyOf, type ColHow, type OutsSheet, type SvcSheet, type SvcTarget, type Sure } from './unitLists';
+import { NEW_SVC, SVC_ROLE_LABEL, OUTS_ROLE_LABEL, STATE_TARGETS, matchSvc, svcKeyOf, type ColHow, type OutsSheet, type SvcSheet, type SvcTarget, type Sure } from './unitLists';
 
 export type ListForm = 'froura' | 'outs';
 export interface ListColView { key: string; role: string; label: string; ref: string; head: string; how: ColHow; c: number | null; side?: 'o' | 'l' }
@@ -26,10 +26,11 @@ const colRef = (c: number) => { let n = c + 1, s = ''; while (n > 0) { const m =
 export function svcView(det: SvcSheet, targets: SvcTarget[], profile: ListProfile | null | undefined): NonNullable<ListModel['svc']> {
   const cols: ListColView[] = (['num', 'hours', 'shift', 'rank', 'name'] as const).map(role => { const p = det.cols[role]; return { key: role, role, label: SVC_ROLE_LABEL[role], ref: p.c == null ? '' : colRef(p.c), head: p.head != null ? colRef(p.head) : '', how: p.how, c: p.c }; });
   const blocks = matchSvc(det, targets, profile).map(m => {
-    const t = targets.find(x => x.value === m.value);
+    const t = targets.find(x => x.value === m.value) ?? STATE_TARGETS.find(x => x.value === m.value);
     return { labelKey: m.labelKey, label: m.block.label, rows: m.block.rows.length, groups: m.block.groups.length, value: m.value, sure: m.sure, why: m.why, suggestLabel: t?.label || '' };
   });
-  const options: ListOption[] = targets.map(t => ({ value: t.value, label: t.label + ' (' + t.groups.length + ' νούμερα)', group: t.value.startsWith('post:') ? 'Λ/Υ και Δ/Υ' : 'Υπηρεσίες της εφαρμογής' }));
+  const options: ListOption[] = [...targets.map(t => ({ value: t.value, label: t.label + ' (' + t.groups.length + ' νούμερα)', group: t.value.startsWith('post:') ? 'Λ/Υ και Δ/Υ' : 'Υπηρεσίες της εφαρμογής' })),
+    ...STATE_TARGETS.map(t => ({ value: t.value, label: t.label, group: 'Καταστάσεις: γεμίζει με όσους είναι σε αυτή την κατάσταση' }))];
   return { header: det.header, title: det.title != null, sig: det.sig != null, cols, blocks, options };
 }
 export function outsView(det: OutsSheet): NonNullable<ListModel['outs']> {

@@ -77,7 +77,7 @@ export async function listsFill(tpl: Buffer, s: AppState, d: ISODate, o: FillIn)
     const sp: SvcPlan = planSvc(hit.sh, det, ms, targets, s, d, posts, ours, lex);
     plan.push(...sp.writes); placed = sp.placed.length; cleared = sp.cleared; unplaced.push(...sp.unplaced.map(x => x.label + ': ' + x.who));
     warnings.push(...sp.warnings);
-    for (const x of sp.placed) { const p = seatMap(s).get(x.pid); const b = det.blocks.find(bl => bl.rows.some(rw => rw.r === x.r)); if (p) lines.push({ label: b?.label || '', text: [rankTxt(p), fullName(p)].join(' ') }); }
+    for (const x of sp.placed) { const p = seatMap(s).get(x.pid); const b = det.blocks.find(bl => bl.rows.some(rw => rw.r === x.r)); if (p) lines.push({ label: x.block || b?.label || '', text: [rankTxt(p), fullName(p)].join(' ') }); }
     const left = ms.filter(m => !m.value && m.sure !== 'ignored').length;
     if (left) warnings.push(left + ' μπλοκ της λίστας δεν έχουν αντιστοιχιστεί σε υπηρεσία της εφαρμογής (Αντιστοίχιση…) και δεν γράφτηκαν');
     const t = planTitle(hit.sh, det.title, d); if (t.write) plan.push(t.write); if (t.warning) warnings.push(t.warning);
