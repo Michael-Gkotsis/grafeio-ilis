@@ -319,8 +319,39 @@ export function cleanAsset(a: Omit<Asset, 'id'> & { id?: string }, id: string): 
   if (t(a.why)) x.why = t(a.why); if (a.warOnly) x.warOnly = true;
   if (a.maint) { const m = clean({ last: a.maint.last || undefined, next: a.maint.next || undefined, every: a.maint.every && a.maint.every > 0 ? Math.floor(a.maint.every) : undefined, lastKm: a.maint.lastKm, nextKm: a.maint.nextKm }); if (Object.keys(m).length) x.maint = m; }
   if (a.extra) { const e: Record<string, string> = {}; for (const [k, v] of Object.entries(a.extra)) if (t(v)) e[k] = t(v); if (Object.keys(e).length) x.extra = e; }
-  if (t(a.acc)) x.acc = t(a.acc); if (t(a.note)) x.note = t(a.note);
+  if (t(a.acc)) x.acc = t(a.acc);
+  // παρελκόμενα ως λίστα: το κείμενο acc (που διαβάζει το Excel) ακολουθεί πάντα τη λίστα
+  const accs = cleanAccs(a.accs); if (accs.length) { x.accs = accs.map(y => ({ name: y.name, qty: y.qty || 1 })); x.acc = accsToText(x.accs); }
+  if (t(a.note)) x.note = t(a.note);
   if (t(a.plate)) x.plate = t(a.plate); if (a.driver) x.driver = a.driver;
   if (a.km != null) x.km = a.km; if (a.kmOn) x.kmOn = a.kmOn; if (a.gone) x.gone = a.gone;
   return x;
+}
+
+// ---------- παρελκόμενα: λίστα ↔ κείμενο ----------
+// Το Excel γράφει το acc (κείμενο)· η λίστα accs είναι η πηγή του όταν υπάρχει: «2 Γεμιστήρας, Λόγχη» (ποσότητα μπροστά μόνο όταν είναι πάνω από 1)
+const sp = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim();
+export function cleanAccs(l: { name?: unknown; qty?: unknown }[] | undefined): { name: string; qty?: number }[] {
+  const o: { name: string; qty?: number }[] = [];
+  for (const x of l || []) {
+    const name = sp(x?.name); if (!name || o.some(y => normGreek(y.name) === normGreek(name))) continue;
+    const q = Math.floor(Number(x.qty)); o.push(q > 1 ? { name, qty: Math.min(q, 999) } : { name });
+  }
+  return o;
+}
+export function accsToText(l: { name: string; qty?: number }[] | undefined): string {
+  return cleanAccs(l).map(x => (x.qty && x.qty > 1 ? x.qty + ' ' : '') + x.name).join(', ');
+}
+// Το αντίστροφο, όσο γίνεται από ελεύθερο κείμενο: χωρίζει σε κόμμα/ερωτηματικό/γραμμή και βρίσκει ποσότητα στην αρχή («2 γεμιστήρες»,
+// «2x γεμιστήρες») ή στο τέλος με σημάδι («γεμιστήρας x2», «γεμιστήρας · 2»)· ό,τι δεν αναγνωρίζεται μένει όνομα με ποσότητα 1
+export function parseAccText(text: string | undefined): { name: string; qty: number }[] {
+  const o: { name: string; qty: number }[] = [];
+  for (const part of String(text ?? '').split(/[,;\n]+/)) {
+    const t = sp(part); if (!t) continue;
+    const a = /^(\d{1,3})\s*[x×*]?\s+(\D.*)$/i.exec(t) || /^(\d{1,3})\s*[x×*]\s*(\D.*)$/i.exec(t); const b = a ? null : /^(.*\D)\s*[x×*·]\s*(\d{1,3})$/i.exec(t);
+    const name = sp(a ? a[2] : b ? b[1] : t); const qty = a ? Number(a[1]) : b ? Number(b[2]) : 1;
+    if (!name) continue;
+    const q = qty >= 1 ? qty : 1; const have = o.find(y => normGreek(y.name) === normGreek(name)); if (have) have.qty += q; else o.push({ name, qty: q });
+  }
+  return o;
 }
