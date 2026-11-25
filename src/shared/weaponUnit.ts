@@ -22,13 +22,13 @@ export const WEAPON_PROFILE_ID = 'weapons-1';
 export const weaponProfileOf = (settings: Pick<Settings, 'tplProfiles'> | undefined): TplProfile | null => profilesOf(settings).find(p => p.kind === 'weapons') ?? null;
 export const emptyWpn = (): WeaponProfile => ({ roles: {}, cats: {}, cols: {}, ignore: [], types: {}, places: {}, holders: {} });
 
-export type WRole = 'aa' | 'rank' | 'name' | 'type' | 'no' | 'place' | 'barrel' | 'spare' | 'note';
-export const WROLES: WRole[] = ['aa', 'rank', 'name', 'type', 'no', 'place', 'barrel', 'spare', 'note'];
+export type WRole = 'aa' | 'rank' | 'name' | 'first' | 'type' | 'no' | 'place' | 'barrel' | 'spare' | 'note';
+export const WROLES: WRole[] = ['aa', 'rank', 'name', 'first', 'type', 'no', 'place', 'barrel', 'spare', 'note'];
 export const WROLE_LABEL: Record<WRole, string> = {
-  aa: 'Α/Α', rank: 'Βαθμός κατόχου', name: 'Ονοματεπώνυμο κατόχου', type: 'Τύπος όπλου', no: 'Αριθμός όπλου', place: 'Θέση (οπλοβαστός, κιβώτιο, Α.Ο…)',
+  aa: 'Α/Α', rank: 'Βαθμός κατόχου', name: 'Ονοματεπώνυμο κατόχου', first: 'Όνομα κατόχου (όταν το επώνυμο είναι σε άλλη στήλη)', type: 'Τύπος όπλου', no: 'Αριθμός όπλου', place: 'Θέση (οπλοβαστός, κιβώτιο, Α.Ο…)',
   barrel: 'Αριθμός κάνης (πεδίο της κατηγορίας)', spare: 'Αριθμός εφεδρικής κάνης (πεδίο της κατηγορίας)', note: 'Παρατηρήσεις (σημείωση της εγγραφής)'
 };
-const CONCEPT_ROLE: Record<string, WRole> = { 'person:aa': 'aa', 'person:rank': 'rank', 'person:name': 'name', 'person:last': 'name', 'weapon:type': 'type', 'weapon:number': 'no', 'weapon:slot': 'place', 'weapon:barrel': 'barrel', 'weapon:spareBarrel': 'spare', 'person:remarks': 'note' };
+const CONCEPT_ROLE: Record<string, WRole> = { 'person:aa': 'aa', 'person:rank': 'rank', 'person:name': 'name', 'person:last': 'name', 'person:first': 'first', 'weapon:type': 'type', 'weapon:number': 'no', 'weapon:slot': 'place', 'weapon:barrel': 'barrel', 'weapon:spareBarrel': 'spare', 'person:remarks': 'note' };
 export const SHEET_ROLE_OPTS: { value: WeaponSheetRole; label: string }[] = [
   { value: 'items', label: 'Λίστα οπλισμού (από εδώ διαβάζει)' }, { value: 'derived', label: 'Βγαίνει από άλλο φύλλο με τύπους (δεν πειράζεται)' }, { value: 'skip', label: 'Άλλο φύλλο (δεν πειράζεται)' }
 ];
@@ -43,6 +43,8 @@ const toks = (s: unknown): string[] => normGreek(s).replace(/[^Α-ΩA-Z0-9]+/g, 
 const setKey = (t: string[]) => [...t].sort().join(' ');
 const lc = (s: string) => normGreek(s).replace(/\s+/g, '');
 
+// Επώνυμο και όνομα σε δύο στήλες (ΕΠΩΝΥΜΟ, ΟΝΟΜΑ): ενώνονται, αλλιώς ο κάτοχος ήταν μία λέξη και δεν ταίριαζε ποτέ (έλεγχος Π2, 25/11)
+const fullName = (name: string, first: string): string => { const f = first.trim(); if (!f || blankWord(f) || blankWord(name)) return name; const have = new Set(toks(name)); return toks(f).every(t => have.has(t)) ? name : (name.trim() + ' ' + f).trim(); };
 // ------------------------------------------------------------------ θέση: αριθμημένη θέση ή λέξη
 export function placeParts(text: string): { seat?: { rack: string; wpos: string }; word?: string; extra?: string } {
   const t = text.replace(/\s+/g, ' ').trim(); if (!t || blankWord(t)) return {};
@@ -121,7 +123,7 @@ export function readWeaponBook(sheets: RawSheet[], o: { prof: WeaponProfile; lex
         blankRun = 0;
         if (g.byRole.no != null && fx.has(r + ':' + g.byRole.no)) { out.formulaRows++; continue; }
         if (!DIGIT.test(no)) { out.skippedRows++; continue; }
-        out.items.push({ sheet: sh.name, r, no, type: cell(r, 'type'), rank: cell(r, 'rank'), name: cell(r, 'name'), place: cell(r, 'place'), note: cell(r, 'note'), barrel: cell(r, 'barrel'), spare: cell(r, 'spare') });
+        out.items.push({ sheet: sh.name, r, no, type: cell(r, 'type'), rank: cell(r, 'rank'), name: fullName(cell(r, 'name'), cell(r, 'first')), place: cell(r, 'place'), note: cell(r, 'note'), barrel: cell(r, 'barrel'), spare: cell(r, 'spare') });
         view.items++;
       }
     });
