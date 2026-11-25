@@ -1,6 +1,7 @@
 // Μέτρηση του UI: χτίζει το bench/ui σε production, το ανοίγει στο Electron της εφαρμογής (--electron, Chromium 108) ή στο
 // Chromium του Playwright, και μετρά κάθε οθόνη, καρτέλα και το ξαναζωγράφισμα μετά από εντολή. Χρειάζεται Playwright.
 // npm run bench:ui (σε Linux χωρίς οθόνη: xvfb-run -a npm run bench:ui) · --cpu 4 πιο αργός επεξεργαστής · --profile Οπλισμός
+// --full: και τα δεδομένα των νέων λειτουργιών (bench/state.ts full: στελέχη με πρόγραμμα, μητρώο, οχήματα, 30 υπηρεσίες…) · --unit: λειτουργία μονάδας
 import { build, preview } from 'vite';
 import react from '@vitejs/plugin-react';
 import { createRequire } from 'module';
@@ -19,7 +20,8 @@ await build(cfg);
 await esbuild({ entryPoints: ['bench/state.ts'], bundle: true, platform: 'node', format: 'cjs', outfile: 'dist/bench-state.cjs', logLevel: 'warning' });
 const { benchState } = require(path.resolve('dist/bench-state.cjs'));
 const day = new Date(); const END = day.getFullYear() + '-' + String(day.getMonth() + 1).padStart(2, '0') + '-' + String(day.getDate()).padStart(2, '0');
-fs.writeFileSync('dist/bench-ui/state.json', JSON.stringify(benchState({ n: N, days: DAYS, end: END })));
+const FULL = process.argv.includes('--full'), UNIT = process.argv.includes('--unit');
+fs.writeFileSync('dist/bench-ui/state.json', JSON.stringify(benchState({ n: N, days: DAYS, end: END, full: FULL, unit: UNIT })));
 const srv = await preview(cfg);
 const url = srv.resolvedUrls.local[0];
 // --electron: μέσα στο Electron της εφαρμογής (Chromium 108, όπως στο PC της μονάδας)· αλλιώς στο Chromium του Playwright
@@ -48,6 +50,12 @@ const clickMs = sel => page.evaluate(async sel => {
   await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
   return performance.now() - a;
 }, sel);
+const tabMs = j => page.evaluate(async j => {
+  const el = document.querySelectorAll('.main [role=tab]')[j]; if (!el) return -1;
+  const a = performance.now(); el.click();
+  await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+  return performance.now() - a;
+}, j);
 const metrics = async () => { const { metrics: m } = await cdp.send('Performance.getMetrics'); const o = {}; for (const x of m) if (['ScriptDuration', 'LayoutDuration', 'RecalcStyleDuration', 'TaskDuration', 'Nodes', 'LayoutCount', 'RecalcStyleCount'].includes(x.name)) o[x.name] = x.value; return o; };
 const med = xs => { const s = [...xs].sort((a, b) => a - b); return Math.round(s[Math.floor(s.length / 2)]); };
 // --profile Οπλισμός: ποιες συναρτήσεις τρώνε τον χρόνο όταν ανοίγει η οθόνη (self time, και συνολικός)
@@ -82,10 +90,10 @@ for (const [i, name] of navs) {
   for (let r = 0; r < REPS; r++) { await clickMs('.sidenav .navbtn:nth-of-type(1)'); xs.push(await clickMs(sel)); }
   R['οθόνη ' + name] = med(xs); D['οθόνη ' + name] = await page.evaluate(() => document.getElementsByTagName('*').length);
   // καρτέλες της οθόνης
+  // κλικ με τη σειρά στη σελίδα (όχι nth-of-type, που μετρά ανά γονέα: οι καρτέλες σε δεύτερη σειρά, π.χ. ΗΚΑΙ › Μπροστά/Πίσω, έβγαιναν -1)
   const tabs = await page.$$eval('.main [role=tab]', els => els.map(e => e.textContent));
   for (let j = 0; j < tabs.length; j++) {
-    const ts = `.main [role=tab]:nth-of-type(${j + 1})`;
-    const ys = []; for (let r = 0; r < REPS; r++) { await clickMs(`.main [role=tab]:nth-of-type(${((j + 1) % tabs.length) + 1})`); ys.push(await clickMs(ts)); }
+    const ys = []; for (let r = 0; r < REPS; r++) { await tabMs((j + 1) % tabs.length); ys.push(await tabMs(j)); }
     R['  ' + name + ' › ' + tabs[j].replace(/\s*\(\d+\)/, '')] = med(ys); D['  ' + name + ' › ' + tabs[j].replace(/\s*\(\d+\)/, '')] = await page.evaluate(() => document.getElementsByTagName('*').length);
   }
 }
@@ -109,10 +117,14 @@ const after = async (navIdx, key, tab) => {
 // το κουμπί «Δυναμολόγιο» λέγεται πια «Στρατιώτες» (#369)· τα κλειδιά των αποτελεσμάτων μένουν όπως ήταν
 const NAV_NAME = { 'Δυναμολόγιο': 'Στρατιώτες' };
 const navIdx = name => { const i = navs.find(([, n]) => n === (NAV_NAME[name] || name))?.[0]; if (i == null) throw new Error('Δεν βρέθηκε κουμπί πλοήγησης «' + name + '»'); return i + 1; };
-for (const [scr, key, tab] of [['Σήμερα', 'statuses'], ['Δυναμολόγιο', 'people'], ['Υπηρεσίες', 'guards', 'Θέσεις'], ['Υπηρεσίες', 'guards', 'Έλεγχος'], ['Υπηρεσίες', 'guards', 'Ποιος'], ['Εξοδούχοι', 'statuses'], ['ΗΚΑΙ', 'statuses'], ['Οπλισμός', 'people', 'Όπλα']])
+for (const [scr, key, tab] of [['Σήμερα', 'statuses'], ['Δυναμολόγιο', 'people'], ['Υπηρεσίες', 'guards', 'Θέσεις'], ['Υπηρεσίες', 'guards', 'Έλεγχος'], ['Υπηρεσίες', 'guards', 'Ποιος'], ['Εξοδούχοι', 'statuses'], ['ΗΚΑΙ', 'statuses'], ['Οπλισμός', 'people', 'Όπλα'],
+  // νέες οθόνες (έλεγχος 25/11): στελέχη, μητρώο, υλικό, οχήματα
+  ['Στελέχη', 'cadreDuties', 'Υπηρεσίες'], ['Στελέχη', 'cadreAbs', 'Πρόγραμμα'], ['Οπλισμός', 'assets', 'Μητρώο'], ['Οπλισμός', 'assets', 'Υλικό'], ['Οχήματα', 'assets']])
   R['μετά από εντολή (' + key + '): ' + scr + (tab ? ' › ' + tab : '')] = await after(navIdx(scr), key, tab);
-// αναζήτηση στο Δυναμολόγιο: ένα γράμμα
-await clickMs('.sidenav .navbtn:nth-of-type(2)');
+// αναζήτηση στο Δυναμολόγιο: ένα γράμμα· πρώτα η καρτέλα «Λίστα» (η οθόνη θυμάται την τελευταία καρτέλα, το Ημερολόγιο, χωρίς αναζήτηση: έβγαινε -1)
+await clickMs(`.sidenav .navbtn:nth-of-type(${navIdx('Δυναμολόγιο')})`);
+await page.evaluate(() => [...document.querySelectorAll('.main [role=tab]')].find(e => e.textContent.startsWith('Λίστα'))?.click());
+await page.waitForTimeout(100);
 const typing = await page.evaluate(async () => {
   const el = document.querySelector('.main input[type="search"]'); if (!el) return -1;
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
@@ -129,4 +141,4 @@ const heap = await page.evaluate(() => performance.memory ? Math.round(performan
 R['μνήμη JS (MB)'] = heap;
 await browser.close(); srv.httpServer.close();
 if (process.env.JSON) console.log(JSON.stringify({ R, D }));
-else { console.log('CPU x' + CPU + ', ' + N + ' άτομα, ' + DAYS + ' μέρες'); for (const [k, v] of Object.entries(R)) console.log(k.padEnd(56), String(v).padStart(7), D[k] != null ? String(D[k]).padStart(7) + ' στοιχεία' : ''); if (errors.length) console.log(errors.slice(0, 5)); }
+else { console.log('CPU x' + CPU + ', ' + N + ' άτομα, ' + DAYS + ' μέρες' + (FULL ? ', full' : '') + (UNIT ? ', μονάδα' : '')); for (const [k, v] of Object.entries(R)) console.log(k.padEnd(56), String(v).padStart(7), D[k] != null ? String(D[k]).padStart(7) + ' στοιχεία' : ''); if (errors.length) console.log(errors.slice(0, 5)); }

@@ -1483,8 +1483,9 @@ else {
       ...(r?.heads && typeof r.heads === 'object' ? { heads: Object.fromEntries(Object.entries(r.heads).filter(([, v]) => typeof v === 'string')) as Record<string, string> } : {}),
       ...(typeof r?.sheet === 'string' ? { sheet: r.sheet } : {})
     });
-    ipcMain.handle('list:model', async (_e, f: FormKind, file?: string, sheet?: string) => { try { return (await listModelOf(listFile(f, file), store.state, f === 'outs' ? 'outs' : 'froura', sheet)).model; } catch (e) { return fail(e); } });
-    ipcMain.handle('list:try', async (_e, f: FormKind, req: ListReq) => { try { const r = asListReq(req); const m = await listModelOf(listFile(f, req?.file), store.state, f === 'outs' ? 'outs' : 'froura', r.sheet); return await listTry(m.sheets, m.buf, store.state, today(), f === 'outs' ? 'outs' : 'froura', m.model.sheet, r); } catch (e) { return fail(e); } });
+    // στο νήμα των Excel (offload.ts), όπως το tpl:model: ένα μεγάλο αρχείο δεν παγώνει το παράθυρο (έλεγχος 25/11)
+    ipcMain.handle('list:model', async (_e, f: FormKind, file?: string, sheet?: string) => { try { const x = listFile(f, file), st = store.state, form = f === 'outs' ? 'outs' as const : 'froura' as const; return await off('listModel', [x, form, sheet], async () => (await listModelOf(x, st, form, sheet)).model, st); } catch (e) { return fail(e); } });
+    ipcMain.handle('list:try', async (_e, f: FormKind, req: ListReq) => { try { const r = asListReq(req); const x = listFile(f, req?.file), st = store.state, d = today(), form = f === 'outs' ? 'outs' as const : 'froura' as const; return await off('listTry', [x, form, d, r], async () => { const m = await listModelOf(x, st, form, r.sheet); return listTry(m.sheets, m.buf, st, d, form, m.model.sheet, r); }, st); } catch (e) { return fail(e); } });
     ipcMain.handle('tpl:restore', async (_e, f: FormKind, req: TplReq) => {
       try {
         const file = tplFile(f, req?.file); const m = await modelOfFile(file, store.state, today(), req?.sheet);

@@ -12,6 +12,7 @@ import type { AppState } from '../shared/domain';
 import { xlLook } from '../shared/xlLook';
 import { forBuild, withBuilt } from '../shared/reports';
 import { modelOfFile, tryFill } from './tplAdapt';
+import { listModelOf, listTry } from './tplLists';
 
 const nodeRequire: NodeRequire = require;
 let state: AppState;
@@ -34,6 +35,9 @@ const FNS: Record<string, (...a: any[]) => Promise<unknown>> = {
   // «Αντιστοίχιση…»: το αρχείο έρχεται ήδη .xlsx (η μετατροπή του .xls γίνεται στο main, μία φορά)
   tplModel: async (file, d, sheet) => (await modelOfFile(file, state, d, sheet)).model,
   tplTry: async (file, d, req) => { const m = await modelOfFile(file, state, d, req?.sheet); return tryFill(m.sheets, m.buf, state, d, req); },
+  // λίστες άλλης μονάδας (Αντιστοίχιση): όπως το tplModel/tplTry, ώστε ένα μεγάλο αρχείο να μην παγώνει το παράθυρο (έλεγχος 25/11)
+  listModel: async (file, form, sheet) => (await listModelOf(file, state, form, sheet)).model,
+  listTry: async (file, form, d, req) => { const m = await listModelOf(file, state, form, req?.sheet); return listTry(m.sheets, m.buf, state, d, form, m.model.sheet, req); },
   writeGroup: (jobs, today, opts) => writeGroup(jobs, state, today, opts),
   // ExcelJS (βαρύ): φορτώνεται μόνο αν χρειαστεί, όπως στο main
   dutyCheck: ym => (nodeRequire(path.join(__dirname, 'excel.js')) as typeof import('./excel')).dutyCheck(state, ym)

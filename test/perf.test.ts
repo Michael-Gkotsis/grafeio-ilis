@@ -14,6 +14,8 @@ import { buildTemplate, fillReport } from '../src/main/reports';
 import { PRINT_DEFAULT, renderBook } from '../src/main/print';
 import { PRESETS, defaultPick, withBuilt } from '../src/shared/reports';
 import { benchState } from '../bench/state';
+import { autoFill, dutySheet, monthCheck } from '../src/shared/cadreDuty';
+import { registry } from '../src/shared/assets';
 
 const END = '2026-10-16';
 const ms = (f: () => unknown) => { const a = performance.now(); f(); return performance.now() - a; };
@@ -52,6 +54,17 @@ describe('απόδοση με ρεαλιστικά δεδομένα', () => {
     // η σελιδοποίηση ψάχνει κλίμακα με δεκάδες δοκιμές και προτείνει σελίδες (ως 8): μετρά σελίδες χωρίς να τις φτιάχνει
     expect(await ams(() => renderBook(data!, { file: 'x.xlsx', layout: PRINT_DEFAULT }))).toBeLessThan(1500);
   }, 20_000);
+  // έλεγχος 25/11 (Π7): και ό,τι μπήκε 13/11–24/11 (bench/state.ts full): 30 υπηρεσίες ως 10 άτομα/νούμερο, «Μόνο στελέχη», μόνιμα,
+  // όριο, 60 στελέχη με πρόγραμμα, 620 εγγραφές μητρώου. Σημερινοί χρόνοι: ~10 ms η καθεμία, η αυτόματη στρατιωτών ~100 θέσεων ~200 ms
+  it('νέες λειτουργίες (στελέχη, μητρώο, πολλές υπηρεσίες) μένουν γρήγορες', () => {
+    const f = benchState({ n: 180, days: 35, end: END, full: true });
+    expect(f.assets!.length).toBeGreaterThan(600); expect(f.cadreDuties!.length).toBeGreaterThan(50);
+    expect(ms(() => autoFill(f, addDays(END, 20).slice(0, 7)))).toBeLessThan(300);
+    expect(ms(() => dutySheet(f, END.slice(0, 7)))).toBeLessThan(200);
+    expect(ms(() => monthCheck(f, END.slice(0, 7)))).toBeLessThan(200);
+    expect(ms(() => registry({ ...f, assets: [...f.assets!] }))).toBeLessThan(200);
+    expect(ms(() => apply(f, { t: 'autofill', date: addDays(END, 1) }, ctx))).toBeLessThan(4000);
+  }, 60_000);
   it('οι μεγάλοι πίνακες δεν στήνουν τις γραμμές εκτός οθόνης', () => {
     // Οπλισμός ~3 δευτ. → ~0,8 (content-visibility, 18/10) → ~0,2 (VirtualList, 19/10) με 180 άτομα (bench/ui)
     // από 19/10 στήνονται μόνο οι γραμμές που φαίνονται (VirtualList), όπως στο Δυναμολόγιο
