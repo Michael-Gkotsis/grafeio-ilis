@@ -840,7 +840,8 @@ function savePrintPrefs(key: string, o: PrintOpts | null) {
 }
 // fix: έντυπο με «Σταθερό μέγεθος γραμμάτων» (Michael, 4/11): «Όσες χρειάζονται» με τα γράμματα του Excel, πάνω από ό,τι είχε αποθηκευτεί
 // Αρχείο που έβγαλε κάποιο έντυπο των Έντυπα (repHist): το παράθυρο εκτύπωσης ξεκινά με «Όσες χρειάζονται»
-const isRepFile = (file: string) => { const f = path.resolve(file); return Object.values(readMeta().repHist || {}).some(l => (l || []).some(h => h?.file && path.resolve(h.file) === f)); };
+// (όχι το Δυναμολόγιο ή άλλο Excel όπου γράφτηκε φύλλο εντύπου: εκεί το ιστορικό έχει sheets)
+const isRepFile = (file: string) => { const f = path.resolve(file); return Object.values(readMeta().repHist || {}).some(l => (l || []).some(h => h?.file && !h.sheets && path.resolve(h.file) === f)); };
 async function printPage(file: string, sheets?: string[], fix?: boolean, rep?: boolean): Promise<Omit<PrintJob, 'file'>> {
   const book = await openBook(await fs.promises.readFile(file));
   const { key, base, opts, want } = await printSetup(book, file, readMeta().printPrefs?.[printKey(file)], sheets, fix, rep); const remember = true;
