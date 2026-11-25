@@ -1,6 +1,7 @@
 // Ονόματα αρχείων (Michael, 13/11): δικό σου όνομα, διαχωριστικό και μορφή ημερομηνίας για τα αρχεία που βγάζει η εφαρμογή.
 // Χωρίς ρυθμίσεις βγαίνουν ακριβώς τα ίδια ονόματα με πριν: κάθε αρχείο κρατά τη δική του προεπιλεγμένη μορφή.
-import { HK_MON, type ISODate } from './dates';
+import { HK_MON, MONTHS, type ISODate } from './dates';
+import { norm, upper } from './text';
 import { reportOf } from './unit';
 import { imerTitle } from './imer';
 import { essoName } from './esso';
@@ -47,10 +48,10 @@ export const FILE_ROWS = (st: Settings): { id: FileId; label: string; ext: strin
   { id: 'cadre', label: 'Δυναμικό στελεχών', ext: 'xlsx' }, { id: 'cadreLeave', label: 'Άδειες και απαλλαγές στελεχών', ext: 'xlsx' }, { id: 'cadrePlan', label: 'Πρόγραμμα αδειών στελεχών', ext: 'xlsx' }, { id: 'cadreDuty', label: 'Υπηρεσίες στελεχών', ext: 'xlsx' }, { id: 'assets', label: 'Μητρώο οπλισμού και υλικού', ext: 'xlsx' }, { id: 'vehicles', label: 'Κατάσταση οχημάτων', ext: 'xlsx' }, { id: 'imer', label: 'Ημερολόγιο κωλυομένων', ext: 'xlsx' },
   { id: 'check', label: 'Έλεγχος υπηρεσιών (μήνας)', ext: 'xlsx' },
 ];
-// Χωρίς \ / : * ? " < > | (και χωρίς κενά στις άκρες)
-export const safeName = (s: string): string => s.replace(/[\\/:*?"<>|]/g, '-').trim();
+// Χωρίς \ / : * ? " < > | (και χωρίς κενά στις άκρες)· οι χαρακτήρες ελέγχου (π.χ. tab από επικόλληση) γίνονται κενό: τα Windows δεν τους δέχονται
+export const safeName = (s: string): string => s.replace(/[\\/:*?"<>|]/g, '-').replace(/[\u0000-\u001f]/g, ' ').trim();
 
-type When = ISODate | { from: ISODate; to: ISODate; psk?: boolean } | { text: string } | null;
+export type When = ISODate | { from: ISODate; to: ISODate; psk?: boolean } | { text: string } | null;
 // Το όνομα του αρχείου. defaultStem: το όνομα όπως ήταν (χωρίς ημερομηνία)· date: μέρα, διάστημα (psk: «ΠΣΚ 14-11 έως 16-11-2026»),
 // {text} (π.χ. ο μήνας του Έλεγχου υπηρεσιών) ή null (χωρίς ημερομηνία)
 export function fileName(st: Pick<Settings, 'fileNames'>, id: FileId, defaultStem: string, date: When, ext: string): string {
@@ -73,4 +74,26 @@ export function newStem(st: Settings, kind: ListKind, day: ISODate): string {
   const es = st.essos ? essoName(st.essos) : '';
   if (kind === 'duties') return 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + (es || day.slice(0, 4));
   return kind === 'people' ? ('ΔΥΝΑΜΟΛΟΓΙΟ ' + es + ' ' + (st.unitName || '')).replace(/\s+/g, ' ').trim() : KIND[kind].title;
+}
+
+// Τα αρχεία που γράφουν μήνα ή χρονιά στο τέλος (όχι ημερομηνία): η επιλογή «Ημερομηνία» δεν έχει νόημα εκεί
+export const TEXT_TAIL: FileId[] = ['check', 'cadreLeave', 'cadrePlan', 'cadreDuty'];
+// Το When που δίνει ο παραγωγός κάθε αρχείου (main/excel.ts, για τη μέρα day): ίδιο κείμενο με το πραγματικό αρχείο
+export function sampleWhen(id: FileId, day: ISODate): When {
+  const m = +day.slice(5, 7), y = day.slice(0, 4);
+  if (id === 'check') return { text: norm(MONTHS[m - 1]) + ' ' + y };
+  if (id === 'cadreLeave') return { text: y };
+  if (id === 'cadrePlan' || id === 'cadreDuty') return { text: upper(MONTHS[m - 1]) + ' ' + y };
+  if (id === 'imer') return { from: day, to: day };
+  return day;
+}
+// Ζεύγη γραμμών που δίνουν το ίδιο όνομα αρχείου (ίδιο όνομα και κατάληξη) για την ίδια μέρα
+export function sameNames(st: Settings, day: ISODate): [string, string, string][] {
+  const seen = new Map<string, string>(); const out: [string, string, string][] = [];
+  for (const r of FILE_ROWS(st)) {
+    const n = fileName(st, r.id, defaultStem(st, r.id), sampleWhen(r.id, day), r.ext);
+    const k = n.toLowerCase(); const was = seen.get(k);
+    if (was !== undefined) out.push([n, was, r.label]); else seen.set(k, r.label);
+  }
+  return out;
 }

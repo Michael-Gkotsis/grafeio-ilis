@@ -1196,10 +1196,12 @@ const countHidden = (a: number, b: number, rowH: (r: number) => number) => { let
 // Το κλειδί των ρυθμίσεων εκτύπωσης ενός εντύπου: το όνομα του αρχείου χωρίς ημερομηνίες, αριθμούς και κατάληξη
 // («ΗΚΑΙ 2Η ΕΠΧΙΑ 21.10.26.xlsx» και «… 22.10.26.xlsx» → ίδιο κλειδί), ώστε να θυμάται το ίδιο έντυπο κάθε μέρα
 const GR_MONTHS = /(ΙΑΝΟΥΑΡΙΟΣ|ΦΕΒΡΟΥΑΡΙΟΣ|ΜΑΡΤΙΟΣ|ΑΠΡΙΛΙΟΣ|ΜΑΙΟΣ|ΙΟΥΝΙΟΣ|ΙΟΥΛΙΟΣ|ΑΥΓΟΥΣΤΟΣ|ΣΕΠΤΕΜΒΡΙΟΣ|ΟΚΤΩΒΡΙΟΣ|ΝΟΕΜΒΡΙΟΣ|ΔΕΚΕΜΒΡΙΟΣ)/g;
+// οι σύντομοι μήνες των Ονομάτων αρχείων («13 Νοέ 26», «13 ΝΟΕ 2026»): μόνο ως ολόκληρη λέξη (το \b δεν δουλεύει με ελληνικά)
+const SHORT_MONTHS = /(^|[\s\-_.,])(ΙΑΝ|ΦΕΒ|ΜΑΡ|ΑΠΡ|ΜΑΙ|ΙΟΥΝ|ΙΟΥΛ|ΑΥΓ|ΣΕΠ|ΟΚΤ|ΝΟΕ|ΔΕΚ)(?=$|[\s\-_.,])/g;
 export function printKey(file: string): string {
   const base = file.split(/[\\/]/).pop() || file;
   const k = base.replace(/\.xls[xm]?$/i, '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase()
-    .replace(GR_MONTHS, ' ').replace(/\d{1,4}([-./]\d{1,4})+/g, ' ').replace(/\(\d+\)/g, ' ').replace(/\b(ΕΩΣ)\b/g, ' ').replace(/\b\d+\b/g, ' ')
+    .replace(GR_MONTHS, ' ').replace(SHORT_MONTHS, '$1 ').replace(/\d{1,4}([-./]\d{1,4})+/g, ' ').replace(/\(\d+\)/g, ' ').replace(/\b(ΕΩΣ)\b/g, ' ').replace(/\b\d+\b/g, ' ')
     .replace(/[-_.,]+/g, ' ').replace(/\s+/g, ' ').trim();
   return k.slice(0, 80) || 'ΑΡΧΕΙΟ';
 }

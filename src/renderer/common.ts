@@ -398,8 +398,9 @@ export function ExportProvider({ children }: P) {
 }
 export const useExport = () => useContext(ExportCtx);
 export const useExportBusy = () => useContext(ExportBusyCtx);
-export function ExportButton({ kind, date, label, variant, size, disabled }: P) {
-  const ex = useExport(); const busy = useExportBusy(); const hp = useHeadPick(sigFormOf(kind));
+// pick: το «Επικεφαλίδα:» της οθόνης (το ίδιο κουτάκι δείχνει και την προεπισκόπηση)· χωρίς αυτό το κουμπί έχει δικό του
+export function ExportButton({ kind, date, label, variant, size, disabled, pick }: P) {
+  const ex = useExport(); const busy = useExportBusy(); const own = useHeadPick(sigFormOf(kind)); const hp = pick || own;
   return html`<${Fragment}>${hp.node}<${Button} variant=${variant} size=${size} disabled=${!!busy || disabled} onClick=${() => ex(kind, date, label, false, undefined, hp.take())}>${busy === kind ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//><${PrintButton} kind=${kind} date=${date} label=${label} size=${size} disabled=${disabled} take=${hp.take}/><${SigsButton} kind=${kind} date=${date} label=${label} size=${size} disabled=${disabled} headId=${hp.headId} take=${hp.take}/><//>`;
 }
 /* «Υπογραφές…»: βγαίνει με άλλες υπογραφές αυτή τη φορά (ή και τις επόμενες, στις Ρυθμίσεις) */
