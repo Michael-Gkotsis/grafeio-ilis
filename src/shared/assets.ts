@@ -159,8 +159,9 @@ export function registry(s: RegistryState, live?: { day: ISODate; hm: string }):
     // διαγραμμένη: δεν φαίνεται. Δεν κρύβει πια το κύριο όπλο κάποιου με τον ίδιο αριθμό (sweep 17/11: ο Οπλισμός το έδειχνε, το μητρώο όχι)·
     // η διαγραφή κύριου όπλου το βγάζει και από το Δυναμολόγιο (commands.ts assetGone)
     if (a.gone) continue;
-    const k = weaponKey(a.no); seen.add(k);
-    const pr = cfg.cats.find(c => c.id === a.cat)?.kind === 'weapon' || !catOf(cfg, a.cat) ? byKey.get(k) : undefined;
+    // μόνο όπλο (ή άγνωστη κατηγορία) ενώνεται με το κύριο όπλο ίδιου αριθμού: υλικό με τον ίδιο αριθμό δεν κρύβει πια το όπλο του ατόμου (έλεγχος Π2, 25/11)
+    const k = weaponKey(a.no); const w = cfg.cats.find(c => c.id === a.cat)?.kind === 'weapon' || !catOf(cfg, a.cat); if (w) seen.add(k);
+    const pr = w ? byKey.get(k) : undefined;
     // κύριο όπλο κάποιου: κάτοχος, τύπος, οπλοβαστός και θέση από το Δυναμολόγιο, όχι από την εγγραφή
     rows.push(pr && k ? { key: a.id, a: clean({ ...a, holder: pr.h, type: pr.type || a.type, rack: pr.rack || undefined, wpos: pr.wpos || undefined }), stored: true, link: pr.h, cat: catOf(cfg, a.cat) } : { key: a.id, a, stored: true, cat: catOf(cfg, a.cat) });
   }
@@ -172,7 +173,9 @@ export function registry(s: RegistryState, live?: { day: ISODate; hm: string }):
   if (live && hasSvcAway(s.settings)) {
     const info = weaponInfo(s, live.day, live.hm); const seat = new Map<string, number>(); armMap(s as AppState).forEach((p, id) => { if (p.cid) seat.set(p.cid, id); });
     for (const r of rows) {
-      const h = r.link; const pid = h ? (h.k === 'person' ? h.pid : seat.get(h.cid)) : undefined;
+      // και το δεύτερο όπλο ατόμου (όπως στην Κατάσταση οπλισμού, secondText)· όχι όπλο προς επισκευή, ακινησία ή διαγραφή (Π2, 25/11)
+      if (r.a.state && r.a.state !== 'ok') continue;
+      const h = r.link || (r.cat?.kind === 'weapon' && r.a.holder?.k === 'person' ? r.a.holder : undefined); const pid = h ? (h.k === 'person' ? h.pid : seat.get(h.cid)) : undefined;
       const nm = pid != null ? info.awayName.get(pid) : undefined; if (nm) r.away = nm;
     }
   }
