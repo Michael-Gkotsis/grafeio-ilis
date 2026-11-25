@@ -7,7 +7,7 @@ import { MONTHS, addDays, dm, dmy, weekday, type ISODate } from './dates';
 import { KIND_NAME, type AppState, type Cadre, type CadreDuty, type CadreDutyCfg, type CadreDutyGroup, type CadreDutyPerson, type CadreService, type Settings } from './domain';
 import { hkRowsOf, rankTxt } from './ranks';
 import { cadreStatusOn, orderedCadre } from './cadre';
-import { cadreOf, cadreOnlyOf, dutyStats, nextCadrePid, isHol, postBy, setCadreFiller, type CadreOnly, type CadreSeatFill, type DutyStat } from './rules';
+import { cadreOf, cadreOnlyAll, cadreOnlyOf, dutyStats, nextCadrePid, isHol, postBy, setCadreFiller, type CadreOnly, type CadreSeatFill, type DutyStat } from './rules';
 import { daysOfMonth, monthIndex, monthOf, planDays, shiftMonth, type MonthIndex, type PlanCell, type PlanDay } from './cadrePlan';
 import { upper } from './text';
 
@@ -85,14 +85,16 @@ export function dutyIndex(s: AppState): Map<string, Map<ISODate, DayDuty>> {
 // Η θέση «μόνο για στελέχη» μετρά ως μία υπηρεσία του προγράμματος στελεχών (BlockDef.cadreAs, αλλιώς η πρώτη της ομάδας). Όταν βάλεις στέλεχος στη θέση,
 // μπαίνει και στο πρόγραμμα στελεχών ως αυτή η υπηρεσία· όταν βάλεις την υπηρεσία στο πρόγραμμα, γεμίζει η κενή θέση· και τα δύο σβήνουν μαζί.
 // Στο πρόγραμμα (cadreDuties) η εγγραφή έχει via = κλειδί της θέσης· οι υπόλοιποι υπολογισμοί (ΗΔ, ΗΚΑΙ, απαλλαγές) διαβάζουν μόνο το πρόγραμμα.
+// Και για θέση ανενεργή ή άλλου εντύπου (cadreOnlyAll, έλεγχος 25/11): οι υπηρεσίες που έγιναν εκεί μένουν ως η υπηρεσία του προγράμματος
 export function linkedSvc(st: Settings, k: string): CadreService | undefined {
-  const o = k ? cadreOnlyOf(st).get(k) : undefined; if (!o) return undefined;
+  const o = k ? cadreOnlyAll(st).get(k) : undefined; if (!o) return undefined;
   const g = dutyCfgOf(st).groups.find(x => x.id === o.group); return g?.services.find(x => x.id === o.as) || g?.services[0];
 }
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 export function syncLinked(prev: AppState, next: AppState, newId: () => string): AppState {
-  const co = cadreOnlyOf(next.settings); const was0 = prev.cadreDuties || NO_DUTIES; const list0 = next.cadreDuties || NO_DUTIES;
-  if (!co.size && !list0.some(x => x.via)) return next;
+  // coAll: όλες οι θέσεις «Μόνο στελέχη» (και ανενεργές/άλλου εντύπου) για ό,τι έγινε· co: μόνο όσες γεμίζουν σήμερα, για το «η εγγραφή γεμίζει τη θέση»
+  const co = cadreOnlyOf(next.settings); const coAll = cadreOnlyAll(next.settings); const was0 = prev.cadreDuties || NO_DUTIES; const list0 = next.cadreDuties || NO_DUTIES;
+  if (!coAll.size && !list0.some(x => x.via)) return next;
   if (prev.guards === next.guards && was0 === list0 && prev.settings === next.settings) return next;
   let guards = next.guards, cadreList = next.cadreList; let list = list0;
   const was = new Set(was0); const have = new Set(list0.map(x => x.id));
@@ -108,7 +110,7 @@ export function syncLinked(prev: AppState, next: AppState, newId: () => string):
   const dates = new Set<ISODate>();
   for (const d of Object.keys(guards)) if (full || guards[d] !== prev.guards[d]) dates.add(d);
   for (const d of Object.keys(prev.guards)) if (!guards[d]) dates.add(d);
-  for (const d of dates) for (const k of co.keys()) {
+  for (const d of dates) for (const k of coAll.keys()) {
     const v = linkedSvc(next.settings, k); const c = v ? cadreAt(guards, d, k) : undefined;
     const pb = prev.guards[d]?.[k]; const before = pb != null && pb < 0 ? cadreOf({ cadreList: prev.cadreList }, pb) : undefined;
     if (before && (!c || c.id !== before.id)) setList(x => (x.date === d && x.cid === before.id && x.via === k ? null : x));

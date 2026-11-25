@@ -220,6 +220,20 @@ export function cadreOnlyOf(st: Settings): Map<string, CadreOnly> {
   else { m = new Map(); for (const p of postsOf(st)) { const b = bl.find(x => x.id === p.block); if (b?.who === 'cadre') m.set(p.k, { group: b.cadreGroup || '', ...(b.cadreAs ? { as: b.cadreAs } : {}), label: p.label }); } }
   coIdx.set(st, m); return m;
 }
+// Για το ιστορικό (έλεγχος 25/11): και οι θέσεις «Μόνο στελέχη» που δεν γεμίζουν σήμερα, δηλαδή ανενεργές ή άλλου εντύπου (ΣΒΕΝ ↔ ΣΠΕΝ).
+// Οι υπηρεσίες που έγιναν σε αυτές μένουν ως η υπηρεσία του προγράμματος στελεχών (π.χ. ΑΥΔΜ). Πρώτα του εντύπου που ισχύει· κλειδί που είναι
+// σήμερα θέση στρατιωτών δεν μπαίνει. Μόνο για την αντιστοίχιση θέσης ↔ προγράμματος (cadreDuty.ts linkedSvc), όχι για τη συμπλήρωση.
+const coAllIdx = new WeakMap<Settings, Map<string, CadreOnly>>();
+export function cadreOnlyAll(st: Settings): Map<string, CadreOnly> {
+  let m = coAllIdx.get(st); if (m) return m;
+  const all = everyBlock(st).filter(b => b.who === 'cadre');
+  if (!all.length) m = NO_CO;
+  else {
+    m = new Map(cadreOnlyOf(st)); const live = new Set(postsOf(st).map(p => p.k));
+    for (const b of all) for (const p of b.posts) if (!m.has(p.k) && !live.has(p.k)) m.set(p.k, { group: b.cadreGroup || '', ...(b.cadreAs ? { as: b.cadreAs } : {}), label: p.label });
+  }
+  coAllIdx.set(st, m); return m;
+}
 // Η συμπλήρωση των θέσεων στελεχών μιας μέρας γράφεται στο cadreDuty.ts (εξαρτάται από το rules.ts): εκεί δηλώνεται εδώ, ώστε να μη γίνει κυκλική εισαγωγή
 export interface CadreSeatFill { put: { k: string; cid: string }[]; empty: { k: string; group: string }[]; extra: { k: string; cid: string }[] }
 let cadreFiller: ((s: AppState, date: ISODate) => CadreSeatFill) | null = null;
