@@ -25,6 +25,7 @@ import { emptyBack, planExtras, type BackReport } from './backFill';
 import { planBoxes, type BoxInfo } from './frontBoxes';
 import type { Sig } from '../shared/sigs';
 import { HK_COLS } from '../shared/sources';
+import { stateLabel } from '../shared/tplMap';
 
 export interface FillOpts {
   dryRun?: boolean;
@@ -126,6 +127,14 @@ function planData(sheets: SheetModel[], shape: BookShape, front: SheetShape, reg
     if (k && !c.rule.keys.includes(k)) { badCol.add(c.c); warnings.push('Η στήλη «' + c.text + '» μετρά τη λέξη «' + word + '» που είναι άλλη κατάσταση: δεν γράφτηκε στο φύλλο δεδομένων'); continue; }
     for (const k2 of c.rule.keys) if (!colOfKey.has(k2)) colOfKey.set(k2, c.c);
   }
+  // κατάσταση χωρίς στήλη στο έντυπο (π.χ. υπηρεσία σε ΗΚΑΛ που μετρά μόνο απόντες): η λέξη της λίστας του φύλλου με την ίδια έννοια
+  // («ΥΠΗΡΕΣΙΑ»), αν δεν τη μετρά άλλη στήλη· αλλιώς ο κωλυόμενος είναι μέσα στο στρατόπεδο: η λέξη «ΠΑΡΩΝ» (έλεγχος 25/11)
+  const counted = new Set([...colW.keys()].map(c => top(colW, c)));
+  const wordOfKey = (k: string): string | undefined => {
+    const v = info.vocab.find(x => x.col === colLetter(statusCol ?? -1) && x.concept && (STATUS_COL[x.concept] ?? (x.concept.startsWith('hkcol:') ? x.concept.slice(6) : null)) === k && !counted.has(x.text));
+    if (v) return v.text;
+    return KOL_KEYS.includes(k) && !ABS_KEYS.includes(k) ? presentWord : undefined;
+  };
   const attachedShown = map.cols.some(c => c.rule?.t === 'attached' && map.rows.some(r => r.rule && !dm.formulas.has(cellKey(r.r, c.c)) && !sheets.find(s => s.name === front.name)!.formulas.has(cellKey(r.r, c.c))));
   const people: { w: HkWho; rank: string; status: string | null }[] = [];
   for (const w of who) {
@@ -136,7 +145,7 @@ function planData(sheets: SheetModel[], shape: BookShape, front: SheetShape, reg
     let status: string | null = null;
     if (w.col == null) status = presentWord ?? null;
     else {
-      const c = colOfKey.get(w.col); const sw = c != null && !badCol.has(c) ? top(colW, c) : undefined;
+      const c = colOfKey.get(w.col); const sw = c != null && !badCol.has(c) ? top(colW, c) : wordOfKey(w.col);
       if (!sw) info.unwritable.push('κατάσταση «' + w.col + '» χωρίς λέξη στο φύλλο· γράφτηκε χωρίς κατάσταση');
       else { status = sw.replace(/[*?~]/g, ''); if (!critMatches(sw, status)) { status = null; info.unwritable.push('η λέξη «' + sw + '» έχει μπαλαντέρ'); } }
     }
@@ -219,6 +228,9 @@ export async function fillAdaptive(tpl: Buffer, s: AppState, date: ISODate, prof
   if (region.driven) {
     const dp = planData(sheets, shape, sh, region, map, cls.who, eng, lex);
     if (dp) { plan.push(...dp.plan); if (dp.box) dataBoxes = [dp.box]; rep.data = dp.info; rep.warnings.push(...dp.warnings); }
+    // οι αριθμοί που γράφεις με το χέρι (εκτός από τους Μισθοτροφοδοτηθέντες, που γράφονται στο κελί τους) δεν είναι άτομα του φύλλου δεδομένων
+    const hand = Object.entries(cls.manual).flatMap(([r, cs]) => Object.entries(cs || {}).filter(([k, n]) => k !== 'ab' && n > 0).map(([k, n]) => r + ': ' + stateLabel(k) + ' ' + n));
+    if (dp && hand.length) rep.warnings.push('Οι αριθμοί που έγραψες με το χέρι (' + hand.join(', ') + ') δεν μπαίνουν: το έντυπο μετρά τα άτομα του φύλλου «' + dp.info.sheet + '».');
   }
   const wb = await Workbook.open(tpl);
   if (opts.extras !== false) {
