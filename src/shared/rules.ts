@@ -972,6 +972,9 @@ function fillDay0(s: AppState, date: ISODate, rooms?: readonly number[] | null):
     const r = guardUnavailable(work, date, f, x.k, idx);
     g[x.k] = f; n++; setDay(); mark(f);
     if (r) fixedWarn.push(who + ': μπήκε παρά τον κανόνα (' + r + ')');
+    // όριο υπηρεσιών (Michael, 25/11: «όπως τώρα + ειδοποίηση»): ο μόνιμος μπαίνει κάθε μέρα, και η ενέργεια λέει ότι πέρασε το όριο
+    const fl = dutyLimitOf(s.rules, pm0.get(f));
+    if (fl && !limited(pm0.get(f)!, s.settings.lists)) { const c = (limitGate?.date === date ? limitGate.n.get(f) : undefined) ?? dutyCount(s, date, f, fl.per, idx); if (c >= fl.max) fixedWarn.push(who + ': μπήκε πάνω από το όριο υπηρεσιών (' + (c + 1) + '/' + fl.max + ')'); }
   }
   const fixed = fixedIds(s); const memo = new Map<string, number[]>();
   const mine = new Set<string>();   // οι θέσεις που γέμισε αυτή η συμπλήρωση (μόνο αυτές μετακινούνται στην επιδιόρθωση)
