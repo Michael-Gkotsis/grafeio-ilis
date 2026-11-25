@@ -1,6 +1,6 @@
 // Καθαρές συναρτήσεις κανόνων: ίδιες στο main process και στο UI (09 §2, shared/rules)
 import { HK } from './unit';
-import { isUnit } from './mode';
+import { isUnit, leavingBlock } from './mode';
 import { collator, upper } from './text';
 import { addDays, daysBetween, dm, dmy, greekHolidays, isWeekend, parseD, weekday, DOW_FULL, type ISODate } from './dates';
 import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, HK_COL_KEY, absKeysOf, hkColsOf, isAbsCol, isKolCol, kolKeysOf, isAway, svcAbsent, svcColOf, svcDefault, isEpopOrigin, LEAVE_AWAY_NO_COL, LEAVE_NO_COL, leaveCol, typeHkOf, leaveMode, leaveNameKey, live, medNote, medNoteXl, medWarns, notesOf, noDutyOf, originRow, statusLbl, type UserLists } from './ranks';
@@ -81,7 +81,12 @@ export function seatMap(s: Pick<AppState, 'people' | 'cadreList'>): Map<number, 
   seatMapIdx.set(s.people, { cl, m });
   return m;
 }
-const limited = (p: Person, lists?: UserLists) => !!p.cid || isEpop(p, lists);
+// μία φορά ανά άτομο και λίστες (η αυτόματη το ρωτά για κάθε άτομο σε κάθε θέση, και το isEpop διαβάζει βαθμό και λίστες· έλεγχος 25/11)
+const limCache = new WeakMap<Person, { lists: UserLists | undefined; v: boolean }>();
+const limited = (p: Person, lists?: UserLists) => {
+  const c = limCache.get(p); if (c && c.lists === lists) return c.v;
+  const v = !!p.cid || isEpop(p, lists); limCache.set(p, { lists, v }); return v;
+};
 // Υπηρεσίες του μήνα της μέρας (χωρίς την ίδια τη μέρα): όσες μέρες έχει υπηρεσία, από το ημερολόγιο και από το Excel.
 // withDay: και η ίδια η μέρα (καρτέλα: «σήμερα» μετρά κι αυτή· στην επιλογή και στο όριο η μέρα που διαλέγεις δεν μετρά)
 export function monthDuties(s: AppState, date: ISODate, pid: number, idx?: Map<number, Set<ISODate>>, withDay = false): number {
@@ -156,8 +161,9 @@ let limitGate: { date: ISODate; n: Map<number, number> } | null = null;
 let limitOff = false;   // στη συμπλήρωση «πάνω από το όριο» το όριο δεν ισχύει (fillOverLimit)
 function limitBlock(s: AppState, date: ISODate, pid: number, idx?: Map<number, Set<ISODate>>): string | null {
   if (pid <= 0 || limitOff) return null;
-  const p = personMap(s.people).get(pid); if (!p || limited(p, s.settings.lists)) return null;
-  const lim = dutyLimitOf(s.rules, p); if (!lim) return null;
+  // πρώτα αν υπάρχει όριο (φτηνό), μετά αν είναι ΕΠΟΠ/στέλεχος (ακριβό): χωρίς όριο η αυτόματη δεν πληρώνει το δεύτερο (έλεγχος 25/11)
+  const p = personMap(s.people).get(pid); if (!p) return null;
+  const lim = dutyLimitOf(s.rules, p); if (!lim || limited(p, s.settings.lists)) return null;
   const n = (limitGate?.date === date ? limitGate.n.get(pid) : undefined) ?? dutyCount(s, date, pid, lim.per, idx);
   return n >= lim.max ? 'Πάνω από το όριο: θα είναι η ' + (n + 1) + 'ή υπηρεσία του (όριο ' + lim.max + ')' : null;
 }
@@ -653,6 +659,7 @@ export const seatlessOn = (s: AppState, date: ISODate, pid: number) => (s.dutyLo
 export function ruleBlock(s: AppState, date: ISODate, pid: number, idx?: Map<number, Set<ISODate>>, k?: string | null): string | null {
   const r = s.rules;
   if (pid > 0 && k && cadreOnlyOf(s.settings).has(k)) return 'Υπηρεσία μόνο για στελέχη';   // Michael, 24/11: με το χέρι μόνο με αιτία
+  const lv = leavingBlock(s, date, pid); if (lv) return lv;   // προγραμματισμένη αναχώρηση (μονάδα): από τη μέρα της δεν είναι σε δύναμη
   const lim = monthBlock(s, date, pid, idx); if (lim) return lim;
   const c = pid < 0 ? cadreOf(s, pid) : undefined;
   const rb = c && seatBlock(s, c, date); if (rb) return rb;   // στέλεχος: τα ίδια «δεν μπορεί» με το πρόγραμμα στελεχών (cadreDuty.ts)
@@ -946,7 +953,7 @@ function fillDay0(s: AppState, date: ISODate, rooms?: readonly number[] | null):
     if (g[x.k] || !f || !all.some(p => p.id === f)) continue;
     const who = 'Μόνιμος ' + x.label + ' ' + shortName(pm0.get(f)!);
     // «Ήδη σε άλλη θέση» κρίνεται χωριστά: άλλος λόγος (μέρα χωρίς υπηρεσία, εξαίρεση, όριο) δεν το κρύβει, ώστε να μη μπει δύο φορές
-    const st = dutyBlock(live(work), date, f, x, s.settings.lists) || monthBlock(work, date, f, idx) || alreadyOn(work, date, f, x.k);
+    const st = dutyBlock(live(work), date, f, x, s.settings.lists) || monthBlock(work, date, f, idx) || leavingBlock(work, date, f) || alreadyOn(work, date, f, x.k);
     if (st) { fixedWarn.push(who + ': δεν μπήκε (' + st + ')'); continue; }
     const r = guardUnavailable(work, date, f, x.k, idx);
     g[x.k] = f; n++; setDay(); mark(f);
