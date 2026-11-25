@@ -350,6 +350,9 @@ export class Lexicon {
         return { ...m, text: raw };
       }
     }
+    // «Μ.ΛΧΙΑΣ», «Μ. ΛΧΙΑΣ» = μόνιμος + βαθμός (το «Μ» μόνο του είναι πολύ μικρό για λέξη προέλευσης· μοιάζει με «ΑΛΧΙΑΣ»)
+    const mon = /^[ΜMμm]\s*\.\s*(\S.*)$/u.exec(raw);
+    if (mon && this.rankKinds(o)) { const m = this.matchPlain('ΜΟΝΙΜΟΣ ' + mon[1], o); if (m.concept && m.origin) return { ...m, text: raw }; }
     const m = this.matchPlain(raw, o);
     return { ...m, text: raw };
   }

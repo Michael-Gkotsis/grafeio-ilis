@@ -65,6 +65,9 @@ export function asRowRule(x: unknown): RowRule | null {
   return { keys, ...(origins ? { origins } : {}), ...(ranks ? { ranks } : {}), ...(who ? { who } : {}) };
 }
 
+// «(Μ)» = μόνιμοι: η λίστα προελεύσεων της εφαρμογής δεν έχει «Μόνιμος»· μόνιμο είναι το στέλεχος χωρίς προέλευση ή με ΣΜΥ/ΣΣΕ (ποτέ στρατιώτης)
+const MONIMOS = 'origin:ΜΟΝΙΜΟΣ';
+const isMonimos = (w: HkWho, o: string | null) => w.kind === 'cadre' && (o == null ? !(w.origin || '').trim() : o === 'origin:ΣΜΥ' || o === 'origin:ΣΣΕ');
 // ------------------------------------------------------------------ the engine: counts over the shared classification
 export class HkEngine {
   private oc = new Map<string, string | null>(); private rc = new Map<string, string | null>();
@@ -82,7 +85,7 @@ export class HkEngine {
   matches(row: RowRule, w: HkWho): boolean {
     if (!row.keys.includes(w.row)) return false;
     if (row.who && w.kind !== row.who) return false;
-    if (row.origins) { const o = this.originOf(w); if (!o || !row.origins.includes(o)) return false; }
+    if (row.origins) { const o = this.originOf(w); if (!(o && row.origins.includes(o)) && !(row.origins.includes(MONIMOS) && isMonimos(w, o))) return false; }
     if (row.ranks) { const r = this.rankOf(w); if (!r || !row.ranks.includes(r)) return false; }
     return true;
   }
