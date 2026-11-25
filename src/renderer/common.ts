@@ -137,7 +137,7 @@ export const RangeField = (props: P) => html`<${Combo} className="ui-input" opti
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const CAL = '\u0001cal';
 const fake = (value: string) => ({ target: { value }, currentTarget: { value } });
-export function DateField({ value, onChange, min, max, className, ...rest }: P) {
+export function DateField({ value, onChange, min, max, className, clearable, ...rest }: P) {
   const { state, today } = useStore();
   const shown = value ? dmy(value) : '';
   const [text, setText] = useState(shown);
@@ -154,7 +154,8 @@ export function DateField({ value, onChange, min, max, className, ...rest }: P) 
     return [...quick.filter(([d]) => ok(d)).map(([d, rel]) => ({ value: dmy(d), label: lbl(d, rel), group: 'Γρήγορα' })),
       ...days.filter(ok).map(d => ({ value: dmy(d), label: lbl(d), group: 'Μέρες' })), { value: CAL, label: 'Άλλη μέρα από το ημερολόγιο…', group: ' ' }];
   }, [anchor, today, min, max, state.settings]);
-  const commit = (t: string) => { const d = parseDmy(t, anchor); if (ok(d)) { setText(dmy(d)); if (d !== value) onChange?.(fake(d)); } else setText(shown); };
+  // clearable (προαιρετικές ημερομηνίες): κενό πεδίο = σβήνει την ημερομηνία (onChange με ''), αλλιώς γυρίζει στην παλιά
+  const commit = (t: string) => { if (clearable && !t.trim()) { setText(''); if (value) onChange?.(fake('')); return; } const d = parseDmy(t, anchor); if (ok(d)) { setText(dmy(d)); if (d !== value) onChange?.(fake(d)); } else setText(shown); };
   const change = (e: P) => {
     const t: string = e.target.value;
     if (t === CAL) { try { cal.current?.showPicker(); } catch { cal.current?.focus(); } return; }
