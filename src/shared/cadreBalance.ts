@@ -107,8 +107,11 @@ export function apalLedger(s: AppState, c: Cadre, today?: ISODate): ApalRow[] {
   type Ev = { d: ISODate; ord: number; what: string; gain: number; take: number; kind: ApalRow['kind']; id?: string };
   const ev: Ev[] = [];
   if (c.pid != null && cfg.apalPerDuty + cfg.apalHolExtra > 0) {
+    // θέση «μόνο στελέχη» συνδεδεμένη με υπηρεσία: η ίδια υπηρεσία είναι και γραμμή του προγράμματος (via = θέση)· μετρά μία φορά, από το πρόγραμμα
+    const linked = new Set<string>(); for (const x of s.cadreDuties || []) if (x.cid === c.id && x.via) linked.add(x.date + '|' + x.via);
     for (const e of dutyStats(s).get(c.pid)?.log || NONE_LOG) {
       if (today && e.d > today) continue;
+      if (linked.size && linked.has(e.d + '|' + e.k)) continue;
       const g = cfg.apalPerDuty + (e.h ? cfg.apalHolExtra : 0); if (g <= 0) continue;
       const post = e.k ? postBy(s, e.k) : undefined;
       ev.push({ d: e.d, ord: 1, what: 'Υπηρεσία ' + (post?.label || (KIND_NAME as Record<string, string>)[e.kind] || e.kind) + (e.h ? ' (ΣΚ/αργία)' : ''), gain: g, take: 0, kind: 'duty' });
