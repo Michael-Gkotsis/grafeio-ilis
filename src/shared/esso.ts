@@ -43,7 +43,9 @@ export function nextEsso(cur: Esso | null, today: ISODate): Esso {
 
 // Η κατάσταση της νέας ΕΣΣΟ: ό,τι αφορά τους στρατιώτες της προηγούμενης φεύγει (άτομα, καταστάσεις, υπηρεσίες,
 // δυνατότητες, αιτήσεις, ΗΚΑΙ, έλεγχος υπηρεσιών)· μένουν οι κανόνες, οι ρυθμίσεις της μονάδας, οι υπηρεσίες, οι λίστες,
-// οι αργίες, τα templates των εντύπων και τα στελέχη. Τα Excel της παλιάς δεν είναι πια πηγές· ο φάκελος των αρχείων
+// οι αργίες, τα templates των εντύπων και τα στελέχη (λίστα, καταστάσεις, υπόλοιπα αδειών/απαλλαγών, «δεν θέλει υπηρεσία», πρόγραμμα υπηρεσιών
+// χωρίς το via των θέσεων, γιατί οι φρουρές καθαρίζουν) και το μητρώο οπλισμού/υλικού με το ιστορικό του (οι κάτοχοι και οδηγοί-άτομα φεύγουν,
+// γιατί οι αριθμοί των ατόμων ξεκινούν πάλι από 1: το είδος γίνεται ΑΧΡΕΩΤΟ). Τα Excel της παλιάς δεν είναι πια πηγές· ο φάκελος των αρχείων
 // γίνεται ο φάκελος της νέας (outputDir) και τα έντυπα πηγαίνουν εκεί (χωρίς δικό τους φάκελο). Το έντυπο υπηρεσιών
 // ξεκινά από τη ΣΒΕΝ, όπως κάθε νέα σειρά.
 // unit: τύπος μονάδας, κεφαλίδα και μονάδα του τίτλου, όπως ορίστηκαν στο πρώτο βήμα (κενό = όπως ήταν)
@@ -52,7 +54,14 @@ export function freshState(s: AppState, e: Esso, today: ISODate, outputDir: stri
   const forms = Object.fromEntries(Object.entries(st.forms || {}).map(([k, b]) => { const c = { ...b }; delete c.dir; return [k, c]; }).filter(([, b]) => Object.values(b as object).some(v => v !== undefined && v !== '')));
   const settings: Settings = { ...st, essos: { s: e.s, y: e.y, from: today }, sources: {}, newDirs: {}, forms, outputDir, fixed: {}, phase: 'sven', baselineReviewed: true, ...(unit || {}) };
   // σημειώσεις: μένουν οι γενικές και των στελεχών· των στρατιωτών της παλιάς ΕΣΣΟ μένουν στο αρχείο της
-  return { ...emptyState(), rules: s.rules, settings, cadreList: s.cadreList, cadreAbs: s.cadreAbs, notes: (s.notes || []).map(normNote).filter(n => !n.pids || n.cids).map(({ pids: _x, ...n }) => n) };
+  const keep: Partial<AppState> = {};
+  if (s.cadreGrants) keep.cadreGrants = s.cadreGrants;
+  if (s.cadreNoDuty) keep.cadreNoDuty = s.cadreNoDuty;
+  if (s.cadreDutyOf) keep.cadreDutyOf = s.cadreDutyOf;
+  if (s.cadreDuties) keep.cadreDuties = s.cadreDuties.map(({ via: _v, ...x }) => x);
+  if (s.assets) keep.assets = s.assets.map(a => { const { holder, driver, ...r } = a; return { ...r, ...(holder && holder.k !== 'person' ? { holder } : {}), ...(driver && driver.k !== 'person' ? { driver } : {}) }; });
+  if (s.assetLog) keep.assetLog = s.assetLog;
+  return { ...emptyState(), ...keep, rules: s.rules, settings, cadreList: s.cadreList, cadreAbs: s.cadreAbs, notes: (s.notes || []).map(normNote).filter(n => !n.pids || n.cids).map(({ pids: _x, ...n }) => n) };
 }
 
 // ------------------------------------------------------------------ αρχείο ΕΣΣΟ (φάκελος με βάση, Excel και ΕΣΣΟ.json)
