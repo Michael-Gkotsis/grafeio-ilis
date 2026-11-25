@@ -318,7 +318,7 @@ export function planSvc(sh: SheetModel, det: SvcSheet, matches: SvcMatch[], targ
   }
   // άτομα της εφαρμογής σε θέσεις που κανένα μπλοκ δεν πήρε
   for (const k of Object.keys(g)) {
-    if (assigned.has(k)) continue; const p = pm.get(g[k]); if (!p) continue;
+    if (assigned.has(k) || !posts.some(x => x.k === k)) continue; const p = pm.get(g[k]); if (!p) continue;   // ανενεργή υπηρεσία: καμία θέση, καμία προειδοποίηση
     if (plan.unplaced.some(x => x.post === k)) continue;
     const post = posts.find(x => x.k === k); plan.unplaced.push({ post: k, label: post?.label || k, who: seatName(p) });
   }
@@ -377,6 +377,10 @@ export function detectOuts(sh: SheetModel, o: { cols?: Record<string, number> } 
       let last = first;
       if (keyC == null) { last = first - 1; for (let rr = first; rr < sig && rr < first + 60 && !titles.some(x => x.r === rr); rr++) { if ((sh.rows[rr] || []).slice(c1, c2 + 1).some(v => txt(v) !== '')) break; last = rr; } if (last < first) last = first; }
       if (keyC != null) { last = first - 1; for (let rr = first; rr < sig && !titles.some(x => x.r === rr && x.c >= c1 && x.c <= c2); rr++) { const v = sh.rows[rr]?.[keyC]; if (typeof v === 'number' || NUM_LABEL.test(nk(v)) || sh.fx.has(cellKey(rr, keyC))) last = rr; else break; } if (last < first) last = first; }
+      // Α/Α στην επικεφαλίδα αλλά κενά κελιά από κάτω (άγραφο πρότυπο με περιγράμματα): ο ίδιος κανόνας με τη λίστα χωρίς Α/Α
+      if (keyC != null && last <= first && !(typeof sh.rows[first]?.[keyC] === 'number' || NUM_LABEL.test(nk(sh.rows[first]?.[keyC])) || sh.fx.has(cellKey(first, keyC)))) {
+        last = first - 1; for (let rr = first; rr < sig && rr < first + 60 && !titles.some(x => x.r === rr); rr++) { if ((sh.rows[rr] || []).slice(c1, c2 + 1).some(v => txt(v) !== '')) break; last = rr; } if (last < first) last = first;
+      }
       lists.push({ side: t.side, title: t.title, titleRow: t.r, header: r, first, last, c1, c2: Math.min(c2, Math.max(0, ...Object.values(cols).map(Number)) + 3), cols });
       break;
     }
