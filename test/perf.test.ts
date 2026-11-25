@@ -26,6 +26,8 @@ describe('απόδοση με ρεαλιστικά δεδομένα', () => {
   it('οι εντολές και οι κανόνες των οθονών μένουν γρήγοροι', () => {
     expect(s.statuses.length).toBeGreaterThan(1000);
     expect(ms(() => apply(s, { t: 'autofill', date: addDays(END, 1) }, ctx))).toBeLessThan(200);
+    // με όριο υπηρεσιών (#378): ο έλεγχος ΕΠΟΠ/στελέχους μία φορά ανά άτομο, όχι σε κάθε θέση (έλεγχος 25/11: ~16 → ~10 ms)
+    expect(ms(() => apply({ ...s, rules: { ...s.rules, dutyMax: 6, dutyMaxPer: 'month' } }, { t: 'autofill', date: addDays(END, 1) }, ctx))).toBeLessThan(200);
     expect(ms(() => apply(s, { t: 'declare', cmd: { type: 'LEAVE', kind: 'Κανονική', pids: [5], from: END, to: addDays(END, 3) } }, ctx))).toBeLessThan(100);
     const outs = activePeople(s).filter(p => !outBlock(s, END, p.id)).slice(0, 60);
     expect(ms(() => apply(s, { t: 'outs', date: END, changes: outs.map(p => ({ pid: p.id, from: null, to: 'OUT' as const })) }, ctx))).toBeLessThan(100);
