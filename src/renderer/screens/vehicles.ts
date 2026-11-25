@@ -256,8 +256,8 @@ function VehicleEditDialog({ row, cfg, defCat, onClose, onSaved }: P) {
       <//>
       <${Sec} t="Συντήρηση">
         <div className="field-row">${fld('every', 'Κάθε (μήνες)', 'every', { ph: cat?.every ? cat.every + ' (της κατηγορίας)' : '', style: { maxWidth: '170px' } })}
-          <div className="field"><label className="field__label" htmlFor="ve-last">Τελευταία</label><${DateField} id="ve-last" value=${f.last} onChange=${(e: any) => set('last', e.target.value || '')}/></div>
-          <div className="field"><label className="field__label" htmlFor="ve-next">Επόμενη (ημερομηνία)</label><${DateField} id="ve-next" value=${f.next} onChange=${(e: any) => set('next', e.target.value || '')}/></div></div>
+          <div className="field"><label className="field__label" htmlFor="ve-last">Τελευταία</label><${DateField} id="ve-last" clearable value=${f.last} onChange=${(e: any) => set('last', e.target.value || '')}/></div>
+          <div className="field"><label className="field__label" htmlFor="ve-next">Επόμενη (ημερομηνία)</label><${DateField} id="ve-next" clearable value=${f.next} onChange=${(e: any) => set('next', e.target.value || '')}/></div></div>
         <div className="field-row">${fld('lastKm', 'Τελευταία στα ' + u, 'lastKm', { num: true, style: { maxWidth: '150px' } })}${fld('nextKm', 'Επόμενη στα ' + u, 'nextKm', { num: true, style: { maxWidth: '150px' }, ph: cat?.everyKm ? 'κάθε ' + numTxt(cat.everyKm) : '' })}</div>
       <//>
       <${Sec} t="Παρελκόμενα">
