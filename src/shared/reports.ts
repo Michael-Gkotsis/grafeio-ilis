@@ -6,7 +6,7 @@ import { PKEYS } from './personal';
 import { absenceOfCadre, absenceOfPerson } from './absence';
 import { addDays, dayFor, daysBetween, dm, dmy, parseD, MON_SHORT, type ISODate } from './dates';
 import { collator, norm, normGreek, upper } from './text';
-import { fileName } from './fileNames';
+import { fileName, safeName } from './fileNames';
 import { TYPES, blocksOf, everyBlock, fullName, shortName, unitOf, roomCfg, type AppState, type Cadre, type Settings, type Person, type Post, type Status, type TypeKey, type WeaponMove } from './domain';
 import { activePeople, isHol, personMap, seatMap, postBy, postsOf, statusesOn, strengthOf } from './rules';
 import { WEAPON_FILTERS, byOut, inOutText, moveById, moveInCell, moveOutCell, movesAll, isAuto, weaponInfo, weaponMatch, type WeaponFilter, type WeaponInfo } from './weapons';
@@ -819,7 +819,7 @@ export function groupsOf(s: Pick<AppState, 'settings'>, kind: RepKind, rows: Row
 }
 // Τι θα γίνει όταν πατηθεί «Βγάλε», σε απλά λόγια (οδηγός, «Βγάλε…»): πόσα φύλλα/σελίδες, ποια, πού
 // Το όνομα του εντύπου όπως είναι· η ημερομηνία στη μορφή των Ρυθμίσεων › Ονόματα αρχείων (προεπιλογή 19-10-2026)
-export const repFileName = (r: Pick<Report, 'name'>, d: ISODate, st?: Pick<Settings, 'fileNames'>) => fileName(st || {}, 'report', upper(r.name || 'ΕΝΤΥΠΟ').replace(/[\\/:*?"<>|]/g, '-').trim(), d, 'xlsx');
+export const repFileName = (r: Pick<Report, 'name'>, d: ISODate, st?: Pick<Settings, 'fileNames'>) => fileName(st || {}, 'report', safeName(upper(r.name || 'ΕΝΤΥΠΟ')), d, 'xlsx');
 const baseName = (f?: string) => (f || '').split(/[\\/]/).pop() || '';
 export const SPLIT_NOUN: Record<RepSplit, [string, string]> = { none: ['', ''], room: ['θάλαμο', 'θαλάμους'], unit: ['ουλαμό', 'ουλαμούς'], si: ['Σ.Ι.', 'Σ.Ι.'], sub: ['λόχο', 'λόχους'] };
 export function outPlan(s: Pick<AppState, 'settings'>, r: Report, rows: Row[], d: ISODate): { groups: RepGroup[]; text: string } {
