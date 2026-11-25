@@ -507,6 +507,9 @@ async function fillHkaiClassic(tpl: Buffer, s: AppState, d: ISODate, opts: HkaiO
   const det = new Map<string, ReturnType<typeof detectHkai>>();
   for (const n of names) det.set(n, detectHkai({ name: n, rows: await wb.values(n, 120, 40) }, place, own, hkNames));
   const frName = opts.front && wb.hasSheet(opts.front) ? opts.front : [...names].sort((a, b) => det.get(b)!.found - det.get(a)!.found)[0];
+  // αρχείο χωρίς γραμμές βαθμών (Δυναμολόγιο, υπηρεσίες, κενό): όχι αριθμοί στις θέσεις του δείγματος ενός ξένου φύλλου (έλεγχος 25/11)
+  if (!opts.map && !cleanHkaiCells(opts.cells).cells && Math.max(...names.map(n => det.get(n)!.found)) < 3)
+    throw new TemplateError('Το αρχείο δεν μοιάζει με ' + reportOf(s.settings) + ': δεν βρέθηκαν οι γραμμές των βαθμών (Επίλαρχοι, Λοχίες, Στρατιώτες…). Διάλεξε το σωστό αρχείο στα Αρχεία Excel › Template.');
   const backRe = /^\d\s*\.?\s*ΕΓΓΡΑΦΕΣ|^ΧΟΡΗΓΟΥΜΕΝΕΣ ΦΡΟΥΡΕΣ|^ΟΡΓΑΝΑ ΥΠΗΡΕΣΙΑΣ|^ΑΠΟΦΑΣΕΙΣ/;
   let bkName = opts.back && wb.hasSheet(opts.back) ? opts.back : undefined;
   if (!bkName) for (const n of names) if (textCells(await wb.values(n, 120, 40)).some(x => backRe.test(x.t))) { bkName = n; break; }
