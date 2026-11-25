@@ -13,10 +13,10 @@ import { essoPersonTxt, parseEsso } from './esso';
 import { mergeDuties, type DutyCell } from './sources';
 import type { AbsNew, CadreNew } from './cadreSource';
 import { leaveCmdOf, sameLeave, nextCadrePid, seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, rosterSameDay, secondDuty, alreadyOn, twoMode, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
-import { noNotes, svcColOk, svcDefault, cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, isAway, itemName, leavePhrase, listRows, rankTxt, statusLbl, weaponBack, withOrigin, type HkRowDef, type ListId, type UserLists } from './ranks';
+import { noNotes, svcColOk, svcDefault, cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, isAway, itemName, LIST_BASE, leavePhrase, listRows, rankTxt, statusLbl, weaponBack, withOrigin, type HkRowDef, type ListId, type UserLists } from './ranks';
 import { insertCadre, isManualOrder } from './cadre';
 import { clearRange, setNoDuty } from './cadrePlan';
-import { assetCfgOf, newAssetCatId, catOf, cleanAsset, doMaint, heldWarn, holderText, primaryWeapons, registry, sameHolder, STATE_TXT } from './assets';
+import { assetCfgOf, newAssetCatId, catOf, cleanAsset, doMaint, heldBy, heldWarn, holderText, itemsTxt, primaryWeapons, registry, sameHolder, STATE_TXT } from './assets';
 import { doVehMaint, driverText, kmTxt, numTxt, vehName, withKm } from './vehicles';
 import { cleanPerson, dutyCfgOf, serviceOf, syncLinked } from './cadreDuty';
 import { hasTimes, mins, normTime, rangeHm, timeNames, timesTxt } from './hours';
@@ -733,7 +733,9 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       // νέα προέλευση γραμμένη με το χέρι: μένει στις Λίστες, όπως στον στρατιώτη
       const o = x.origin; const lists0 = s.settings.lists;
       const settings = o && !/[,"]/.test(o) && itemKey(o) !== itemKey(old?.origin || '') && !listRows(lists0, 'origins').some(r => itemKey(r.name) === itemKey(o)) ? { ...s.settings, lists: { ...lists0, origins: { ...(lists0?.origins || {}), add: [...(lists0?.origins?.add || []), { name: o }] } } } : s.settings;
-      return { state: { ...s, cadreList, guards, settings }, text: (old ? 'Άλλαξαν τα στοιχεία στελέχους: ' : 'Νέο στέλεχος: ') + rankTxt(x) + ' ' + x.last + ' ' + x.first + (x.monthMax ? ' (υπηρεσίες ' + x.monthMax + ' τον μήνα)' : ''), files: guards !== s.guards ? [HK(), 'Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [HK()] };
+      // βγήκε εκτός δύναμης με χρεωμένα: δεν ξεχρεώνονται μόνα τους (όπως στον στρατιώτη, heldNote)
+      const heldC = old?.active && !x.active ? heldBy(registry(s), { k: 'cadre', cid: x.id }) : [];
+      return { state: { ...s, cadreList, guards, settings }, text: (old ? 'Άλλαξαν τα στοιχεία στελέχους: ' : 'Νέο στέλεχος: ') + rankTxt(x) + ' ' + x.last + ' ' + x.first + (x.monthMax ? ' (υπηρεσίες ' + x.monthMax + ' τον μήνα)' : '') + (heldC.length ? ' · ΠΡΟΣΟΧΗ: χρεωμένα ' + itemsTxt(heldC) + '. Δεν παραδίδονται μόνα τους: ξεχρέωσέ τα από τον Οπλισμό ή το Μητρώο' : ''), files: guards !== s.guards ? [HK(), 'Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [HK()] };
     }
     case 'importCadres': {
       // κάθε στέλεχος περνά από το saveCadre (κανονικοποίηση, προέλευση, ΗΚΑΙ, σειρά)· IBAN/ΑΜΚΑ/ΑΦΜ μπαίνουν μετά, όπως στο setPersonal
@@ -778,6 +780,9 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const x = s.cadreList.find(y => y.id === c.id); if (!x) throw new Error('Δεν βρέθηκε το στέλεχος');
       if (x.pid != null && (Object.values(s.guards).some(g => Object.values(g || {}).includes(x.pid!)) || Object.values(s.dutyLog || {}).some(l => l.some(e => e.pid === x.pid))))
         throw new Error('Ο ' + rankTxt(x) + ' ' + x.last + ' έχει υπηρεσίες στο ημερολόγιο. Βάλ\' τον «εκτός δύναμης» από τα «Στοιχεία», για να μείνει το ιστορικό.');
+      // χρεωμένα ή οδηγός οχήματος: θα έμεναν σε «άγνωστο στέλεχος» (και το κύριο όπλο θα έφευγε από το Μητρώο)
+      { const h = { k: 'cadre', cid: x.id } as const; const rows = registry(s); const held = heldBy(rows, h); const drv = rows.filter(r => !r.a.gone && r.a.driver && sameHolder(r.a.driver, h));
+        if (held.length || drv.length) throw new Error('Ο ' + rankTxt(x) + ' ' + x.last + ' έχει ' + [held.length && 'χρεωμένα: ' + itemsTxt(held), drv.length && 'οδηγός σε: ' + itemsTxt(drv)].filter(Boolean).join(' · ') + '. Ξεχρέωσέ τα από τον Οπλισμό ή το Μητρώο, ή βάλ\' τον «εκτός δύναμης» από τα «Στοιχεία».'); }
       return { state: { ...s, cadreList: s.cadreList.filter(y => y !== x), cadreAbs: s.cadreAbs.filter(a => a.cid !== x.id), ...(s.cadreGrants?.some(g => g.cid === x.id) ? { cadreGrants: s.cadreGrants.filter(g => g.cid !== x.id) } : {}), ...(s.cadreNoDuty?.some(g => g.cid === x.id) ? { cadreNoDuty: s.cadreNoDuty.filter(g => g.cid !== x.id) } : {}), ...(s.cadreDuties?.some(g => g.cid === x.id) ? { cadreDuties: s.cadreDuties.filter(g => g.cid !== x.id) } : {}), ...(s.cadreDutyOf?.[x.id] ? { cadreDutyOf: Object.fromEntries(Object.entries(s.cadreDutyOf).filter(([k]) => k !== x.id)) } : {}) }, text: 'Διαγράφηκε το στέλεχος ' + rankTxt(x) + ' ' + x.last, files: [HK()] };
     }
     case 'addCadreAbs': {
@@ -891,9 +896,22 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const hit = (a: { type?: string }) => normGreek(a.type) === fk;
       let n = 0; const assets = (s.assets || []).map(a => (a.cat === cat.id && hit(a) && a.type !== to ? (n++, { ...a, type: to }) : a));
       // κύριο όπλο ατόμων/στελεχών (εικονικές γραμμές του Μητρώου): όπλα μόνο, ο τύπος γράφεται κεφαλαία όπως στο setWeapons
-      const wt = cat.kind === 'weapon'; const up = to.toUpperCase(); const hw = (x: { wtype?: string }) => wt && normGreek(x.wtype) === fk && x.wtype !== up;
+      const wt = cat.kind === 'weapon'; const fk0 = itemKey(from); const up = to.toUpperCase(); const hw = (x: { wtype?: string }) => wt && normGreek(x.wtype) === fk && x.wtype !== up;
       const people = s.people.map(p => (hw(p) ? (n++, { ...p, wtype: up }) : p)); const cadreList = s.cadreList.map(p => (hw(p) ? (n++, { ...p, wtype: up }) : p));
-      return { state: { ...s, settings: { ...s.settings, assets: { ...s.settings.assets, cats } }, assets: s.assets ? assets : s.assets, people, cadreList }, text: 'Μητρώο: ο τύπος «' + from + '» της κατηγορίας ' + cat.name + ' έγινε «' + to + '»' + (n ? ' (' + n + ' εγγραφές)' : ''), files: [] };
+      // λίστα «Τύποι όπλων»: αλλιώς ο παλιός τύπος ξαναμπαίνει ως αυτόματη κατηγορία «wt:…» και μένει στα dropdown του Οπλισμού
+      let lists = s.settings.lists;
+      if (wt) {
+        const u = lists?.weaponTypes || {}; const add = u.add || []; const hide = u.hide || []; const nk = itemKey(to); const nn = itemName(to, 'weaponTypes');
+        const ra = add.findIndex(y => itemKey(y.name || '') === fk0); const isBase = LIST_BASE.weaponTypes.some(y => itemKey(y) === fk0);
+        if (ra >= 0 || isBase) {
+          const baseTo = LIST_BASE.weaponTypes.some(y => itemKey(y) === nk);
+          let add2 = ra >= 0 ? add.filter((_, j) => j !== ra) : [...add]; let hide2 = ra >= 0 ? [...hide] : hide.some(h => itemKey(h) === fk0) ? [...hide] : [...hide, LIST_BASE.weaponTypes.find(y => itemKey(y) === fk0)!];
+          if (baseTo) hide2 = hide2.filter(h => itemKey(h) !== nk);
+          else if (!add2.some(y => itemKey(y.name || '') === nk)) add2 = ra >= 0 ? [...add2.slice(0, ra), { ...add[ra], name: nn }, ...add2.slice(ra)] : [...add2, { name: nn }];
+          lists = { ...lists, weaponTypes: { ...u, add: add2, hide: hide2 } };
+        }
+      }
+      return { state: { ...s, settings: { ...s.settings, ...(lists !== s.settings.lists ? { lists } : {}), assets: { ...s.settings.assets, cats } }, assets: s.assets ? assets : s.assets, people, cadreList }, text: 'Μητρώο: ο τύπος «' + from + '» της κατηγορίας ' + cat.name + ' έγινε «' + to + '»' + (n ? ' (' + n + ' εγγραφές)' : ''), files: [] };
     }
     case 'saveAsset': case 'assetBulk': case 'assetMaint': case 'assetState': case 'assetHolder': case 'assetGone': case 'deleteAsset': case 'assetFuel': case 'assetKm': case 'assetDriver': return assetCmd(s, c, ctx);
     case 'addRequest': case 'updateRequest': {

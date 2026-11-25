@@ -376,8 +376,8 @@ function AssetEditDialog({ row, all, cfg, defCat, mode, onClose, onSaved }: P) {
       <//>
       <${Sec} t="Συντήρηση">
         <div className="field-row">${fld('every', 'Κάθε (μήνες)', 'every', { ph: cat?.every ? cat.every + ' (της κατηγορίας)' : '', style: { maxWidth: '170px' } })}
-          <div className="field"><label className="field__label" htmlFor="ae-last">Τελευταία</label><${DateField} id="ae-last" value=${f.last} onChange=${(e: any) => set('last', e.target.value)}/></div>
-          <div className="field"><label className="field__label" htmlFor="ae-next">Επόμενη</label><${DateField} id="ae-next" value=${f.next} onChange=${(e: any) => set('next', e.target.value)}/></div>
+          <div className="field"><label className="field__label" htmlFor="ae-last">Τελευταία</label><${DateField} id="ae-last" clearable value=${f.last} onChange=${(e: any) => set('last', e.target.value)}/></div>
+          <div className="field"><label className="field__label" htmlFor="ae-next">Επόμενη</label><${DateField} id="ae-next" clearable value=${f.next} onChange=${(e: any) => set('next', e.target.value)}/></div>
           <label className="check op__war"><input type="checkbox" checked=${f.warOnly} onChange=${(e: any) => set('warOnly', e.target.checked)}/><span>Μόνο εμπόλεμη περίοδο</span></label></div>
       <//>
       <${Sec} t="Παρελκόμενα">
