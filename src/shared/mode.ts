@@ -1,7 +1,7 @@
 // Λειτουργία κέντρου ή μονάδας (Michael, 13/11): το κέντρο εκπαίδευσης έχει μία ΕΣΣΟ τη φορά, η μονάδα συνεχή ροή με
 // στρατιώτες από πολλές ΕΣΣΟ. Λείπει = κέντρο: όποιος δεν το πειράξει δεν βλέπει καμία αλλαγή.
 import { addDays, daysBetween, MONTHS, type ISODate } from './dates';
-import type { Move, Person, Settings } from './domain';
+import type { AppState, Move, Person, Settings } from './domain';
 import { itemKey, listOf, type UserLists } from './ranks';
 import { ESSO_SERIES, essoPersonTxt, nextEsso, parseEsso, type Esso } from './esso';
 
@@ -84,6 +84,25 @@ export function pendingMoves(people: Person[], to?: ISODate): PendingMove[] {
   const out: PendingMove[] = [];
   for (const p of people) for (const m of p.moves || []) if (!m.done && (!to || m.on <= to)) out.push({ p, m });
   return out.sort((a, b) => a.m.on.localeCompare(b.m.on) || a.p.last.localeCompare(b.p.last, 'el'));
+}
+// Προγραμματισμένη αναχώρηση που ισχύει τη μέρα (μονάδα): η κίνηση «φεύγει» εφαρμόζεται το πρωί της μέρας της και σβήνει τον στρατιώτη από όλες
+// τις θέσεις από τότε, άρα ο κανόνας τον μπλοκάρει από εκείνη τη μέρα (εκτός αν προηγείται δική του «ξαναμπαίνει»). Ευρετήριο ανά πίνακα ατόμων (WeakMap),
+// μόνο όσοι έχουν κινήσεις που περιμένουν: καλείται χιλιάδες φορές στη συμπλήρωση. Κέντρο: πάντα null
+const leaveIdx = new WeakMap<readonly Person[], Map<number, Move[]>>();
+export function leavingBlock(s: Pick<AppState, 'people' | 'settings'>, date: ISODate, pid: number): string | null {
+  if (pid <= 0 || !isUnit(s.settings)) return null;
+  let ix = leaveIdx.get(s.people);
+  if (!ix) {
+    ix = new Map();
+    for (const p of s.people) { const v = (p.moves || []).filter(m => !m.done); if (v.length) ix.set(p.id, v.sort((a, b) => a.on.localeCompare(b.on))); }
+    leaveIdx.set(s.people, ix);
+  }
+  const v = ix.get(pid); if (!v) return null;
+  let out: Move | null = null;
+  for (const m of v) { if (m.on > date) break; if (m.dir === 'out') out = m; else out = null; }
+  if (!out) return null;
+  const why = [out.why, out.where].filter(Boolean).join(': ');
+  return 'Φεύγει από τη δύναμη ' + out.on.slice(8) + '/' + out.on.slice(5, 7) + (why ? ' (' + why + ')' : '');
 }
 // Για τη λίστα: οι απολύσεις της ίδιας ΕΣΣΟ την ίδια μέρα γίνονται μία γραμμή «ΕΣΣΟ 2025 Γ΄ απολύεται (24)»
 export interface MoveRow { key: string; on: ISODate; text: string; ids: { pid: number; id: string }[]; pid?: number }
