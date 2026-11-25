@@ -42,7 +42,7 @@ import { cleanHd, hdHeadDate, hdTags, HD_SECTIONS, type HdDoc } from '../shared/
 import { cleanOpts, infoOf, openBook, previewHtml, printKey, renderBook, renderOpen, sectionsHtml, type Book, type PrintOpts } from './print';
 import { xlLook } from '../shared/xlLook';
 import { buildTemplate, fillReport, inspectTemplate, placeSheets, previewReport, previewTemplate, type GroupKey } from './reports';
-import { forBuild, repDate, rowsOf, sigsNone, splitOk, withBuilt, type BuildOpts, type RepKind, type Report } from '../shared/reports';
+import { forBuild, repDate, repFileName, rowsOf, sigsNone, splitOk, withBuilt, type BuildOpts, type RepKind, type Report } from '../shared/reports';
 import { PV_PAGES } from '../shared/repPage';
 import type { ImportRow } from '../shared/commands';
 import { fileNameOf, frouraName, newStem, safeName } from '../shared/fileNames';
@@ -839,9 +839,12 @@ function savePrintPrefs(key: string, o: PrintOpts | null) {
   writeMeta({ printPrefs: all });
 }
 // fix: έντυπο με «Σταθερό μέγεθος γραμμάτων» (Michael, 4/11): «Όσες χρειάζονται» με τα γράμματα του Excel, πάνω από ό,τι είχε αποθηκευτεί
-async function printPage(file: string, sheets?: string[], fix?: boolean): Promise<Omit<PrintJob, 'file'>> {
+// Αρχείο που έβγαλε κάποιο έντυπο των Έντυπα (repHist): το παράθυρο εκτύπωσης ξεκινά με «Όσες χρειάζονται»
+// (όχι το Δυναμολόγιο ή άλλο Excel όπου γράφτηκε φύλλο εντύπου: εκεί το ιστορικό έχει sheets)
+const isRepFile = (file: string) => { const f = path.resolve(file); return Object.values(readMeta().repHist || {}).some(l => (l || []).some(h => h?.file && !h.sheets && path.resolve(h.file) === f)); };
+async function printPage(file: string, sheets?: string[], fix?: boolean, rep?: boolean): Promise<Omit<PrintJob, 'file'>> {
   const book = await openBook(await fs.promises.readFile(file));
-  const { key, base, opts, want } = await printSetup(book, file, readMeta().printPrefs?.[printKey(file)], sheets, fix); const remember = true;
+  const { key, base, opts, want } = await printSetup(book, file, readMeta().printPrefs?.[printKey(file)], sheets, fix, rep); const remember = true;
   const doc = await renderOpen(book, { file: path.basename(file), sheets: want, layout: opts });
   const tmp = path.join(app.getPath('temp'), 'grafeio-print-' + crypto.randomUUID() + '.html');
   await fs.promises.writeFile(tmp, previewHtml(doc, path.basename(file), { opts, remember, duplex: !!readMeta().printDuplex }));
@@ -849,12 +852,12 @@ async function printPage(file: string, sheets?: string[], fix?: boolean): Promis
 }
 // Μία προεπισκόπηση τη φορά («Τύπωσε όλα» στα Έντυπα ημέρας): η επόμενη ανοίγει όταν κλείσει η προηγούμενη
 let previewGate: Promise<void> = Promise.resolve();
-async function printPreview(file: string, sheets?: string[], fix?: boolean): Promise<{ ok: true } | { ok: false; error: string }> {
+async function printPreview(file: string, sheets?: string[], fix?: boolean, rep?: boolean): Promise<{ ok: true } | { ok: false; error: string }> {
   const prev = previewGate; let free = () => {};
   previewGate = new Promise<void>(r => { free = r; });
   await prev;
   try {
-    const p = await printPage(file, sheets, fix);
+    const p = await printPage(file, sheets, fix, rep);
     const pw = new BrowserWindow({
       parent: win || undefined, modal: !!win, width: 1280, height: 880, minWidth: 820, minHeight: 520, show: false, title: 'Εκτύπωση · ' + path.basename(file), backgroundColor: '#5f6368',
       webPreferences: { preload: path.join(__dirname, '..', 'preload', 'print.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false }
@@ -1301,10 +1304,11 @@ else {
     ipcMain.handle('rep:preview', async (_e, src: { file?: string; build?: BuildOpts }, r: Report, ids: (number | string)[], date: ISODate, raw: boolean, opts?: { sample?: number }) => {
       try {
         const s = store.state; const sample = typeof opts?.sample === 'number' ? opts.sample : undefined; const pages = sample == null ? 1 : PV_PAGES;
-        if (src.build) return await off('previewBuilt', [src.build, r, ids, date, pages, sample], async () => { const o = forBuild(src.build!, r); const b = await buildTemplate(o, r.kind, xlLook(s.settings)); return previewReport(b.data, s, withBuilt(r, b, o), ids, date, pages, sample); }, s);
+        const saved = readMeta().printPrefs?.[printKey(repFileName(r, date, s.settings))];   // οι ρυθμίσεις εκτύπωσης του εντύπου (το worker δεν έχει meta)
+        if (src.build) return await off('previewBuilt', [src.build, r, ids, date, pages, sample, saved], async () => { const o = forBuild(src.build!, r); const b = await buildTemplate(o, r.kind, xlLook(s.settings)); return previewReport(b.data, s, withBuilt(r, b, o), ids, date, pages, sample, saved); }, s);
         const buf = await tplBuf(src.file || '');
         if (raw) return await off('previewTemplate', [buf, r.sheet], () => previewTemplate(buf, r.sheet));
-        return await off('previewReport', [buf, r, ids, date, pages, sample], () => previewReport(buf, s, r, ids, date, pages, sample), s);
+        return await off('previewReport', [buf, r, ids, date, pages, sample, saved], () => previewReport(buf, s, r, ids, date, pages, sample, saved), s);
       } catch (e) { return fail(e); }
     });
     // out 'sheet': φύλλο μέσα στο Δυναμολόγιο ή σε άλλο Excel (force: ο χρήστης είπε να γραφτεί πάνω σε φύλλο που δεν έφτιαξε)·
@@ -1362,7 +1366,7 @@ else {
           const [f] = await serial(() => writeAll([{ dir: outputDir(), name: out.name.replace(/\.xlsx$/, ext), data: out.data }]));
           logWrite('Έντυπο ' + r.name, t0);
           const warnings = [...(out.warnings || [])];
-          if (print) { const p = await printPreview(f, out.sheets, !!r.fixsz); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else if (!opts?.quiet) shell.openPath(f);
+          if (print) { const p = await printPreview(f, out.sheets, !!r.fixsz, true); if (!p.ok) warnings.push('Δεν άνοιξε η εκτύπωση: ' + p.error); } else if (!opts?.quiet) shell.openPath(f);
           res = { ok: true, file: f, warnings, sheets: out.sheets };
         }
         if (!res.ok) return res;
@@ -1503,7 +1507,7 @@ else {
       const known = knownPath(file) || [outputDir(), ...Object.values(store.state.settings.forms || {}).map(b => b?.dir)].some(inside);
       if (!known || !/\.xls[xm]?$/i.test(file) || !fs.existsSync(file)) return fail('Δεν βρέθηκε το ' + path.basename(file));
       if (/\.xls$/i.test(file)) return fail('Το ' + path.basename(file) + ' είναι παλιό .xls. Άνοιξέ το στο Excel και αποθήκευσέ το ως .xlsx για να τυπώνεται από εδώ.');
-      return printPreview(file, Array.isArray(sheet) ? sheet.filter(x => typeof x === 'string') : sheet ? [sheet] : undefined);
+      return printPreview(file, Array.isArray(sheet) ? sheet.filter(x => typeof x === 'string') : sheet ? [sheet] : undefined, undefined, isRepFile(file));
     });
     // από το παράθυρο προεπισκόπησης: νέα διάταξη (σελίδες, προσανατολισμός, φύλλα…) από το ήδη ανοιγμένο Excel
     ipcMain.handle('print:layout', async (e, req: { opts?: unknown; sheets?: unknown; save?: boolean }) => {
