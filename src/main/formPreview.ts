@@ -9,10 +9,12 @@ export interface Produced { name?: string; data: Buffer; warnings?: string[]; em
 const MAX_PAGES = 8;   // το μηνιαίο πλέγμα είναι μεγάλο: δείχνονται οι πρώτες σελίδες
 
 // Οι ρυθμίσεις και τα φύλλα με τα οποία ανοίγει το παράθυρο «Εκτύπωση» ένα αρχείο: μία συνάρτηση για την εκτύπωση (printPage) και την οθόνη
-// saved: ό,τι είναι αποθηκευμένο για το έντυπο (meta.json printPrefs[printKey])· fix: έντυπο με «Σταθερό μέγεθος γραμμάτων» (Michael, 4/11)
-export async function printSetup(book: Book, fileName: string, saved: Partial<PrintOpts> | undefined, sheets?: string[], fix?: boolean) {
+// rep: αρχείο εντύπου των Έντυπα· saved: ό,τι είναι αποθηκευμένο για το έντυπο (meta.json printPrefs[printKey])· fix: έντυπο με «Σταθερό μέγεθος γραμμάτων» (Michael, 4/11)
+export async function printSetup(book: Book, fileName: string, saved: Partial<PrintOpts> | undefined, sheets?: string[], fix?: boolean, rep?: boolean) {
   const key = printKey(fileName); const visible = book.sheets.filter(x => !x.hidden).map(x => x.name);
   let base = printDefaults(key, sheets && sheets.length ? sheets : visible);
+  // Έντυπα (Michael, 25/11): το παράθυρο ξεκινά με «Όσες χρειάζονται»· ό,τι έχει αποθηκευτεί για το έντυπο ισχύει πάνω από αυτό
+  if (rep) base = { ...base, pages: 'auto' };
   const opts = cleanOpts({ ...(saved || {}), breaks: undefined }, base);
   if (fix) {
     const sz = await sheetFontSize(book, (sheets && sheets[0]) || visible[0] || '');

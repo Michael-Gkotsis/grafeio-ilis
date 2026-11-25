@@ -10,7 +10,8 @@ import { TODAY, headFor } from '../shared/docHead';
 import { applyHead, headBlocks, placeImages, type HeadDone } from './headWrite';
 import type { LayoutSheet } from '../shared/layout';
 import { SIG_TAG } from './sigs';
-import { renderBook } from './print';
+import { openBook, renderBook, renderOpen, type PrintOpts } from './print';
+import { printSetup } from './formPreview';
 import { cutSample, type PvCount } from '../shared/repPage';
 import { normGreek, upper } from '../shared/text';
 import { FILLS, TAB_WIDTHS, blankFill, blankIdx, blankN, blankTags, gridOn, metricFn, TAG_RE, byGroup, byIds, cellValue, DATE_FIELDS, fieldOf, fieldValue, groupOf, groupsOf, guessField, moreRows, rowsOf, tableDay, repFileName, splitOk, stNewCols, tagKey, type BuildOpts, type BuildVal, type BuiltOut, type RepCell, type RepCol, type RepGroup, type RepKind, type Report, type Row, type TabLay } from '../shared/reports';
@@ -704,9 +705,11 @@ export async function buildTemplate(o: BuildOpts, kind: RepKind, look: XlLook = 
 
 // Προεπισκόπηση: η πρώτη σελίδα όπως θα τυπωθεί, με τα κελιά σημαδεμένα (data-a) για να διαλέγεις με κλικ
 // sample (σελίδα δημιουργίας): πόσες γραμμές δείχνει κάθε πίνακας (0: όλοι)· τότε το αποτέλεσμα έχει και counts. Χωρίς sample: οι πρώτοι 120 του 1ου πίνακα, όπως πριν.
-export async function previewReport(tpl: Buffer | Uint8Array, s: AppState, r: Report, ids: (number | string)[], d: ISODate, pages = 1, sample?: number): Promise<{ html: string; css: string; pages: number; counts?: PvCount[]; error?: string }> {
+export async function previewReport(tpl: Buffer | Uint8Array, s: AppState, r: Report, ids: (number | string)[], d: ISODate, pages = 1, sample?: number, saved?: Partial<PrintOpts>): Promise<{ html: string; css: string; pages: number; counts?: PvCount[]; error?: string }> {
   const out = sample == null ? await fillReport(tpl, s, r, ids.slice(0, 120), d) : await fillReport(tpl, s, r, ids, d, {}, { sample });
-  const doc = await renderBook(out.data, { file: out.name, sheets: [out.sheets[0]], refs: true, maxPages: pages });
+  // η ίδια διάταξη με το παράθυρο «Εκτύπωση» (Michael, 25/11): «Όσες χρειάζονται» εκτός αν έχει αποθηκευτεί άλλη ρύθμιση για το έντυπο
+  const book = await openBook(out.data); const su = await printSetup(book, out.name, saved, [out.sheets[0]], !!r.fixsz, true);
+  const doc = await renderOpen(book, { file: out.name, sheets: [out.sheets[0]], layout: su.opts, refs: true, maxPages: pages });
   const sh = doc.sheets[0];
   return { html: sh ? sh.html : '', css: doc.css, pages: sh ? sh.pages : 0, ...(out.counts ? { counts: out.counts } : {}) };
 }
