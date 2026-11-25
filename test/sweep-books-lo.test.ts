@@ -81,14 +81,15 @@ describe('Τα νέα Excel της 17/11: ανοίγουν στο LibreOffice ί
           if (/[a-zα-ωά-ώ]/.test(v)) expect(v.replace(/ Ή /g, ' Η '), x.what + ' ' + k).toBe(upper(v));
         }
       }
-      // ο ΟΠΛΙΣΜΟΣ έχει φύλλο ΑΠΟΝΤΑ με τα δύο όπλα, και το Μητρώο ΘΕΣΗ «ΑΠΩΝ (…)» και ΑΠΟΝΤΑ στα ΣΥΝΟΛΑ, όπως γύρισαν από το LibreOffice
+      // ο ΟΠΛΙΣΜΟΣ έχει φύλλο ΑΠΟΝΤΑ με τα δύο όπλα, και το Μητρώο ΘΕΣΗ «ΑΠΩΝ (…)» και ΑΠΟΝΤΑ στα ΣΥΝΟΛΑ, όπως γύρισαν από το LibreOffice·
+      // και τα δύο μετρούν και τα δεύτερα όπλα τους (το Μητρώο από το #406, Michael 25/11: «Ναι, και τα δύο»)
       let wk = 0, reg = 0;
       for (const x of files) {
         const b = await cells(fs.readFileSync(path.join(dir, 'out', path.basename(x.f))));
         const ab = [...b].filter(([k]) => k.startsWith('ΑΠΟΝΤΑ!')).map(([, v]) => v);
         if (ab.length) { wk++; expect(ab.filter(v => v === 'ΑΠΩΝ: ΥΠΗΡΕΣΙΑ ΦΥΛΑΚΙΟ ΠΟΤΑΜΟΥ 14:45–22:15'), x.what).toHaveLength(2 + second.get(+x.what.split(' ')[0])!); }
         const th = [...b.values()].filter(v => v === 'ΑΠΩΝ (ΦΥΛΑΚΙΟ ΠΟΤΑΜΟΥ)');
-        if (th.length) { reg++; expect(th, x.what).toHaveLength(2); expect([...b].some(([k, v]) => k.startsWith('ΣΥΝΟΛΑ!') && v === 'ΑΠΟΝΤΑ'), x.what).toBe(true); }
+        if (th.length) { reg++; expect(th, x.what).toHaveLength(2 + second.get(+x.what.split(' ')[0])!); expect([...b].some(([k, v]) => k.startsWith('ΣΥΝΟΛΑ!') && v === 'ΑΠΟΝΤΑ'), x.what).toBe(true); }
       }
       expect(wk).toBe(4); expect(reg).toBe(4);
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
