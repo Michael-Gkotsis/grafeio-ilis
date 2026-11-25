@@ -248,13 +248,66 @@ export function matchSvc(det: SvcSheet, targets: SvcTarget[], profile: ListProfi
   return out;
 }
 
+// ---- ανενεργές υπηρεσίες χωρίς «Να μένει στο έντυπο»: το μπλοκ τους βγαίνει από το αντίγραφο (όπως στη δική μας ΦΡΟΥΡΑ).
+// Υπολογίζεται κάθε φορά, δεν γράφεται στο προφίλ (ξανανοίγει η υπηρεσία → το μπλοκ ξαναβγαίνει στο επόμενο έντυπο). Μπλοκ που ο χρήστης έβαλε «Να μένει» (show 'keep') μένει.
+export function hiddenBlockKeys(s: AppState, det: SvcSheet, lst: ListProfile | null | undefined, targets: SvcTarget[]): string[] {
+  const gone = blocksOf(s.settings).filter(b => b.hidden && !b.keep && b.kind !== 'ly'); if (!gone.length) return [];
+  const norm = (x: string) => nk(x).replace(/[^\p{L}\d/ ]/gu, ' ').replace(/\s+/g, ' ').trim().replace(/\s*\/\s*/g, '/');
+  const activeNames = new Set(targets.filter(t => !t.value.startsWith('post:')).map(t => norm(t.label)));
+  const labelCount = new Map<string, number>(); for (const b of det.blocks) labelCount.set(b.key, (labelCount.get(b.key) || 0) + 1);
+  const out: string[] = [];
+  for (const b of det.blocks) {
+    const key = svcKeyOf(b); if (lst?.show?.[key] === 'keep') continue;
+    const user = lst?.posts?.[key];
+    if (user != null) { if (gone.some(g => 'blk:' + g.id === user)) out.push(key); continue; }
+    const k = b.key.replace(/\s*\/\s*/g, '/');
+    if ((labelCount.get(b.key) || 1) === 1 && !activeNames.has(k) && gone.some(g => norm(g.name) === k)) out.push(key);
+  }
+  return out;
+}
+
+// ---- η επικεφαλίδα κάθε στήλης που διάλεξε ο χρήστης: αν το αρχείο αλλάξει (στήλη μπήκε πριν), η στήλη ξαναβρίσκεται από το κείμενο της επικεφαλίδας της
+// Οι γραμμές επικεφαλίδας: '' = λίστα υπηρεσιών, 'o' / 'l' = οι λίστες εξοδούχων / αδειούχων
+export function headRowsOf(sh: SheetModel, kind: 'services' | 'outs'): Record<string, number> {
+  if (kind === 'services') { const r = svcHeaderRow(sh); return r == null ? {} : { '': r }; }
+  const det = detectOuts(sh); const out: Record<string, number> = {};
+  if (det) for (const l of det.lists) if (out[l.side] == null) out[l.side] = l.header;
+  return out;
+}
+export const headTexts = (sh: SheetModel, rows: Record<string, number>): Record<string, string[]> => Object.fromEntries(Object.entries(rows).map(([k, r]) => [k, (sh.rows[r] || []).map(v => nk(v))]));
+// τα κείμενα επικεφαλίδας των στηλών που ορίζει το cols (για αποθήκευση στο lst.heads): μόνο όσα δεν είναι κενά
+export function headsFor(cols: Record<string, number>, texts: Record<string, string[]> | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, c] of Object.entries(cols)) { const t = texts?.[k.includes('.') ? k.slice(0, k.indexOf('.')) : '']?.[c]; if (t) out[k] = t; }
+  return out;
+}
+export function fixCols(sh: SheetModel, kind: 'services' | 'outs', lst: ListProfile): { cols: Record<string, number> | undefined; warnings: string[] } {
+  const warnings: string[] = [];
+  if (!lst.cols || !lst.heads || !Object.keys(lst.heads).length) return { cols: lst.cols, warnings };
+  const rows = headRowsOf(sh, kind); const cols: Record<string, number> = { ...lst.cols };
+  for (const [k, c] of Object.entries(lst.cols)) {
+    const want = lst.heads[k]; if (!want) continue;
+    const row = rows[k.includes('.') ? k.slice(0, k.indexOf('.')) : '']; if (row == null) continue;
+    const cells = sh.rows[row] || [];
+    if (nk(cells[c]) === want) continue;
+    const at: number[] = []; for (let i = 0; i < cells.length; i++) if (nk(cells[i]) === want) at.push(i);
+    if (at.length === 1) cols[k] = at[0];
+    else warnings.push('Η στήλη «' + want.toLowerCase() + '» που διάλεξες μπορεί να μετακινήθηκε στο αρχείο (η επικεφαλίδα δεν βρίσκεται πια στη στήλη ' + colLetter(c) + '): έλεγξε την Αντιστοίχιση.');
+  }
+  return { cols, warnings };
+}
+const colLetter = (c: number) => { let n = c + 1, s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
+
 export interface SvcPlan {
   writes: Write[]; placed: { post: string; pid: number; sheet: string; r: number; block?: string }[];
   unplaced: { post: string; label: string; who: string }[];      // η εφαρμογή βάζει άτομο σε θέση που η λίστα της μονάδας δεν έχει (ή δεν αντιστοιχίστηκε)
   cleared: number; kept: number; warnings: string[];
 }
-const seatName = (p: Person) => fullName(p);
-export function planSvc(sh: SheetModel, det: SvcSheet, matches: SvcMatch[], targets: SvcTarget[], s: AppState, date: ISODate, posts: Post[], ours: Record<string, string> = {}, lex?: Lexicon): SvcPlan {
+// Μορφή ονόματος στο αρχείο της μονάδας: 'short' = «ΕΠΩΝΥΜΟ Α.» (χωρίς πατρώνυμο), αλλιώς το πλήρες ονοματεπώνυμο όπως πάντα
+export type NameFmt = 'short';
+export const nameOf = (p: Person, fmt?: NameFmt): string => (fmt === 'short' ? (p.last + ' ' + (p.first ? p.first.charAt(0) + '.' : '')).trim() : fullName(p));
+export function planSvc(sh: SheetModel, det: SvcSheet, matches: SvcMatch[], targets: SvcTarget[], s: AppState, date: ISODate, posts: Post[], ours: Record<string, string> = {}, lex?: Lexicon, nameFmt?: NameFmt): SvcPlan {
+  const seatName = (p: Person) => nameOf(p, nameFmt);
   const l = lexOf(lex); const g = s.guards[date] || {}; const pm = seatMap(s); const g2 = new Grid(sh);
   const plan: SvcPlan = { writes: [], placed: [], unplaced: [], cleared: 0, kept: 0, warnings: [] };
   const rc = det.cols.rank.c, nc = det.cols.name.c;
@@ -392,16 +445,17 @@ export function detectOuts(sh: SheetModel, o: { cols?: Record<string, number> } 
 export interface OutsRow { p: Person; from: string; to: string; sub: string }
 // Οι εξοδούχοι της μέρας και οι αδειούχοι (άδεια που καλύπτει τη μέρα): με τη σειρά του Δυναμολογίου
 export function outsRowsOf(s: AppState, d: ISODate, outs: { p: Person }[]): { outs: OutsRow[]; leaves: OutsRow[] } {
-  const leaves: OutsRow[] = []; const seen = new Set<number>();
+  const leaves: OutsRow[] = []; const seen = new Set<number>(); const dm = dutyMin(s.settings);
+  // άδεια ή τιμητική που καλύπτει τη μέρα· όχι εκκρεμείς, ούτε όποιος γυρίζει πριν αρχίσουν οι υπηρεσίες (ίδιος κανόνας με τις καταστάσεις, stateWho)
   for (const p of activePeople(s)) {
-    const st = s.statuses.find(x => x.pid === p.id && x.type === 'LEAVE' && x.from <= d && (x.open || x.to >= d));
+    const st = s.statuses.find(x => x.pid === p.id && (x.type === 'LEAVE' || x.type === 'HON') && !x.pending && x.from <= d && (x.open || x.to >= d) && !backBy(x, d, dm));
     if (!st || seen.has(p.id)) continue; seen.add(p.id);
     leaves.push({ p, from: dmy(st.from), to: st.open ? '' : dmy(st.to), sub: p.sub || '' });
   }
   return { outs: outs.map(x => ({ p: x.p, from: '', to: '', sub: x.p.sub || '' })), leaves };
 }
 export interface OutsPlan { writes: Write[]; counts: { o: number; l: number }; unplaced: { side: 'o' | 'l'; who: string }[]; cleared: number; warnings: string[] }
-export function planOuts(sh: SheetModel, det: OutsSheet, rows: { outs: OutsRow[]; leaves: OutsRow[] }, ours: Record<string, string> = {}): OutsPlan {
+export function planOuts(sh: SheetModel, det: OutsSheet, rows: { outs: OutsRow[]; leaves: OutsRow[] }, ours: Record<string, string> = {}, nameFmt?: NameFmt): OutsPlan {
   const plan: OutsPlan = { writes: [], counts: { o: 0, l: 0 }, unplaced: [], cleared: 0, warnings: [] }; const g = new Grid(sh);
   const stop = det.sig ?? Infinity;
   const mine = (r: number, c: number) => oursKey(sh.name, r, c);
@@ -415,12 +469,12 @@ export function planOuts(sh: SheetModel, det: OutsSheet, rows: { outs: OutsRow[]
       // γραμμή με ξένο κείμενο στα κελιά που θα γράφαμε: μένει όπως είναι
       const busy = roleKeys.some(k => { const a = cellAt(rr, cols[k]); return !!a && (a.fx || (a.cur !== '' && a.cur !== ours[mine(a.r, a.c)] && !(k === 'rank' && rankLike(lexOf(), a.cur)))); });
       if (busy) continue;
-      const v: Partial<Record<OutsRole, string>> = { rank: rankTxt(x.p), name: fullName(x.p), sub: x.sub, from: x.from, to: x.to };
+      const v: Partial<Record<OutsRole, string>> = { rank: rankTxt(x.p), name: nameOf(x.p, nameFmt), sub: x.sub, from: x.from, to: x.to };
       for (const k of roleKeys) { if (v[k] === undefined) continue; const a = cellAt(rr, cols[k])!; plan.writes.push({ sheet: sh.name, r: a.r, c: a.c, value: v[k]!, ...(a.cur && a.cur !== ours[mine(a.r, a.c)] ? { over: a.cur } : {}) }); }
       if (cols.aa != null) { const a = cellAt(rr, cols.aa)!; if (!a.fx && a.cur === '' && sh.rows[a.r]?.[a.c] == null) plan.writes.push({ sheet: sh.name, r: a.r, c: a.c, value: i + 1 }); }
       i++; plan.counts[L.side]++;
     }
-    for (; i < data.length; i++) { plan.unplaced.push({ side: L.side, who: fullName(data[i].p) }); }
+    for (; i < data.length; i++) { plan.unplaced.push({ side: L.side, who: nameOf(data[i].p, nameFmt) }); }
     // γραμμές που έγραψε η εφαρμογή άλλη φορά και τώρα περισσεύουν: καθαρίζονται
     for (let r = rr; r < Math.min(stop, L.last + 1); r++) for (const k of roleKeys) {
       const a = cellAt(r, cols[k]); if (a && !a.fx && a.cur && a.cur === ours[mine(a.r, a.c)]) { plan.writes.push({ sheet: sh.name, r: a.r, c: a.c, value: null }); plan.cleared++; }
