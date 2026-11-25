@@ -16,6 +16,7 @@ import { USB_DAYS, cadreDutyGaps, maintDueRows, newsSince, usbAge, usbDue } from
 import { noteDue, noteGroups, noteHead, noteSearch, noteWho } from '../../shared/notes';
 import { frouraEmpty } from '../sheets';
 import { RealPreview } from '../realPreview';
+import { useHeadPick } from '../headPick';
 import { HK_SECTIONS, kolColName, dutyStartOf, hkLvOn, hkOn, hkToggle, type HkaiManual, type HkaiSettings, type HkSection, type HkVehicle, TYPES, TYPE_KEYS, RECORD_CATS, coversDay, effects, fullName, shortName, unitOf, isWaiting, type LeaveAsk, type Person, type PersonRequest, type Status, platoonsOf, platoonShort, roomTxt } from '../../shared/domain';
 import { ReturnsList } from './guard';
 import { HK_MANUAL, approvalPlan, planNeedsOk, awayNow, activePeople, hkaiCounts, kolView, isRecordExpiredOn, personMap, statusesAt, statusesOn, strengthOf, strengthAt, awayText, SVC_AWAY_LBL, type StatusPlan } from '../../shared/rules';
@@ -356,6 +357,7 @@ function RequestsLink({ date }: { date: string }) {
 function HkaiMain() {
   const { state, today } = useStore(); const nav = useNav(); const mobile = useMedia('(max-width: 767px)');
   const date = nav.params.hkaiDate || today;
+  const hp = useHeadPick('hkai');   // «Επικεφαλίδα:» μόνο για την επόμενη φορά, και στην προεπισκόπηση
   const [side, setSide] = useState(mobile ? 'sum' : 'front');
   const h = useMemo(() => hkaiCounts(state, date), [state, date]);
   // στρατιώτες και στελέχη (καρτέλα Στελέχη, με τη σειρά της) σε κάθε στήλη
@@ -379,11 +381,11 @@ function HkaiMain() {
   <${HkaiSectionsCard}/></div>`;
   const sheets = html`<div>
     <div className="toolbar" style=${{ marginBottom: '8px' }}>${!mobile && html`<${Tabs} value=${side === 'sum' ? 'front' : side} onChange=${setSide} items=${[{ value: 'front', label: 'Μπροστά' }, { value: 'back', label: 'Πίσω' }]}/>`}<${HkLeavesToggle} date=${date} onToggle=${() => setSide('back')}/></div>
-    <${RealPreview} req=${{ kind: 'hkai', date }} watch=${state} sheet=${side === 'back' ? 1 : 0}/>
+    <${RealPreview} req=${{ kind: 'hkai', date, headId: hp.headId }} watch=${state} sheet=${side === 'back' ? 1 : 0}/>
     <${TemplateNote} ids=${['hkai']}/></div>`;
   return html`<div>
     <${PageHeader} title=${HK() + ' της ' + dmy(date)} sub="Βγαίνει μόνη της· κάθε αριθμός ανοίγει τα ονόματα."><${DateBar} value=${date} onChange=${(d: string) => requestLeave(() => nav.set({ hkaiDate: d }))} days=${[addDays(today, -1), today, addDays(today, 1)]}/>
-      <div className="page-head__acts"><${ExportButton} kind="hkai" date=${date} label="η ${HK()}"/></div><//>
+      <div className="page-head__acts"><${ExportButton} kind="hkai" date=${date} label="η ${HK()}" pick=${hp}/></div><//>
     ${mobile ? html`<div style=${{ marginBottom: '12px' }}><${Tabs} value=${side} onChange=${setSide} items=${[{ value: 'sum', label: 'Σύνοψη' }, { value: 'front', label: 'Μπροστά' }, { value: 'back', label: 'Πίσω' }]}/></div>${side === 'sum' ? sum : sheets}` : html`<div className="strength">${sum}${sheets}</div>`}
   </div>`;
 }

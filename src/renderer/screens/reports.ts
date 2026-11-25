@@ -210,9 +210,12 @@ function Preview({ pv, busy, picking, marks, heads, onPick, page = 1, none }: P)
 }
 // ζητά προεπισκόπηση λίγο μετά την τελευταία αλλαγή (όχι σε κάθε πλήκτρο: το Atom φτιάχνει ένα xlsx κάθε φορά)
 // sample: πόσες γραμμές δείχνει κάθε πίνακας (0: όλοι)· χωρίς αυτό (undefined) όπως πριν
+// το κλειδί της προεπισκόπησης: όλο το έντυπο (όποιο πεδίο αλλάζει το αρχείο ξαναφτιάχνει την προεπισκόπηση)
+export const previewKey = (src: RepSource | null, r: Report, ids: (number | string)[], d: string, raw: boolean, sample?: number): string =>
+  JSON.stringify([src, r, ids.length, ids.slice(0, sample == null ? 120 : sample || PV_MAX), d, raw, sample]);
 function usePreview(src: RepSource | null, r: Report, ids: (number | string)[], d: string, raw: boolean, sample?: number) {
   const [pv, setPv] = useState<RepPreview | null>(null); const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
-  const key = JSON.stringify([src, r.sheet, r.head, r.cols, r.cells, r.title, r.name, r.trim, r.fixsz, r.split, r.kind, r.sigs, r.layout, r.more, r.vals, r.bands, r.at, ids.length, ids.slice(0, sample == null ? 120 : sample || PV_MAX), d, raw, sample]);
+  const key = previewKey(src, r, ids, d, raw, sample);
   // μία προεπισκόπηση τη φορά: όσες αλλαγές γίνουν όσο φτιάχνεται μία, ζητείται μόνο η τελευταία (στο Atom κάθε μία θέλει χρόνο)
   const inflight = useRef<Promise<unknown> | null>(null);
   useEffect(() => {
