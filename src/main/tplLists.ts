@@ -11,7 +11,7 @@ import { outsAndStay } from '../shared/outsStay';
 import { formatOf, frontTexts } from '../shared/backForm';
 import { sigsCustom, sigsFor, sigsSaved, type Sig } from '../shared/sigs';
 import { profilesOf, type ProfileKind, type TplProfile } from '../shared/tplStore';
-import { STATE_FILE_WORD, STATE_TARGETS, stateWho, detectOuts, detectRooms, detectSvc, matchSvc, oursKey, outsRowsOf, planOuts, planRooms, planSvc, planTitle, svcKeyOf, svcTargets, type OutsSheet, type RoomPlan, type SvcMatch, type SvcPlan, type SvcSheet, type SvcTarget } from '../shared/unitLists';
+import { STATE_FILE_WORD, STATE_TARGETS, fixCols, headRowsOf, headTexts, hiddenBlockKeys, stateWho, detectOuts, detectRooms, detectSvc, matchSvc, oursKey, outsRowsOf, planOuts, planRooms, planSvc, planTitle, svcKeyOf, svcTargets, type OutsSheet, type RoomPlan, type SvcMatch, type SvcPlan, type SvcSheet, type SvcTarget } from '../shared/unitLists';
 import type { SheetModel } from '../shared/sheetModel';
 import type { AppState, Post } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
@@ -30,25 +30,30 @@ export interface ListsReport { written: number; refused: { ref: string; reason: 
 const lexFor = (s: AppState, p?: TplProfile | null) => buildLexicon({ lists: s.settings.lists, ...(p && Object.keys(p.words).length ? {} : {}) });
 
 const svcDetect = (sh: SheetModel, lst: ListProfile, lex: ReturnType<typeof buildLexicon>): SvcSheet | null => {
-  const svcCols = lst.cols ? Object.fromEntries(Object.entries(lst.cols).filter(([k]) => !k.includes('.'))) : undefined;
+  const fc = fixCols(sh, 'services', lst).cols;                // στήλη που διάλεξε ο χρήστης και μετακινήθηκε: ξαναβρίσκεται από την επικεφαλίδα της
+  const svcCols = fc ? Object.fromEntries(Object.entries(fc).filter(([k]) => !k.includes('.'))) : undefined;
   return detectSvc(sh, { lex, ...(svcCols && Object.keys(svcCols).length ? { cols: svcCols } : {}) });
 };
 // Το φύλλο της αντιστοίχισης μέσα σε αυτό το αρχείο: με το ίδιο όνομα, αλλιώς όποιο έχει τουλάχιστον τις μισές λέξεις θέσεων της αντιστοίχισης
-export function profileSheet(sheets: SheetModel[], p: TplProfile, kind: 'services' | 'outs', s: AppState): { sheet: SheetModel; det: SvcSheet | OutsSheet } | null {
+export function profileSheet(sheets: SheetModel[], p: TplProfile, kind: 'services' | 'outs', s: AppState): { sheet: SheetModel; det: SvcSheet | OutsSheet; warnings: string[] } | null {
   const lex = lexFor(s, p); const lst = p.lst; if (!lst) return null;
-  const cols = lst.cols; const outsCols = cols ? Object.fromEntries(Object.entries(cols).filter(([k]) => k.includes('.'))) : undefined;
-  const det = (sh: SheetModel) => (kind === 'services' ? svcDetect(sh, lst, lex) : detectOuts(sh, outsCols && Object.keys(outsCols).length ? { cols: outsCols } : {}));
+  const det = (sh: SheetModel) => {
+    if (kind === 'services') return svcDetect(sh, lst, lex);
+    const fc = fixCols(sh, 'outs', lst).cols; const outsCols = fc ? Object.fromEntries(Object.entries(fc).filter(([k]) => k.includes('.'))) : undefined;
+    return detectOuts(sh, outsCols && Object.keys(outsCols).length ? { cols: outsCols } : {});
+  };
+  const warnOf = (sh: SheetModel) => fixCols(sh, kind, lst).warnings;
   const same = sheets.find(x => x.name === lst.sheet); const d0 = same ? det(same) : null;
-  if (same && d0) return { sheet: same, det: d0 };
+  if (same && d0) return { sheet: same, det: d0, warnings: warnOf(same) };
   const saved = new Set(Object.keys(lst.posts || {}).map(k => k.slice(0, k.lastIndexOf('#'))));
   for (const sh of sheets) {
     const d = det(sh); if (!d) continue;
-    if (kind === 'outs') return { sheet: sh, det: d };
+    if (kind === 'outs') return { sheet: sh, det: d, warnings: warnOf(sh) };
     const have = new Set((d as SvcSheet).blocks.map(b => b.key)); const hit = [...saved].filter(k => have.has(k)).length;
-    if (saved.size && hit / saved.size >= 0.5) return { sheet: sh, det: d };
+    if (saved.size && hit / saved.size >= 0.5) return { sheet: sh, det: d, warnings: warnOf(sh) };
   }
   // το φύλλο άλλαξε όνομα και δεν υπάρχουν επιλογές χρήστη να συγκριθούν: το πρώτο φύλλο που έχει λίστα υπηρεσιών
-  if (kind === 'services') for (const sh of sheets) { const d = det(sh); if (d) return { sheet: sh, det: d }; }
+  if (kind === 'services') for (const sh of sheets) { const d = det(sh); if (d) return { sheet: sh, det: d, warnings: warnOf(sh) }; }
   return null;
 }
 export function pickProfile(s: AppState, kind: ProfileKind): TplProfile[] { return profilesOf(s.settings).filter(p => p.kind === kind && p.lst); }
@@ -67,8 +72,8 @@ const reportOf = (rep: WriteReport) => rep.refused.map(x => ({ ref: x.sheet + '!
 // ------------------------------------------------------------------ δομή του εντύπου: μπλοκ που βγαίνουν, υπηρεσίες που μπαίνουν (formEdit.ts)
 export const addOf = (t: SvcTarget, a: { after: string; like: string }): AddSvc => ({ value: t.value, label: t.label, nums: t.groups.length, per: Math.max(1, ...t.groups.map(gp => gp.length)), hours: t.groups.map(gp => (gp[0]?.hours || '').trim()), after: a.after, like: a.like });
 interface Shaped { tpl: Buffer; sheets: SheetModel[]; sh: SheetModel; det: SvcSheet; lst: ListProfile; ours: Record<string, string> }
-async function shapeSvc(tpl: Buffer, sheets: SheetModel[], sh: SheetModel, det: SvcSheet, lst: ListProfile, targets: SvcTarget[], ours: Record<string, string>, lex: ReturnType<typeof buildLexicon>, warnings: string[], s: AppState, d: ISODate): Promise<Shaped | null> {
-  const remove = Object.entries(lst.show || {}).filter(([, v]) => v === 'remove').map(([k]) => k).filter(k => det.blocks.some(b => svcKeyOf(b) === k));
+async function shapeSvc(tpl: Buffer, sheets: SheetModel[], sh: SheetModel, det: SvcSheet, lst: ListProfile, targets: SvcTarget[], ours: Record<string, string>, lex: ReturnType<typeof buildLexicon>, warnings: string[], s: AppState, d: ISODate, hidden: string[] = []): Promise<Shaped | null> {
+  const remove = [...new Set([...Object.entries(lst.show || {}).filter(([, v]) => v === 'remove').map(([k]) => k), ...hidden])].filter(k => det.blocks.some(b => svcKeyOf(b) === k));
   const placed = new Set(matchSvc(det, targets, lst).filter(m => (m.sure === 'sure' || m.sure === 'mine') && m.value).map(m => m.value));
   const add: AddSvc[] = [];
   for (const a of lst.add || []) {
@@ -103,7 +108,7 @@ export async function listsFill(tpl: Buffer, s: AppState, d: ISODate, o: FillIn)
   let sheets = o.sheets ?? await modelOfBuffer(tpl);
   const warnings: string[] = []; const lex = lexFor(s);
   let hit: { p: TplProfile; sh: SheetModel; det: SvcSheet | OutsSheet } | null = null;
-  for (const p of profiles) { const f = profileSheet(sheets, p, o.kind, s); if (f) { hit = { p, sh: f.sheet, det: f.det }; break; } }
+  for (const p of profiles) { const f = profileSheet(sheets, p, o.kind, s); if (f) { hit = { p, sh: f.sheet, det: f.det }; warnings.push(...f.warnings); break; } }
   if (!hit) return null;
   const plan: PlannedWrite[] = []; let placed = 0; let cleared = 0; const unplaced: string[] = []; const lines: { label: string; text: string }[] = [];
   let ours = hit.p.ours || {}; let lstE = hit.p.lst; let tplE = tpl;
@@ -111,13 +116,15 @@ export async function listsFill(tpl: Buffer, s: AppState, d: ISODate, o: FillIn)
     let det = hit.det as SvcSheet; const posts: Post[] = postsOf(s.settings);
     const targets: SvcTarget[] = svcTargets(s, posts);
     // δομή: μπλοκ που δεν υπάρχουν πια στο έντυπο βγαίνουν, υπηρεσίες που λείπουν μπαίνουν (στο αντίγραφο που βγαίνει)· οι θέσεις των γραμμών μετά είναι άλλες
-    if (lstE && (lstE.add?.length || Object.values(lstE.show || {}).includes('remove'))) {
-      const sp = await shapeSvc(tpl, sheets, hit.sh, det, lstE, targets, ours, lex, warnings, s, d);
+    // ανενεργή υπηρεσία χωρίς «Να μένει στο έντυπο»: το μπλοκ της βγαίνει κι εδώ (υπολογίζεται κάθε φορά, δεν γράφεται στο προφίλ)
+    const hidden = lstE ? hiddenBlockKeys(s, det, lstE, targets) : [];
+    if (lstE && (lstE.add?.length || hidden.length || Object.values(lstE.show || {}).includes('remove'))) {
+      const sp = await shapeSvc(tpl, sheets, hit.sh, det, lstE, targets, ours, lex, warnings, s, d, hidden);
       if (sp) { tplE = sp.tpl; sheets = sp.sheets; hit = { p: hit.p, sh: sp.sh, det: sp.det }; det = sp.det; lstE = sp.lst; ours = sp.ours; }
     }
     // τι είναι κάθε μπλοκ: οι επιλογές του χρήστη, αλλιώς μόνο ό,τι είναι σίγουρο (ό,τι μένει Πρόταση / άγνωστο δεν γράφεται)· «φαίνεται, δεν γεμίζει» = ανενεργό
     const ms: SvcMatch[] = matchSvc(det, targets, lstE).map(m => (lstE?.show?.[m.labelKey] ? { ...m, value: '', sure: 'ignored' as const } : m.sure === 'sure' || m.sure === 'mine' ? m : { ...m, value: '' }));
-    const sp: SvcPlan = planSvc(hit.sh, det, ms, targets, s, d, posts, ours, lex);
+    const sp: SvcPlan = planSvc(hit.sh, det, ms, targets, s, d, posts, ours, lex, lstE?.name);
     plan.push(...sp.writes); placed = sp.placed.length; cleared = sp.cleared; unplaced.push(...sp.unplaced.map(x => x.label + ': ' + x.who));
     warnings.push(...sp.warnings);
     for (const x of sp.placed) { const p = seatMap(s).get(x.pid); const b = det.blocks.find(bl => bl.rows.some(rw => rw.r === x.r)); if (p) lines.push({ label: x.block || b?.label || '', text: [rankTxt(p), fullName(p)].join(' ') }); }
@@ -128,7 +135,7 @@ export async function listsFill(tpl: Buffer, s: AppState, d: ISODate, o: FillIn)
   } else {
     const det = hit.det as OutsSheet; const { outs } = outsAndStay(s, d);
     const rows = outsRowsOf(s, d, outs);
-    const op = planOuts(hit.sh, det, rows, ours);
+    const op = planOuts(hit.sh, det, rows, ours, hit.p.lst?.name);
     plan.push(...op.writes); placed = op.counts.o + op.counts.l; lines.push({ label: 'Εξοδούχοι', text: op.counts.o + ' άτομα' }, { label: 'Αδειούχοι', text: op.counts.l + ' άτομα' }); cleared = op.cleared; unplaced.push(...op.unplaced.map(x => x.who)); warnings.push(...op.warnings);
     const t = planTitle(hit.sh, det.titleRow, d, /^ΚΑΤΑΣΤΑΣΗ ΕΞΟΔΟΥΧΩΝ/, 'ΚΑΤΑΣΤΑΣΗ ΕΞΟΔΟΥΧΩΝ'); if (t.write) plan.push(t.write); if (t.warning) warnings.push(t.warning);
     plan.push(...sigPlan(hit.sh, s, d, 'outs', o.sigs, warnings));
@@ -159,13 +166,15 @@ export async function listModelOf(file: string, s: AppState, form: ListForm, wan
   const pickName = want && sheets.some(x => x.name === want) ? want : hit?.sheet.name ?? sheets.find(x => det(x))?.name ?? sheets[0]?.name ?? '';
   const sh = sheets.find(x => x.name === pickName);
   const own = prof && prof.lst && hit?.sheet.name === pickName ? prof.lst : null;
-  const d = sh ? det(sh, own?.cols) : null;
+  const d = sh ? det(sh, sh && own ? fixCols(sh, kind, own).cols : undefined) : null;
   const rp = pickProfile(s, 'rooms')[0];
   const model: ListModel = {
     ok: true, form, kind, file, sheets: sheets.map(x => x.name), sheet: pickName, found: !!d, profileId: prof?.id ?? null,
     rooms: detectRooms(sheets).map(r => ({ sheet: r.sheet, keys: r.rows.length, table: r.table.sheet, tableRows: Math.max(0, r.table.last - r.table.first + 1), who: rp?.lst?.who?.[r.sheet] ?? '', saved: !!rp?.lst?.sheets?.includes(r.sheet) })),
     subs: [...new Set(activePeople(s).map(p => (p.sub || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'el'))
   };
+  if (own?.name) model.name = own.name;
+  if (sh && d) model.headTexts = headTexts(sh, headRowsOf(sh, kind));
   if (d && kind === 'services') model.svc = svcView(d as SvcSheet, svcTargets(s, postsOf(s.settings)), own);
   if (d && kind === 'outs') model.outs = outsView(d as OutsSheet);
   return { model, sheets, buf };
@@ -176,7 +185,7 @@ export function draftState(s: AppState, form: ListForm, sheet: string, req: List
   const prev = pickProfile(s, kind)[0] ?? null;
   const ctx = { today: '2000-01-01', newId: () => 'x' };
   const cols = Object.fromEntries(Object.entries(req.cols).filter(([k, v]) => typeof v === 'number' && v >= 0));
-  const prof = listProfileFrom(kind, { prev, sheet, posts: req.posts, cols, show: req.show, add: req.add });
+  const prof = listProfileFrom(kind, { prev, sheet, posts: req.posts, cols, show: req.show, add: req.add, name: req.name, heads: req.heads });
   let st = apply(s, { t: 'adaptTpl', profile: prof, create: req.creates.map(c => ({ k: 'service' as const, name: c.name })), text: 'δοκιμή' }, ctx).state;
   const on = req.rooms.filter(r => r.on);
   if (on.length) st = apply(st, { t: 'adaptTpl', profile: listProfileFrom('rooms', { prev: pickProfile(st, 'rooms')[0] ?? null, sheet: on[0].sheet, rooms: on }), text: 'δοκιμή' }, ctx).state;

@@ -7,7 +7,7 @@ import { html, Alert, Badge, Button, Dialog, Tabs, useToast } from '../ui';
 import { Select } from '../select';
 import { useStore } from '../store';
 import { profilesOf, type ListAdd } from '../../shared/tplStore';
-import { STATE_TARGETS } from '../../shared/unitLists';
+import { STATE_TARGETS, headsFor } from '../../shared/unitLists';
 import { NEW_SVC, listProfileFrom, type ListColView, type ListModel, type ListReq, type ListTryRes, type SvcBlockView } from '../../shared/listMap';
 type P = any;
 
@@ -15,8 +15,8 @@ export type Step = 'posts' | 'cols' | 'rooms' | 'try';
 const TONE: Record<string, { tone: string; label: string }> = { sure: { tone: 'ok', label: 'Σίγουρο' }, suggest: { tone: 'warn', label: 'Πρόταση' }, unknown: { tone: 'bad', label: 'Δεν το ξέρω' }, mine: { tone: 'info', label: 'Το όρισες εσύ' }, ignored: { tone: 'outline', label: 'Το αφήνω' } };
 const LETTERS = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
 
-export interface Edits { posts: Record<string, string>; creates: Record<string, string>; cols: Record<string, number | null>; rooms: Record<string, { on: boolean; who: string }>; show: Record<string, '' | 'keep' | 'remove'>; adds: ListAdd[] | null; skip: string[] }   // adds: null = όπως είναι αποθηκευμένα· skip: υπηρεσίες που ο χρήστης είπε «Όχι στο έντυπο» (μόνο στην οθόνη)
-export const noEdits = (): Edits => ({ posts: {}, creates: {}, cols: {}, rooms: {}, show: {}, adds: null, skip: [] });
+export interface Edits { posts: Record<string, string>; creates: Record<string, string>; cols: Record<string, number | null>; rooms: Record<string, { on: boolean; who: string }>; show: Record<string, '' | 'keep' | 'remove'>; adds: ListAdd[] | null; skip: string[]; name: '' | 'short' | null }   // adds: null = όπως είναι αποθηκευμένα· skip: υπηρεσίες που ο χρήστης είπε «Όχι στο έντυπο» (μόνο στην οθόνη)
+export const noEdits = (): Edits => ({ posts: {}, creates: {}, cols: {}, rooms: {}, show: {}, adds: null, skip: [], name: null });
 export const showOf = (b: SvcBlockView, e: Edits): '' | 'keep' | 'remove' => (b.labelKey in e.show ? e.show[b.labelKey] : b.show);
 export function nowOf(b: SvcBlockView, e: Edits): { state: string; value: string } {
   if (b.labelKey in e.posts) { const v = e.posts[b.labelKey]; return { state: v === 'ignore' ? 'ignored' : v ? 'mine' : 'unknown', value: v }; }
@@ -111,11 +111,14 @@ function ColRow({ c, e, setCol }: { c: ListColView; e: Edits; setCol(k: string, 
       <option value="">Καμία (δεν γράφεται)</option>${LETTERS.map((l, i) => html`<option key=${l} value=${i}>Στήλη ${l}</option>`)}<//>
     <${Badge} tone=${(st === 'unknown' ? TONE.ignored : TONE[st]).tone}>${st === 'unknown' ? 'Δεν τη γράφω' : TONE[st].label}<//></div></div>`;
 }
-function ColsStep({ model, e, setCol }: P) {
+function ColsStep({ model, e, setCol, setName }: P) {
   const groups: { title: string; cols: ListColView[] }[] = model.svc ? [{ title: 'Στήλες της λίστας', cols: model.svc.cols.filter((c: P) => c.role === 'rank' || c.role === 'name') }]
     : model.outs.lists.map((l: P) => ({ title: l.title + ' (' + l.ready + ' έτοιμες γραμμές)', cols: l.cols }));
   return html`<div className="tm">
     <p className="tm__help">Η εφαρμογή βρίσκει τις στήλες από αυτά που γράφει το αρχείο, όχι μόνο από τις επικεφαλίδες (που μπορεί να είναι μετατοπισμένες). Αν κάποια είναι λάθος, διάλεξε τη σωστή.</p>
+    <div className="field" style=${{ maxWidth: '320px' }}><label className="field__label" htmlFor="lm-name">Μορφή ονόματος</label>
+      <${Select} id="lm-name" className="ui-input" value=${e.name ?? model.name ?? ''} onChange=${(ev: P) => setName(ev.target.value)}>
+        <option value="">Ονοματεπώνυμο (όπως τώρα)</option><option value="short">ΕΠΩΝΥΜΟ Α.</option><//></div>
     ${groups.map(g => html`<section className="ui-card" key=${g.title}><div className="ui-card__head"><h2>${g.title}</h2></div>
       <div className="tm__wgrid tm__wgrid--head"><span>Τι γράφεται</span><span>Σε ποια στήλη</span><span></span></div>
       ${g.cols.map((c: ListColView) => html`<${ColRow} key=${c.key} c=${c} e=${e} setCol=${setCol}/>`)}</section>`)}
@@ -152,7 +155,7 @@ function TrialStep({ trial }: P) {
 }
 
 // ------------------------------------------------------------------ το σώμα της οθόνης (μόνο εμφάνιση)
-export interface BodyProps { model: ListModel; step: Step; e: Edits; trial: ListTryRes | null; onStep(s: Step): void; setPost(b: SvcBlockView, v: string): void; setCreate(b: SvcBlockView, name: string): void; setShow(b: SvcBlockView, v: '' | 'keep' | 'remove'): void; addSvc(a: ListAdd): void; dropAdd(value: string): void; skipSvc(value: string): void; setCol(k: string, v: number | null): void; setRoom(sheet: string, v: { on: boolean; who: string }): void }
+export interface BodyProps { model: ListModel; step: Step; e: Edits; trial: ListTryRes | null; onStep(s: Step): void; setPost(b: SvcBlockView, v: string): void; setCreate(b: SvcBlockView, name: string): void; setShow(b: SvcBlockView, v: '' | 'keep' | 'remove'): void; addSvc(a: ListAdd): void; dropAdd(value: string): void; skipSvc(value: string): void; setCol(k: string, v: number | null): void; setName(v: '' | 'short'): void; setRoom(sheet: string, v: { on: boolean; who: string }): void }
 export function ListMapBody(p: BodyProps) {
   const { model, step } = p;
   if (!model.found) return html`<${Alert} tone="bad"><span>${model.kind === 'services' ? 'Στο φύλλο δεν βρέθηκε λίστα υπηρεσιών (γραμμή με ΒΑΘΜΟΣ και ΟΝΟΜΑΤΕΠΩΝΥΜΟ και από κάτω οι θέσεις).' : 'Στο φύλλο δεν βρέθηκαν οι λίστες ΕΞΟΔΟΥΧΟΙ / ΑΔΕΙΟΥΧΟΙ.'} Διάλεξε άλλο φύλλο.</span><//>`;
@@ -162,7 +165,7 @@ export function ListMapBody(p: BodyProps) {
     ${model.svc && html`<div className="tm__sum"><${Badge} tone="ok">${n('sure')} σίγουρες<//><${Badge} tone="warn">${n('suggest')} προτάσεις<//><${Badge} tone="bad">${n('unknown')} δεν τις ξέρω<//>${n('mine') > 0 && html`<${Badge} tone="info">${n('mine')} τις όρισες εσύ<//>`}</div>`}
     <${Tabs} value=${step} onChange=${p.onStep} items=${items}/>
     ${step === 'posts' && model.svc && html`<${PostsStep} model=${model} e=${p.e} setPost=${p.setPost} setCreate=${p.setCreate} setShow=${p.setShow} addSvc=${p.addSvc} dropAdd=${p.dropAdd} skipSvc=${p.skipSvc}/>`}
-    ${step === 'cols' && html`<${ColsStep} model=${model} e=${p.e} setCol=${p.setCol}/>`}
+    ${step === 'cols' && html`<${ColsStep} model=${model} e=${p.e} setCol=${p.setCol} setName=${p.setName}/>`}
     ${step === 'rooms' && html`<${RoomsStep} model=${model} e=${p.e} setRoom=${p.setRoom}/>`}
     ${step === 'try' && html`<${TrialStep} trial=${p.trial}/>`}
   </div>`;
@@ -183,6 +186,7 @@ export function ListMapDialog({ form, file, sheet, onClose, onSaved }: { form: P
   const dropAdd = (value: string) => edit(x => ({ ...x, adds: (x.adds ?? model?.svc?.adds ?? []).filter(y => y.value !== value) }));
   const skipSvc = (value: string) => edit(x => ({ ...x, skip: [...x.skip, value] }));
   const setCol = (k: string, v: number | null) => edit(x => ({ ...x, cols: { ...x.cols, [k]: v } }));
+  const setName = (v: '' | 'short') => edit(x => ({ ...x, name: v }));
   const setRoom = (sh: string, v: { on: boolean; who: string }) => edit(x => ({ ...x, rooms: { ...x.rooms, [sh]: v } }));
   const kind = form === 'outs' ? 'outs' : 'services';
   const prev = profilesOf(state.settings).find(p => p.kind === kind && p.lst) ?? null;
@@ -190,14 +194,15 @@ export function ListMapDialog({ form, file, sheet, onClose, onSaved }: { form: P
   const finalPosts = () => { const out: Record<string, string> = { ...(prev?.lst?.posts || {}) }; for (const [k, v] of Object.entries(e.posts)) { if (v) out[k] = v; else delete out[k]; } return out; };
   const finalShow = () => { const out: Record<string, 'keep' | 'remove'> = { ...(prev?.lst?.show || {}) }; for (const [k, v] of Object.entries(e.show)) { if (v) out[k] = v; else delete out[k]; } return out; };
   const finalAdd = (): ListAdd[] => e.adds ?? prev?.lst?.add ?? [];
+  const finalName = (): 'short' | undefined => ((e.name ?? prev?.lst?.name ?? '') === 'short' ? 'short' : undefined);
   const finalCols = () => { const out: Record<string, number> = { ...(prev?.lst?.cols || {}) }; for (const [k, v] of Object.entries(e.cols)) { if (v == null) delete out[k]; else out[k] = v; } return out; };
   const roomsOn = () => (model?.rooms || []).map(r => { const x = e.rooms[r.sheet] || { on: r.saved, who: r.who }; return { sheet: r.sheet, who: x.who, on: x.on }; });
-  const req = (): ListReq => ({ ...(file ? { file } : {}), ...(model ? { sheet: model.sheet } : {}), posts: finalPosts(), creates: Object.values(e.creates).map(name => ({ name })), cols: finalCols(), rooms: roomsOn(), show: finalShow(), add: finalAdd() });
+  const req = (): ListReq => ({ ...(file ? { file } : {}), ...(model ? { sheet: model.sheet } : {}), posts: finalPosts(), creates: Object.values(e.creates).map(name => ({ name })), cols: finalCols(), rooms: roomsOn(), show: finalShow(), add: finalAdd(), ...(finalName() ? { name: 'short' as const } : {}), heads: headsFor(finalCols(), model?.headTexts) });
   const runTry = async () => { const r: P = await window.api.listTry(form, req()); if (!r.ok && 'error' in r) { toast({ text: r.error }); return; } setTrial(r); };
   const goStep = (s: Step) => { setStep(s); if (s === 'try' && !trial) void runTry(); };
   const save = async () => {
     if (!model) return;
-    const profile = listProfileFrom(kind, { prev, sheet: model.sheet, posts: finalPosts(), cols: finalCols(), show: finalShow(), add: finalAdd() });
+    const profile = listProfileFrom(kind, { prev, sheet: model.sheet, posts: finalPosts(), cols: finalCols(), show: finalShow(), add: finalAdd(), name: finalName(), heads: headsFor(finalCols(), model.headTexts) });
     const r = await run({ t: 'adaptTpl', profile, create: Object.values(e.creates).map(name => ({ k: 'service' as const, name })), text: form === 'outs' ? 'εξοδούχοι/αδειούχοι της μονάδας' : 'κατάσταση υπηρεσιών της μονάδας' } as P);
     if ((r as P)?.ok === false) { toast({ text: (r as P).error }); return; }
     const on = roomsOn().filter(x => x.on);
@@ -214,6 +219,6 @@ export function ListMapDialog({ form, file, sheet, onClose, onSaved }: { form: P
     ${model && model.sheets.length > 1 && html`<div className="field" style=${{ maxWidth: '280px' }}><label className="field__label" htmlFor="lm-sh">Φύλλο</label>
       <${Select} id="lm-sh" className="ui-input" value=${model.sheet} onChange=${(ev: P) => { setE(noEdits()); setTrial(null); load(ev.target.value); }}>${model.sheets.map((n: string) => html`<option key=${n} value=${n}>${n}</option>`)}<//></div>`}
     ${err ? html`<${Alert} tone="bad"><span>${err}</span><//>` : !model ? html`<p className="note">Διαβάζεται το αρχείο… (ένα παλιό .xls μετατρέπεται πρώτα με το Excel, μπορεί να πάρει λίγο)</p>`
-      : html`<${ListMapBody} model=${model} step=${step} e=${e} trial=${trial} onStep=${goStep} setPost=${setPost} setCreate=${setCreate} setShow=${setShow} addSvc=${addSvc} dropAdd=${dropAdd} skipSvc=${skipSvc} setCol=${setCol} setRoom=${setRoom}/>`}
+      : html`<${ListMapBody} model=${model} step=${step} e=${e} trial=${trial} onStep=${goStep} setPost=${setPost} setCreate=${setCreate} setShow=${setShow} addSvc=${addSvc} dropAdd=${dropAdd} skipSvc=${skipSvc} setCol=${setCol} setRoom=${setRoom} setName=${setName}/>`}
   <//>`;
 }
