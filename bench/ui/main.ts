@@ -40,7 +40,7 @@ const api = {
   undo: async () => {
     const u = undo.pop();
     if (u) state = u.prev;
-    else { const k = (window as any).__benchTouch as keyof AppState; const v: any = state[k]; state = { ...state, [k]: Array.isArray(v) ? [...v] : { ...v } }; }
+    else { const k = (window as any).__benchTouch as keyof AppState; const v: any = state[k]; if (v != null) state = { ...state, [k]: Array.isArray(v) ? [...v] : { ...v } }; }
     return reply('Αναιρέθηκε');
   }
 };
