@@ -47,6 +47,8 @@ export function profileSheet(sheets: SheetModel[], p: TplProfile, kind: 'service
     const have = new Set((d as SvcSheet).blocks.map(b => b.key)); const hit = [...saved].filter(k => have.has(k)).length;
     if (saved.size && hit / saved.size >= 0.5) return { sheet: sh, det: d };
   }
+  // το φύλλο άλλαξε όνομα και δεν υπάρχουν επιλογές χρήστη να συγκριθούν: το πρώτο φύλλο που έχει λίστα υπηρεσιών
+  if (kind === 'services') for (const sh of sheets) { const d = det(sh); if (d) return { sheet: sh, det: d }; }
   return null;
 }
 export function pickProfile(s: AppState, kind: ProfileKind): TplProfile[] { return profilesOf(s.settings).filter(p => p.kind === kind && p.lst); }

@@ -31,9 +31,17 @@ function spellings(sheet: RawSheet, col: number | undefined, recs: number[]): Ma
   return m;
 }
 
+// Σάρωση με όλες τις στήλες που έχουν κείμενο στην επικεφαλίδα ως γνωστές (π.χ. ΚΑΤΑΣΤΑΣΗ, που δεν γράφεται πίσω):
+// μια οργανική θέση χωρίς άτομο αλλά με κείμενο εκεί δεν σταματά τη σάρωση (όπως στην ανάγνωση)
+function scanOwn(sheet: RawSheet, b: SourceBinding) {
+  const cols: Record<string, number> = { ...b.cols }; const used = Object.values(b.cols);
+  (sheet.rows[b.header] || []).forEach((v, c) => { if (cellText(v) && !used.includes(c)) cols['h' + c] = c; });
+  return tableRows(sheet, b.header, cols);
+}
+
 export function ownSnap(sheet: RawSheet, b: SourceBinding, people: Person[]): Record<number, PersonSnap> {
   const match = makeMatcher(people); const out: Record<number, PersonSnap> = {};
-  for (const { v } of tableRows(sheet, b.header, b.cols).records) { const m = match(v); if (m.pid == null || out[m.pid]) continue; const p = people.find(x => x.id === m.pid)!; out[m.pid] = personVals(p, b); }
+  for (const { v } of scanOwn(sheet, b).records) { const m = match(v); if (m.pid == null || out[m.pid]) continue; const p = people.find(x => x.id === m.pid)!; out[m.pid] = personVals(p, b); }
   return out;
 }
 
@@ -42,7 +50,7 @@ export function planOwnWrite(sheet: RawSheet, b: SourceBinding, s: AppState, met
   const ros = rosterProfileOf(s.settings)?.ros as RosterProfile | undefined;
   const plan: OwnPlan = { sets: [], insert: null, inserts: [], deletes: [], header: [], keys: [], added: 0, changed: 0, cleared: 0, foreign: 0, notFound: [], snap: { ...(meta?.snap || {}) }, psnap, fresh: [], gone: [], grow: null, other: [], conflicts: [] };
   const lex = lexOf(s.settings); const names = subNames(s.settings);
-  const scan = tableRows(sheet, b.header, b.cols);
+  const scan = scanOwn(sheet, b);
   const recRows = scan.records.map(x => x.r);
   const subSp = spellings(sheet, b.cols.sub, recRows);
   const subCode = new Map<string, string>();     // όνομα Λόχου/Ίλας → κωδικός της μονάδας
