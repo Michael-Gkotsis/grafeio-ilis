@@ -81,7 +81,12 @@ export function seatMap(s: Pick<AppState, 'people' | 'cadreList'>): Map<number, 
   seatMapIdx.set(s.people, { cl, m });
   return m;
 }
-const limited = (p: Person, lists?: UserLists) => !!p.cid || isEpop(p, lists);
+// μία φορά ανά άτομο και λίστες (η αυτόματη το ρωτά για κάθε άτομο σε κάθε θέση, και το isEpop διαβάζει βαθμό και λίστες· έλεγχος 25/11)
+const limCache = new WeakMap<Person, { lists: UserLists | undefined; v: boolean }>();
+const limited = (p: Person, lists?: UserLists) => {
+  const c = limCache.get(p); if (c && c.lists === lists) return c.v;
+  const v = !!p.cid || isEpop(p, lists); limCache.set(p, { lists, v }); return v;
+};
 // Υπηρεσίες του μήνα της μέρας (χωρίς την ίδια τη μέρα): όσες μέρες έχει υπηρεσία, από το ημερολόγιο και από το Excel.
 // withDay: και η ίδια η μέρα (καρτέλα: «σήμερα» μετρά κι αυτή· στην επιλογή και στο όριο η μέρα που διαλέγεις δεν μετρά)
 export function monthDuties(s: AppState, date: ISODate, pid: number, idx?: Map<number, Set<ISODate>>, withDay = false): number {
@@ -156,8 +161,9 @@ let limitGate: { date: ISODate; n: Map<number, number> } | null = null;
 let limitOff = false;   // στη συμπλήρωση «πάνω από το όριο» το όριο δεν ισχύει (fillOverLimit)
 function limitBlock(s: AppState, date: ISODate, pid: number, idx?: Map<number, Set<ISODate>>): string | null {
   if (pid <= 0 || limitOff) return null;
-  const p = personMap(s.people).get(pid); if (!p || limited(p, s.settings.lists)) return null;
-  const lim = dutyLimitOf(s.rules, p); if (!lim) return null;
+  // πρώτα αν υπάρχει όριο (φτηνό), μετά αν είναι ΕΠΟΠ/στέλεχος (ακριβό): χωρίς όριο η αυτόματη δεν πληρώνει το δεύτερο (έλεγχος 25/11)
+  const p = personMap(s.people).get(pid); if (!p) return null;
+  const lim = dutyLimitOf(s.rules, p); if (!lim || limited(p, s.settings.lists)) return null;
   const n = (limitGate?.date === date ? limitGate.n.get(pid) : undefined) ?? dutyCount(s, date, pid, lim.per, idx);
   return n >= lim.max ? 'Πάνω από το όριο: θα είναι η ' + (n + 1) + 'ή υπηρεσία του (όριο ' + lim.max + ')' : null;
 }
