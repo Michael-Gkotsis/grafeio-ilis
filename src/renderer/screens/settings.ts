@@ -67,9 +67,9 @@ function AppearanceCard() {
   <//>`;
 }
 
-function SettingsCard() {
+export function SettingsCard() {
   const { state, run, boot } = useStore(); const toast = useToast();
-  const fromState = () => ({ unitKind: unitKindOf(state.settings), unit: [...state.settings.unit] as [string, string, string], unitName: state.settings.unitName, place: state.settings.place, cadre: { ...state.settings.cadre }, head: [state.settings.hkai?.head?.[0] || '', state.settings.hkai?.head?.[1] || ''] });
+  const fromState = (st = state.settings) => ({ unitKind: unitKindOf(st), unit: [...st.unit] as [string, string, string], unitName: st.unitName, place: st.place, cadre: { ...st.cadre }, head: [st.hkai?.head?.[0] || '', st.hkai?.head?.[1] || ''] });
   const [s, setS] = useState(fromState);
   const dirty = JSON.stringify(s) !== JSON.stringify(fromState());
   // άλλος τύπος μονάδας: η κεφαλίδα και ο τίτλος αλλάζουν μαζί («4η ΙΛΗ» → «4ος ΛΟΧΟΣ»), για να τα δεις πριν την αποθήκευση
@@ -77,7 +77,7 @@ function SettingsCard() {
   const save = async () => {
     const head = s.head.map(x => x.trim()); const hkai = { ...(state.settings.hkai || {}) }; if (head.some(Boolean)) hkai.head = head; else delete hkai.head;
     const ok = await run({ t: 'setSettings', settings: { unitKind: s.unitKind, unit: s.unit, unitName: s.unitName, place: s.place, cadre: s.cadre, hkai }, text: 'μονάδα (' + UNIT_KINDS.find(k => k.id === s.unitKind)!.label + '), στελέχη ' + HK() }, false);
-    if (ok) toast({ text: 'Αποθηκεύτηκαν οι ρυθμίσεις' });
+    if (ok) { setS(fromState(ok.settings)); toast({ text: 'Αποθηκεύτηκαν οι ρυθμίσεις' }); }   // η φόρμα ξαναγίνεται όπως αποθηκεύτηκε (κενά στην κεφαλίδα): αλλιώς μένει η μπάρα «Δεν αποθηκεύτηκαν»
     return ok;
   };
   usePending(dirty, { label: 'Μονάδα και έντυπα', save, discard: () => setS(fromState()) });
@@ -125,7 +125,7 @@ const STYLE_BTN: [typeof XL_STYLES[number], string, string, Record<string, strin
 const formLike = (k: XlPartKey) => k === 'hdr' || k === 'sig';
 // Πώς βγαίνει το κομμάτι: για κεφαλίδα και υπογραφές ό,τι όρισες (τα υπόλοιπα όπως το έντυπο), για τον πίνακα με τις προεπιλογές του
 const partNow = (x: XlLook, k: XlPartKey): XlPart => (formLike(k) ? x.parts?.[k] || {} : tablePart(x, k as 'title' | 'head' | 'data'));
-function XlLookCard() {
+export function XlLookCard() {
   const { state, run } = useStore(); const toast = useToast();
   const saved = xlLook(state.settings);
   const [x, setX] = useState<XlLook>(saved);
@@ -222,7 +222,7 @@ function OutsAdik() {
     <p className="note" style=${{ marginTop: 0 }}>Ισχύει στη μορφή «Όλη η δύναμη», στη σελίδα 2 (ΔΥΝΑΜΗ). Οι ομάδες Β5 και Β6 γράφονται μόνο όταν υπάρχει κάποιος σε αυτήν.</p>
   </div>`;
 }
-function SigsCard() {
+export function SigsCard() {
   const { state, run, today } = useStore(); const toast = useToast();
   const [form, setForm] = useState<SigForm>('hkai'); const [lay, setLay] = useState(false);
   const lf = form === 'reports' ? null : form as LayoutForm;

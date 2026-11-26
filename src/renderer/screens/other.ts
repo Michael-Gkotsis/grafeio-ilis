@@ -244,7 +244,7 @@ function copyRich(htmlStr: string, plain: string): boolean {
   if (!ok && navigator.clipboard) { navigator.clipboard.writeText(plain).catch(() => undefined); ok = true; }
   return ok;
 }
-function PunTextDialog({ st, onClose }: P) {
+export function PunTextDialog({ st, onClose }: P) {
   const { state, run } = useStore(); const toast = useToast();
   const p = personMap(state.people).get(st.pid)!;
   const [f, setF] = useState({ by: st.by || '', reason: st.reason || '', on: st.on || st.from });
@@ -252,7 +252,8 @@ function PunTextDialog({ st, onClose }: P) {
   const t = punText(p, { ...st, by: f.by.trim() || undefined, reason: f.reason.trim() || undefined, on: f.on }, state.settings.lists);
   const max = overMax(st.kind, punDays(st), state.settings.lists);
   const dirty = f.by !== (st.by || '') || f.reason !== (st.reason || '') || f.on !== (st.on || st.from);
-  const save = async () => (dirty ? run({ t: 'setPunInfo', id: st.id, by: f.by, reason: f.reason, on: f.on }, false) : true);
+  // μετά την αποθήκευση τα πεδία ξαναγίνονται όπως αποθηκεύτηκαν (χωρίς κενά): αλλιώς το παράθυρο ρωτά «να χαθεί;» ενώ όλα είναι αποθηκευμένα
+  const save = async () => { if (!dirty) return true; const ok = await run({ t: 'setPunInfo', id: st.id, by: f.by, reason: f.reason, on: f.on }, false); if (ok) setF({ ...f, by: f.by.trim(), reason: f.reason.trim() }); return ok; };
   return html`<${Dialog} title="Κείμενο ποινής" description=${rkFull(p) + ' · ' + punLbl(st.kind) + ' ' + dm(st.from) + '–' + dm(st.to)} onClose=${onClose} dirty=${dirty && 'Τα στοιχεία της ποινής (ποιος, πότε, λόγος) δεν αποθηκεύτηκαν. Αν κλείσεις, χάνονται.'}
     footer=${html`<${Button} variant="outline" onClick=${onClose}>Κλείσιμο<//>${dirty && html`<${Button} variant="outline" onClick=${async () => { if (await save()) toast({ text: 'Αποθηκεύτηκαν τα στοιχεία της ποινής' }); }}>Αποθήκευση<//>`}<${Button} onClick=${async () => { if (!(await save())) return; toast({ text: copyRich(t.html, t.plain) ? 'Αντιγράφηκε. Στο Word πάτα Ctrl+V.' : 'Δεν έγινε αντιγραφή. Επίλεξε το κείμενο και πάτα Ctrl+C.' }); }}>Αντιγραφή<//>`}>
     <div className="field-row">
@@ -402,7 +403,7 @@ function HkLeavesToggle({ date, onToggle }: { date: string; onToggle: () => void
 }
 
 // Στελέχη ανά βαθμό, μέσα στην ΗΚΑΙ (γραφέας, 10/10: «δεν έχει κάπου να τους προσθέσω»)
-function CadreCard({ warn }: { warn: boolean }) {
+export function CadreCard({ warn }: { warn: boolean }) {
   const { state, run } = useStore(); const toast = useToast(); const nav = useNav();
   const [c, setC] = useState(() => ({ ...state.settings.cadre }));
   const [open, setOpen] = useState(warn);
@@ -428,7 +429,7 @@ const HK_TEXT_FIELDS: [string, string, string][] = [['egr', '1. Εγγραφές
 const HK_ACC_FIELDS: [string, string][] = [['accT', 'Ζημιές σε οχήματα: ολικές'], ['accP', 'Ζημιές σε οχήματα: μερικές'], ['accM', 'Σε άνδρες']];
 // χωρίς το lv (3. ΑΔΕΙΕΣ ναι/όχι): αυτό αλλάζει από τον διακόπτη της μέρας, όχι από την Αποθήκευση εδώ
 const manualOf = (x?: HkaiManual): HkaiManual => ({ cells: x?.cells || {}, text: x?.text || {} });
-function HkaiManualCard({ date }: { date: string }) {
+export function HkaiManualCard({ date }: { date: string }) {
   const { state, run, today } = useStore(); const toast = useToast();
   const cur = manualOf(state.hkaiManual[date]); const curKey = JSON.stringify(cur); const lvOn = hkLvOn(state, date);
   const [m, setM] = useState(cur); const [rk, setRk] = useState('Στρατιώτες');

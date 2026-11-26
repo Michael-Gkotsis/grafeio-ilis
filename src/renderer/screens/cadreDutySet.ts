@@ -16,7 +16,7 @@ const nz = (v: string, d: number) => { const x = Number(String(v).replace(',', '
 
 export function CadreDutyCard() {
   const { state, run } = useStore(); const toast = useToast();
-  const fromState = () => { const c = dutyCfgOf(state.settings); return { groups: c.groups.map(g => ({ ...g, services: g.services.map(v => ({ ...v, ...(v.days ? { days: [...v.days] } : {}) })) })), offBase: String(c.limits.off.base), offExtra: String(c.limits.off.extra), ncoBase: String(c.limits.nco.base), ncoExtra: String(c.limits.nco.extra), rest: String(c.rest), carry: c.carry, fairHol: c.fairHol }; };
+  const fromState = (st = state.settings) => { const c = dutyCfgOf(st); return { groups: c.groups.map(g => ({ ...g, services: g.services.map(v => ({ ...v, ...(v.days ? { days: [...v.days] } : {}) })) })), offBase: String(c.limits.off.base), offExtra: String(c.limits.off.extra), ncoBase: String(c.limits.nco.base), ncoExtra: String(c.limits.nco.extra), rest: String(c.rest), carry: c.carry, fairHol: c.fairHol }; };
   const [f, setF] = useState(fromState);
   const dirty = JSON.stringify(f) !== JSON.stringify(fromState());
   // οι στήλες της ΗΚΑΙ που παίρνουν οι καταστάσεις στελεχών (μία φορά η κάθε στήλη)
@@ -35,7 +35,7 @@ export function CadreDutyCard() {
       limits: { off: { base: nz(f.offBase, 3), extra: nz(f.offExtra, 1) }, nco: { base: nz(f.ncoBase, 4), extra: nz(f.ncoExtra, 1) } }, rest: nz(f.rest, 1), carry: f.carry, fairHol: f.fairHol
     };
     const ok = await run({ t: 'setSettings', settings: { cadreDuty: cfg }, text: 'υπηρεσίες στελεχών (' + (cfg.groups.map(g => g.name).join(', ') || 'χωρίς ομάδες') + ')' }, false);
-    if (ok) toast({ text: 'Αποθηκεύτηκαν οι υπηρεσίες των στελεχών' });
+    if (ok) { setF(fromState(ok.settings)); toast({ text: 'Αποθηκεύτηκαν οι υπηρεσίες των στελεχών' }); }   // η φόρμα ξαναγίνεται όπως αποθηκεύτηκε (κεφαλαία, κενά): αλλιώς μένει η μπάρα «Δεν αποθηκεύτηκαν»
     return ok;
   };
   usePending(dirty, { label: 'Υπηρεσίες στελεχών', save, discard: () => setF(fromState()) });

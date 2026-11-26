@@ -95,7 +95,7 @@ function GrantDialog({ c, year, kind, grant, onClose }: { c: Cadre; year: number
 // ---- Ρυθμίσεις › Μονάδα και έντυπα: Άδειες και απαλλαγές στελεχών ----
 export function CadreLeaveCard() {
   const { state, run } = useStore(); const toast = useToast();
-  const fromState = () => { const c = leaveCfgOf(state.settings); return { quotas: c.quotas.map(q => ({ ...q, kinds: [...q.kinds] })), count: c.count, apalPerDuty: String(c.apalPerDuty), apalHolExtra: String(c.apalHolExtra), apalExpire: c.apalExpire }; };
+  const fromState = (st = state.settings) => { const c = leaveCfgOf(st); return { quotas: c.quotas.map(q => ({ ...q, kinds: [...q.kinds] })), count: c.count, apalPerDuty: String(c.apalPerDuty), apalHolExtra: String(c.apalHolExtra), apalExpire: c.apalExpire }; };
   const [f, setF] = useState(fromState);
   const dirty = JSON.stringify(f) !== JSON.stringify(fromState());
   const kinds = useMemo(() => cadreAbsKinds(state.settings.lists), [state.settings.lists]);
@@ -107,7 +107,7 @@ export function CadreLeaveCard() {
     if (bad) return false;
     const cfg = { quotas: f.quotas.map(q => ({ ...q, name: q.name.trim() })), count: f.count, apalPerDuty: n(f.apalPerDuty), apalHolExtra: n(f.apalHolExtra), apalExpire: f.apalExpire };
     const ok = await run({ t: 'setSettings', settings: { cadreLeave: cfg }, text: 'άδειες και απαλλαγές στελεχών (' + cfg.quotas.map(q => q.name + ' ' + q.perYear).join(', ') + ')' }, false);
-    if (ok) toast({ text: 'Αποθηκεύτηκαν οι άδειες και οι απαλλαγές των στελεχών' });
+    if (ok) { setF(fromState(ok.settings)); toast({ text: 'Αποθηκεύτηκαν οι άδειες και οι απαλλαγές των στελεχών' }); }   // η φόρμα ξαναγίνεται όπως αποθηκεύτηκε (π.χ. «0,5» → «0.5»)
     return ok;
   };
   usePending(dirty, { label: 'Άδειες και απαλλαγές στελεχών', save, discard: () => setF(fromState()) });

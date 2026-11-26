@@ -118,6 +118,7 @@ export function HkHeadCard() {
   const save = async () => {
     const head = v.map(x => x.trim()); const hkai = { ...cur }; if (head.some(Boolean)) hkai.head = head; else delete hkai.head;
     const ok = await run({ t: 'setSettings', settings: { hkai }, text: 'κεφαλίδα της ' + HK() }, false);
+    if (ok) setV(head);   // κενά στο τέλος φεύγουν: αλλιώς, αν το κείμενο δεν άλλαξε, μένει η μπάρα «Δεν αποθηκεύτηκαν»
     if (ok) toast({ text: head.some(Boolean) ? 'Η ' + HK() + ' θα βγαίνει με κεφαλίδα «' + head.filter(Boolean).join(' / ') + '».' : 'Η ' + HK() + ' κρατά την κεφαλίδα του εντύπου.' });
     return ok;
   };
