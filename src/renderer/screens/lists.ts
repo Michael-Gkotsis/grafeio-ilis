@@ -108,7 +108,7 @@ export function ListsCard() {
   const reset = () => { setName(''); setChoice(null); setAcc(''); setMax(''); setCode(''); setWarn(false); setNote(false); setNBadge(false); setNXl(false); setBack(''); setLtext(''); setLduty(false); setLout(false); setErr(null); };
   // Λόχοι / Ίλες: σειρά (▲▼) και μετονομασία (και στους στρατιώτες)
   const moveSub = (r: ListRow, d: -1 | 1) => save(withList(u => { const i = u.add.findIndex(x => itemKey(x.name) === itemKey(r.name)), j = i + d; if (i >= 0 && j >= 0 && j < u.add.length) [u.add[i], u.add[j]] = [u.add[j], u.add[i]]; }), 'σειρά: ' + r.name);
-  const renameSub = async (r: ListRow) => { const to = (ren?.name || '').trim(); if (!to || to === r.name) { setRen(null); return; } if (await run({ t: 'renameSub', from: r.name, to }, false)) setRen(null); };
+  const renameSub = async (r: ListRow) => { const to = (ren?.name || '').trim(); if (!to || to === r.name) { setRen(null); return; } if (await run({ t: id === 'eids' ? 'renameEid' : 'renameSub', from: r.name, to }, false)) setRen(null); };
   const toDuty = () => requestLeave(() => nav.set({ tab: 'duty', dsub: 'stat' }));
   const select = (v: ListId) => { setId(v); reset(); setWho(null); };
   const n = itemName(name, id); const key = keyOf(id); const isUsed = (r: ListRow) => used.has(key(r.name));
@@ -205,9 +205,9 @@ export function ListsCard() {
         : pick && !r.builtin
         ? html`<${Select} className="ui-select" aria-label=${pick.label + ': ' + r.name} value=${current(id, r, lists)} onChange=${(e: any) => setPick(r, e.target.value)}>${pick.opts.map(([v, l]) => html`<option key=${v} value=${v}>${l}</option>`)}<//>`
         : html`<span className="muted" style=${{ fontSize: '12px' }}>${info(r)}</span>`}
-      ${id === 'subUnits' && !r.builtin && (ren?.key === key(r.name)
+      ${(id === 'subUnits' || id === 'eids') && !r.builtin && (ren?.key === key(r.name)
         ? html`<input className="ui-input" style=${{ width: '200px' }} aria-label=${'Νέο όνομα για ' + r.name} data-autofocus="" value=${ren!.name} onChange=${(e: any) => setRen({ key: ren!.key, name: e.target.value })} onKeyDown=${(e: any) => { if (e.key === 'Enter') renameSub(r); if (e.key === 'Escape') setRen(null); }}/><${Button} size="sm" onClick=${() => renameSub(r)}>Αποθήκευση<//><${Button} size="sm" variant="ghost" onClick=${() => setRen(null)}>Άκυρο<//>`
-        : html`<${Button} size="sm" variant="ghost" aria-label=${'Άνοδος ' + r.name} onClick=${() => moveSub(r, -1)}>▲<//><${Button} size="sm" variant="ghost" aria-label=${'Κάθοδος ' + r.name} onClick=${() => moveSub(r, 1)}>▼<//><${Button} size="sm" variant="ghost" onClick=${() => setRen({ key: key(r.name), name: r.name })}>Μετονομασία<//>`)}
+        : html`${id === 'subUnits' && html`<${Button} size="sm" variant="ghost" aria-label=${'Άνοδος ' + r.name} onClick=${() => moveSub(r, -1)}>▲<//><${Button} size="sm" variant="ghost" aria-label=${'Κάθοδος ' + r.name} onClick=${() => moveSub(r, 1)}>▼<//>`}<${Button} size="sm" variant="ghost" onClick=${() => setRen({ key: key(r.name), name: r.name })}>Μετονομασία<//>`)}
       ${id === 'cadreAbs' && !r.hidden && html`<input key=${r.name + '|' + planCodeSet(lists, planKeyOf(r))} className="ui-input" style=${{ width: '90px' }} maxLength=${PLAN_CODE_MAX} aria-label=${'Κωδικός στο Πρόγραμμα αδειών: ' + r.name} data-tip="Ο σύντομος κωδικός της κατάστασης στο Πρόγραμμα αδειών (οθόνη και Excel). Κενό = αυτόματος" placeholder=${planCode(planKeyOf(r), { lists: { ...lists, planCodes: undefined } as UserLists, cadreLeave: state.settings.cadreLeave }).code} defaultValue=${planCodeSet(lists, planKeyOf(r))} onBlur=${(e: any) => setPlanCode(r, e.target.value)}/>`}
       <span style=${{ flex: 1 }}></span>
       ${id !== 'siUnarmed' && (usedN(r) ? html`<button type="button" className="linkish lists__n" aria-expanded=${who === key(r.name)} data-tip=${who === key(r.name) ? 'Κλείσε' : 'Δες ποιοι'} onClick=${() => setWho(who === key(r.name) ? null : key(r.name))}>${(STAT_IDS.includes(id) ? 'Δηλώθηκε σε ' : 'Το έχουν ') + usedN(r)}</button>` : html`<span className="muted lists__n">Κανείς</span>`)}

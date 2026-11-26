@@ -118,6 +118,7 @@ export type Command =
   | { t: 'printed'; date: ISODate; at: string; files: string[] }
   | { t: 'importPeople'; rows: ImportRow[]; source: string; deactivateMissing: boolean }
   | { t: 'updatePerson'; person: Person }
+  | { t: 'renameEid'; from: string; to: string }   // μετονομασία ειδικότητας στη λίστα, στους στρατιώτες, στα στελέχη, στα φίλτρα εντύπων και στις αποθηκευμένες λίστες
   | { t: 'renameSub'; from: string; to: string }   // μετονομασία Λόχου / Ίλης στη λίστα και στους στρατιώτες (μονάδα)
   | { t: 'addPerson'; person: NewPerson }
   | { t: 'addPeople'; people: NewPerson[] }
@@ -1189,7 +1190,11 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
         });
       }
       // πρώτη φορά σε λειτουργία μονάδας: το έντυπο υπηρεσιών ξεκινά από το έντυπο ΦΡΟΥΡΑ (της ΣΠΕΝ, με όλες τις θέσεις)· τα δικά σου έντυπα μένουν
-      if (c.settings.mode === 'unit' && s.settings.mode !== 'unit' && settings.phase === 'sven') settings.phase = 'spen';
+      // αλλαγή έντυπου με το χέρι στη μονάδα: ο χρήστης αποφάσισε, δεν το πειράζουμε στην επιστροφή
+      if ('phase' in c.settings && c.settings.phase !== s.settings.phase) delete settings.unitSpen;
+      if (c.settings.mode === 'unit' && s.settings.mode !== 'unit' && settings.phase === 'sven') { settings.phase = 'spen'; settings.unitSpen = true; }
+      // πίσω στο κέντρο: αν το ΣΠΕΝ το έβαλε η μετάβαση (και δεν άλλαξε από τότε), γυρνά στη ΣΒΕΝ
+      if (s.settings.mode === 'unit' && c.settings.mode !== undefined && c.settings.mode !== 'unit') { if (settings.unitSpen && settings.phase === 'spen') settings.phase = 'sven'; delete settings.unitSpen; }
       // πρώτη φορά σε λειτουργία μονάδας: οι νέοι ξεκινούν από τον μέσο όρο, μόνο αν δεν είχε οριστεί ποτέ (Michael, 13/11)
       if (c.settings.mode === 'unit' && s.settings.mode !== 'unit' && s.rules.newAvg === undefined)
         return { state: { ...s, settings, rules: { ...s.rules, newAvg: true } }, text: 'Ρυθμίσεις: ' + c.text + ' (άνοιξε και το «Οι νέοι ξεκινούν από τον μέσο όρο», γιατί δεν είχε οριστεί ποτέ)', files: [] };
@@ -1386,6 +1391,27 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const text = old.active && !person.active ? shortName(person) + ': εκτός δύναμης' + (gone.length ? ' (βγήκε από ' + gone.length + (gone.length === 1 ? ' υπηρεσία' : ' υπηρεσίες') + ')' : '') : !old.active && person.active ? shortName(person) + ': ξανά σε δύναμη' : 'Άλλαξαν τα στοιχεία: ' + shortName(person);
       return { state: next, text, files: gone.length ? ['Υπηρεσίες', 'Έλεγχος υπηρεσιών'] : [] };
     }
+    case 'renameEid': {
+      const to = itemName(c.to, 'eids'); const k = itemKey(c.from);
+      if (!to) throw new Error('Γράψε το νέο όνομα');
+      if (/[,"]/.test(to)) throw new Error('Χωρίς κόμμα ή εισαγωγικά: το Excel τα χρησιμοποιεί για να χωρίζει τις τιμές της λίστας.');
+      if (itemKey(to) !== k && listRows(s.settings.lists, 'eids').some(r => itemKey(r.name) === itemKey(to))) throw new Error('Υπάρχει ήδη «' + to + '» στη λίστα');
+      const u = s.settings.lists?.eids || {}; const kt = itemKey(to);
+      const lists = { ...(s.settings.lists || {}), eids: { ...u, add: (u.add || []).map(x => (itemKey(x.name) === k ? { ...x, name: to } : x)), ...(u.hide ? { hide: u.hide.map(x => (itemKey(x) === k ? to : x)) } : {}) } };
+      let n = 0, m = 0; const people = s.people.map(p => { if (p.eid && itemKey(p.eid) === k) { n++; return { ...p, eid: to }; } return p; });
+      const cadreList = s.cadreList.map(x => { if (x.eid && itemKey(x.eid) === k) { m++; return { ...x, eid: to }; } return x; });
+      // φίλτρα εντύπων (και των επιπλέον πινάκων τους) και αποθηκευμένες λίστες του Προσωπικού
+      const pick = <P extends { eids?: string[]; from?: string }>(p: P): P => {
+        if (!p) return p; let q = p;
+        if (p.eids?.some(x => itemKey(x) === k)) q = { ...q, eids: p.eids.map(x => (itemKey(x) === k ? to : x)) };
+        if (p.from === 'eid:' + k) q = { ...q, from: 'eid:' + kt };
+        return q;
+      };
+      const reports = s.settings.reports?.map(r => { const p = pick(r.pick); const more = r.more?.map(t => { const q = pick(t.pick); return q === t.pick ? t : { ...t, pick: q }; }); return p === r.pick && !more?.some((t, i) => t !== r.more![i]) ? r : { ...r, pick: p, ...(more ? { more } : {}) }; });
+      const views = s.settings.views?.map(v => (v.filter === 'eid:' + k ? { ...v, filter: 'eid:' + kt } : v));
+      const settings = { ...s.settings, lists, ...(reports ? { reports } : {}), ...(views ? { views } : {}) };
+      return { state: { ...s, people, cadreList, settings }, text: 'Ειδικότητες: «' + c.from + '» → «' + to + '»' + (n || m ? ' (άλλαξε σε ' + [n && n + (n === 1 ? ' άτομο' : ' άτομα'), m && m + (m === 1 ? ' στέλεχος' : ' στελέχη')].filter(Boolean).join(' και ') + ')' : ''), files: [] };
+    }
     case 'renameSub': {
       const to = c.to.replace(/\s+/g, ' ').trim(); const k = itemKey(c.from);
       if (!to) throw new Error('Γράψε το νέο όνομα');
@@ -1556,7 +1582,7 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
     case 'setPhase':
       if (c.phase === s.settings.phase) return { state: s, text: '', files: [] };
       if (!phaseList(s.settings).some(x => x.id === c.phase)) throw new Error('Δεν βρέθηκε το έντυπο υπηρεσιών');
-      return { state: { ...s, settings: { ...s.settings, phase: c.phase } }, text: 'Έντυπο υπηρεσιών: ΦΡΟΥΡΑ ' + phaseName(s.settings, c.phase), files: [] };
+      return { state: { ...s, settings: (({ unitSpen: _u, ...r }) => ({ ...r, phase: c.phase }))(s.settings) }, text: 'Έντυπο υπηρεσιών: ΦΡΟΥΡΑ ' + phaseName(s.settings, c.phase), files: [] };
     // Δικά σου έντυπα υπηρεσιών (Michael, 22/10): ξεκινούν ως αντίγραφο ενός άλλου, με τις ίδιες υπηρεσίες και θέσεις
     // (ίδια κλειδιά = ίδιο ιστορικό και δικαιοσύνη), και βγαίνουν στο Excel με το έντυπο εκείνου (ΣΒΕΝ ή ΣΠΕΝ)
     case 'addPhase': {
