@@ -44,7 +44,7 @@ export function nextEsso(cur: Esso | null, today: ISODate): Esso {
 // Η κατάσταση της νέας ΕΣΣΟ: ό,τι αφορά τους στρατιώτες της προηγούμενης φεύγει (άτομα, καταστάσεις, υπηρεσίες,
 // δυνατότητες, αιτήσεις, ΗΚΑΙ, έλεγχος υπηρεσιών)· μένουν οι κανόνες, οι ρυθμίσεις της μονάδας, οι υπηρεσίες, οι λίστες,
 // οι αργίες, τα templates των εντύπων και τα στελέχη (λίστα, καταστάσεις, υπόλοιπα αδειών/απαλλαγών, «δεν θέλει υπηρεσία», πρόγραμμα υπηρεσιών
-// χωρίς το via των θέσεων, γιατί οι φρουρές καθαρίζουν) και το μητρώο οπλισμού/υλικού με το ιστορικό του (οι κάτοχοι και οδηγοί-άτομα φεύγουν,
+// και οι θέσεις τους στις φρουρές (αρνητικό pid, με το via που τις δένει)· οι υπόλοιπες φρουρές φεύγουν) και το μητρώο οπλισμού/υλικού με το ιστορικό του (οι κάτοχοι και οδηγοί-άτομα φεύγουν,
 // γιατί οι αριθμοί των ατόμων ξεκινούν πάλι από 1: το είδος γίνεται ΑΧΡΕΩΤΟ). Τα Excel της παλιάς δεν είναι πια πηγές· ο φάκελος των αρχείων
 // γίνεται ο φάκελος της νέας (outputDir) και τα έντυπα πηγαίνουν εκεί (χωρίς δικό τους φάκελο). Το έντυπο υπηρεσιών
 // ξεκινά από τη ΣΒΕΝ, όπως κάθε νέα σειρά.
@@ -58,7 +58,12 @@ export function freshState(s: AppState, e: Esso, today: ISODate, outputDir: stri
   if (s.cadreGrants) keep.cadreGrants = s.cadreGrants;
   if (s.cadreNoDuty) keep.cadreNoDuty = s.cadreNoDuty;
   if (s.cadreDutyOf) keep.cadreDutyOf = s.cadreDutyOf;
-  if (s.cadreDuties) keep.cadreDuties = s.cadreDuties.map(({ via: _v, ...x }) => x);
+  // φρουρές: μένουν μόνο οι θέσεις στελεχών (αρνητικό pid), γιατί από αυτές βγαίνουν οι απαλλαγές τους (cadreBalance.ts)· οι μέρες που μένουν κενές φεύγουν
+  const guards: AppState['guards'] = {};
+  for (const [d, g] of Object.entries(s.guards || {})) { const c = Object.fromEntries(Object.entries(g).filter(([, pid]) => (pid as number) < 0)); if (Object.keys(c).length) guards[d] = c as typeof g; }
+  if (Object.keys(guards).length) keep.guards = guards;
+  // το via μένει όσο μένει η θέση που δείχνει (ώστε η υπηρεσία να μετρά μία φορά)· αλλιώς φεύγει, γιατί οι φρουρές καθαρίζουν
+  if (s.cadreDuties) keep.cadreDuties = s.cadreDuties.map(x => { if (!x.via) return x; const pid = guards[x.date]?.[x.via]; if (pid != null && s.cadreList.find(c => c.pid === pid)?.id === x.cid) return x; const { via: _v, ...r } = x; return r; });
   if (s.assets) keep.assets = s.assets.map(a => { const { holder, driver, ...r } = a; return { ...r, ...(holder && holder.k !== 'person' ? { holder } : {}), ...(driver && driver.k !== 'person' ? { driver } : {}) }; });
   if (s.assetLog) keep.assetLog = s.assetLog;
   return { ...emptyState(), ...keep, rules: s.rules, settings, cadreList: s.cadreList, cadreAbs: s.cadreAbs, notes: (s.notes || []).map(normNote).filter(n => !n.pids || n.cids).map(({ pids: _x, ...n }) => n) };
