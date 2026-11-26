@@ -47,7 +47,7 @@ export function RoomsCard() {
     const ok = await run({ t: 'setSettings', settings: { rooms }, text: 'θάλαμοι ' + n + ', ουλαμοί ' + clean.map(u => u.name + ' (' + roomsTxt(u.rooms) + ')').join(', ') }, false);
     const nr = { ...state.rules, outRooms: { ...state.rules.outRooms, 6: out[6], 0: out[0] } };
     if (ok && JSON.stringify(nr.outRooms) !== JSON.stringify(state.rules.outRooms)) await run({ t: 'setRules', rules: nr, text: 'θάλαμοι εξόδου ΣΑΒ ' + roomsTxt(out[6]) + ', ΚΥΡ ' + roomsTxt(out[0]) }, false);
-    if (ok) toast({ text: 'Αποθηκεύτηκαν οι θάλαμοι και οι ουλαμοί' });
+    if (ok) { setPl(clean); toast({ text: 'Αποθηκεύτηκαν οι θάλαμοι και οι ουλαμοί' }); }   // τα ονόματα ξαναγίνονται όπως αποθηκεύτηκαν (χωρίς κενά): αλλιώς μένει η μπάρα «Δεν αποθηκεύτηκαν»
     return ok;
   };
   usePending(dirty, { label: 'Θάλαμοι και ουλαμοί', save, discard: () => { const x = stored(); setN(x.n); setPer(x.per); setPl(x.pl); setOut(x.out); } });

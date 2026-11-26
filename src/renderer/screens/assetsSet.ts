@@ -61,7 +61,7 @@ export function AssetsCard() {
     if (bad) return false;
     const cfg = { cats: f.cats.map(toCat), places: f.places.map(p => ({ word: p.word.trim().toUpperCase(), means: p.means, ...(p.note?.trim() ? { note: p.note.trim() } : {}) })), warnDays: Math.floor(Number(f.warn)) };
     const ok = await run({ t: 'setSettings', settings: { assets: cfg }, text: 'μητρώο οπλισμού και υλικού (' + cfg.cats.length + ' κατηγορίες)' }, false);
-    if (ok) toast({ text: 'Αποθηκεύτηκαν οι ρυθμίσεις του μητρώου' });
+    if (ok) { setF(fromState(ok.settings)); toast({ text: 'Αποθηκεύτηκαν οι ρυθμίσεις του μητρώου' }); }   // η φόρμα ξαναγίνεται όπως αποθηκεύτηκε: αλλιώς μένει η μπάρα «Δεν αποθηκεύτηκαν»
     return ok;
   };
   usePending(dirty, { label: 'Οπλισμός και υλικό', save, discard: () => setF(fromState(state.settings)) });
