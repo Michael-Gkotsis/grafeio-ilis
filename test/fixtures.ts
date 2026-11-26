@@ -15,3 +15,6 @@ export function fakePeople(n: number): Person[] {
 export function fakeState(n = 40): AppState {
   const s = emptyState(); s.people = fakePeople(n); return s;
 }
+
+// Ό,τι γράφει η εφαρμογή στα αρχεία είναι με κεφαλαία, εκτός από την κατάληξη του τακτικού αριθμού (1ο, 2η, 3ος)
+export const capsOk = (v: string): boolean => { const t = v.replace(/(?<![\p{L}\d])(\d+)(ος|ου|ης|οι|ες|ων|ο|η)(?![\p{L}\d])/gu, '$1'); return t === t.toUpperCase(); };

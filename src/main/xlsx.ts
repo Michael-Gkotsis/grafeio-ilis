@@ -5,7 +5,7 @@
 import JSZip from 'jszip';
 import crypto from 'crypto';
 import { sheetRelsPath, resolveTarget, parseDrawings, EMU_PX } from './xlDrawings';
-import { upper } from '../shared/text';
+import { upperOrd } from '../shared/text';
 import { digitPx, fitText, minSize, textPx, type Box, type Fit, type FontSpec } from './textfit';
 const WIDE_MAX = 60;   // χαρακτήρες: ως εδώ φαρδαίνει μια στήλη πίνακα για να χωρά ό,τι γράφτηκε (fitSheet)
 import { tablePart, type XlLook, type XlPart } from '../shared/xlLook';
@@ -22,7 +22,7 @@ const ZIP_DATE = new Date(2020, 0, 1);   // βλ. save()
 const clean = (s: string) => s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
 // Ό,τι γράφει η εφαρμογή στο Excel μπαίνει με κεφαλαία χωρίς τόνους (Michael, 13/10): κείμενα κελιών, κείμενο με μορφή και λίστες επιλογής.
 // Οι τύποι και οι αριθμοί μένουν όπως είναι.
-const text = (s: string) => clean(upper(s));
+const text = (s: string) => clean(upperOrd(s));
 
 export const colNum = (c: string) => c.split('').reduce((a, ch) => a * 26 + ch.charCodeAt(0) - 64, 0);
 export const colName = (n: number) => { let s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
@@ -318,12 +318,12 @@ export class Sheet {
   // Νέες τιμές στη λίστα που έβαλε η εφαρμογή (ownList)
   setListItems(sqref: string, items: string[]): this {
     const re = new RegExp('(<dataValidation\\b[^>]*\\ssqref="' + sqref.replace(/[$]/g, '\\$&') + '"[^>]*>\\s*<formula1>)[^<]*(</formula1>)');
-    this.tail = this.tail.replace(re, (_m, p1: string, p2: string) => p1 + esc('"' + items.map(upper).join(',') + '"') + p2);
+    this.tail = this.tail.replace(re, (_m, p1: string, p2: string) => p1 + esc('"' + items.map(upperOrd).join(',') + '"') + p2);
     return this;
   }
   // Λίστα επιλογής (dropdown) που δέχεται και ό,τι άλλο γράψει ο χρήστης (χωρίς μήνυμα λάθους)
   addListValidation(sqref: string, items: string[]): this {
-    const dv = `<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="0" sqref="${sqref}"><formula1>${esc('"' + items.map(upper).join(',') + '"')}</formula1></dataValidation>`;
+    const dv = `<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="0" sqref="${sqref}"><formula1>${esc('"' + items.map(upperOrd).join(',') + '"')}</formula1></dataValidation>`;
     if (/<dataValidations\b[^>]*>/.test(this.tail)) {
       const n = (this.tail.match(/<dataValidation\b/g) || []).length + 1;
       this.tail = this.tail.replace(/<dataValidations\b([^>]*)>/, (_m, a: string) => `<dataValidations${setAttr(a, 'count', String(n))}>`).replace('</dataValidations>', dv + '</dataValidations>');

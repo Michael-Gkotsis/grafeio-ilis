@@ -12,7 +12,7 @@ import { checkCadres, dutySheet, rosterCodes } from '../shared/cadreDuty';
 import { countOf, onceKeyOfCadre, onceKeyOfPid } from '../shared/dutyOnce';
 import { assetSheets, type AssetRow, type AssetSheet } from '../shared/assets';
 import { vehicleSheets } from '../shared/vehicles';
-import { norm, collator, upper } from '../shared/text';
+import { norm, collator, upperOrd } from '../shared/text';
 import { everyBlock, fatherTxt, type AppState, type DutyKind } from '../shared/domain';
 import { live, absCode, rankTxt } from '../shared/ranks';
 import { bareOf, codeOf } from '../shared/codes';
@@ -33,7 +33,7 @@ function lookOf(s: AppState) {
   const al = { horizontal: L.h, vertical: L.v === 'center' ? 'middle' as const : L.v };
   // Πλάτος στήλης: όσο θέλει το μεγαλύτερο κείμενό της (από min ως max)· ό,τι περισσεύει μικραίνει ή αναδιπλώνεται στο fitBook
   const fitWidth = (min: number, vals: unknown[], max = 40, b = false) =>
-    Math.round(Math.min(max, Math.max(min * L.sz / 10, ...vals.map(v => (v == null || v === '' ? 0 : widthChars(upper(String(v)), { name: L.font, sz: L.sz, b }))))) * 10) / 10;
+    Math.round(Math.min(max, Math.max(min * L.sz / 10, ...vals.map(v => (v == null || v === '' ? 0 : widthChars(upperOrd(String(v)), { name: L.font, sz: L.sz, b }))))) * 10) / 10;
   // στήλη πίνακα: χωράει και την επικεφαλίδα (έντονη) στο μέγεθος των ρυθμίσεων, για να μη μικραίνει στο fitBook
   const colWidth = (min: number, head: string, vals: unknown[], b = false) => Math.max(fitWidth(min, vals, 40, b), fitWidth(0, [head], 30, true));
   // γράμματα ανά κομμάτι (Ρυθμίσεις › Γράμματα Excel): τίτλος έντονος, υπογραμμισμένος, 2 μεγέθη πάνω· επικεφαλίδες έντονες·
@@ -105,7 +105,7 @@ export async function dutyCheck(s: AppState, ym: string): Promise<Made> {
   people.forEach((p, i) => {
     const row = ws.getRow(4 + i); const x = per.get(p.id) || new Map<ISODate, V[]>(); let nDuty = 0;
     let hol = 0; const c: Record<string, number> = {}; const o: Record<string, number> = {};
-    const vals: (string | number)[] = [i + 1, upper(rankTxt(p)), upper(p.last), upper(p.first + fatherTxt(p))];
+    const vals: (string | number)[] = [i + 1, upperOrd(rankTxt(p)), upperOrd(p.last), upperOrd(p.first + fatherTxt(p))];
     for (const d of days) {
       const v = x.get(d); const code = codeAt(p, d);
       if (code) {
@@ -172,7 +172,7 @@ export async function cadrePlanBook(s: AppState, ym: string, d: ISODate, filter 
   const fill = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } });
   const GREY = { we: fill('FFD9D9D9'), hol: fill('FFBFBFBF') };
   ws.mergeCells(1, 1, 1, W);
-  const t = ws.getCell(1, 1); t.value = upper(sh.title + ' · ' + s.settings.unitName); t.font = FT.title; t.alignment = { horizontal: 'center' };
+  const t = ws.getCell(1, 1); t.value = upperOrd(sh.title + ' · ' + s.settings.unitName); t.font = FT.title; t.alignment = { horizontal: 'center' };
   const head = ws.getRow(3);
   ['Α/Α', 'ΒΑΘΜΟΣ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', ...sh.days.map(x => x.n + '\n' + x.dow), 'ΥΠΟΛΟΙΠΟ ΑΔΕΙΩΝ'].forEach((h, i) => {
     const c = head.getCell(i + 1); c.value = h; c.font = FT.head; c.alignment = { ...al, wrapText: true }; c.border = border;
@@ -197,7 +197,7 @@ export async function cadrePlanBook(s: AppState, ym: string, d: ISODate, filter 
   for (let j = 0; j < nd; j++) ws.getColumn(FIX + 1 + j).width = Math.min(8, colWidth(3.2, String(sh.days[j].n), sh.rows.map(r => r.cells[j]), true));
   ws.getColumn(W).width = Math.min(30, colWidth(14, 'ΥΠΟΛΟΙΠΟ ΑΔΕΙΩΝ', sh.rows.map(r => r.left)));
   ws.pageSetup.printTitlesRow = '3:3';
-  return { name: fileNameOf(s.settings, 'cadrePlan', { text: upper(MONTHS[+ym.slice(5, 7) - 1]) + ' ' + ym.slice(0, 4) }), data: await fitBook(Buffer.from(await wb.xlsx.writeBuffer())), marks: [{ sheet: ws.name, key: 'main', head: [], date: [], title: ['A1'], foot: foot + 1, cols: W }] };
+  return { name: fileNameOf(s.settings, 'cadrePlan', { text: upperOrd(MONTHS[+ym.slice(5, 7) - 1]) + ' ' + ym.slice(0, 4) }), data: await fitBook(Buffer.from(await wb.xlsx.writeBuffer())), marks: [{ sheet: ws.name, key: 'main', head: [], date: [], title: ['A1'], foot: foot + 1, cols: W }] };
 }
 // Υπηρεσίες στελεχών (Michael, 17/11): ΝΕΟ αρχείο με δύο φύλλα για τον μήνα: «ΑΝΑ ΑΤΟΜΟ» (πλέγμα με κωδικούς, Σ και όριο) και «ΑΝΑ ΗΜΕΡΑ»
 // (ποιος κάνει κάθε υπηρεσία κάθε μέρα). A4 οριζόντια, φάρδος μία σελίδα, γκρι ΣΚ και αργίες. Τα δεδομένα βγαίνουν από το shared/cadreDuty.ts
@@ -212,9 +212,9 @@ export async function cadreDutyBook(s: AppState, ym: string, d: ISODate): Promis
   // ---- ΑΝΑ ΑΤΟΜΟ ----
   const nd = sh.days.length; const FIX = 4; const W = FIX + nd + 2;
   const ws = wb.addWorksheet('ΑΝΑ ΑΤΟΜΟ', { pageSetup: setup, views: [{ state: 'frozen', xSplit: 4, ySplit: 3 }] });
-  ws.mergeCells(1, 1, 1, W); const t = ws.getCell(1, 1); t.value = upper(sh.title + ' · ' + s.settings.unitName); t.font = FT.title; t.alignment = { horizontal: 'center' };
+  ws.mergeCells(1, 1, 1, W); const t = ws.getCell(1, 1); t.value = upperOrd(sh.title + ' · ' + s.settings.unitName); t.font = FT.title; t.alignment = { horizontal: 'center' };
   ['Α/Α', 'ΒΑΘΜΟΣ', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΟΜΑΔΑ', ...sh.days.map(x => x.n + '\n' + x.dow), 'Σ', 'ΟΡΙΟ'].forEach((h, i) => {
-    const c = ws.getRow(3).getCell(i + 1); c.value = upper(h); c.font = FT.head; c.alignment = { ...al, wrapText: true }; c.border = border;
+    const c = ws.getRow(3).getCell(i + 1); c.value = upperOrd(h); c.font = FT.head; c.alignment = { ...al, wrapText: true }; c.border = border;
     const g = i >= FIX && i < FIX + nd ? sh.shade[i - FIX] : ''; if (g) c.fill = GREY[g];
   });
   sh.byPerson.forEach((r, j) => {
@@ -237,7 +237,7 @@ export async function cadreDutyBook(s: AppState, ym: string, d: ISODate): Promis
   marks.push({ sheet: ws.name, key: 'main', head: [], date: [], title: ['A1'], foot: foot + 1, cols: W });
   // ---- ΑΝΑ ΗΜΕΡΑ ----
   const w2 = wb.addWorksheet('ΑΝΑ ΗΜΕΡΑ', { pageSetup: setup, views: [{ state: 'frozen', ySplit: 3 }] });
-  w2.mergeCells(1, 1, 1, 4); const t2 = w2.getCell(1, 1); t2.value = upper(sh.title + ' · ' + s.settings.unitName); t2.font = FT.title; t2.alignment = { horizontal: 'center' };
+  w2.mergeCells(1, 1, 1, 4); const t2 = w2.getCell(1, 1); t2.value = upperOrd(sh.title + ' · ' + s.settings.unitName); t2.font = FT.title; t2.alignment = { horizontal: 'center' };
   ['ΗΜΕΡΟΜΗΝΙΑ', 'ΗΜΕΡΑ', 'ΥΠΗΡΕΣΙΑ', 'ΒΑΘΜΟΣ ΚΑΙ ΟΝΟΜΑΤΕΠΩΝΥΜΟ'].forEach((h, i) => { const c = w2.getRow(3).getCell(i + 1); c.value = h; c.font = FT.head; c.alignment = { ...al, wrapText: true }; c.border = border; });
   sh.byDay.forEach((r, j) => {
     [r.date, r.dow, r.svc, r.who].forEach((v, i) => { const c = w2.getRow(4 + j).getCell(i + 1); c.value = v; c.border = border; c.font = FT.data; c.alignment = i === 3 ? { ...al, horizontal: 'left' as const, wrapText: true } : al; if (r.shade) c.fill = GREY[r.shade]; });
@@ -249,7 +249,7 @@ export async function cadreDutyBook(s: AppState, ym: string, d: ISODate): Promis
   w2.getColumn(3).width = Math.min(30, colWidth(14, 'ΥΠΗΡΕΣΙΑ', sh.byDay.map(r => r.svc))); w2.getColumn(4).width = Math.min(60, colWidth(24, 'ΒΑΘΜΟΣ ΚΑΙ ΟΝΟΜΑΤΕΠΩΝΥΜΟ', sh.byDay.map(r => r.who)));
   w2.pageSetup.printTitlesRow = '3:3';
   marks.push({ sheet: w2.name, key: 'main', head: [], date: [], title: ['A1'], foot: f2, cols: 4 });
-  return { name: fileNameOf(s.settings, 'cadreDuty', { text: upper(MONTHS[+ym.slice(5, 7) - 1]) + ' ' + ym.slice(0, 4) }), data: await fitBook(Buffer.from(await wb.xlsx.writeBuffer())), marks };
+  return { name: fileNameOf(s.settings, 'cadreDuty', { text: upperOrd(MONTHS[+ym.slice(5, 7) - 1]) + ' ' + ym.slice(0, 4) }), data: await fitBook(Buffer.from(await wb.xlsx.writeBuffer())), marks };
 }
 // Μητρώο οπλισμού και υλικού (Michael, 17/11): ΝΕΟ αρχείο, ένα φύλλο ανά τύπο όπλου, ένα ανά κατηγορία υλικού και ΣΥΝΟΛΑ.
 // Όλα με κεφαλαία, A4 οριζόντια, φάρδος μία σελίδα. Τα δεδομένα βγαίνουν από το shared/assets.ts (rows: ό,τι φαίνεται στην οθόνη)
@@ -264,7 +264,7 @@ async function sheetBook(s: AppState, sheets: AssetSheet[], d: ISODate, id: 'ass
   const marks: Made['marks'] = [];
   for (const sh of sheets) {
     const W = sh.head.length; const ws = wb.addWorksheet(sh.name, { pageSetup: setup, views: [{ state: 'frozen', ySplit: 3 }] });
-    ws.mergeCells(1, 1, 1, W); const t = ws.getCell(1, 1); t.value = upper(sh.title + ' · ' + s.settings.unitName); t.font = FT.title; t.alignment = { horizontal: 'center' };
+    ws.mergeCells(1, 1, 1, W); const t = ws.getCell(1, 1); t.value = upperOrd(sh.title + ' · ' + s.settings.unitName); t.font = FT.title; t.alignment = { horizontal: 'center' };
     sh.head.forEach((h, i) => { const c = ws.getRow(3).getCell(i + 1); c.value = h; c.font = FT.head; c.alignment = { ...al, wrapText: true }; c.border = border; });
     const left = (i: number) => sh.kind === 'totals' ? i < 2 : sh.kind === 'weapon' ? i === 2 || i === 5 || i >= 9 : sh.kind === 'vehicle' ? i === 1 || i === 3 || i === 4 || i === 6 || i >= 7 : sh.kind === 'fuel' ? i === 2 : sh.kind === 'maint' ? i === 2 || i === 4 : i === 1 || i === 2 || i === 5 || i === 6 || i >= 10;
     sh.rows.forEach((r, j) => r.forEach((v, i) => {
@@ -297,10 +297,10 @@ function addSheets(wb: ExcelJS.Workbook, s: AppState, sheets: RosterSheet[], key
     });
     const W = sh.head.length;
     ws.mergeCells(1, 1, 1, W);
-    const t = ws.getCell(1, 1); t.value = upper(sh.title + ' · ' + s.settings.unitName); t.font = FT.title; t.alignment = { horizontal: 'center' };
+    const t = ws.getCell(1, 1); t.value = upperOrd(sh.title + ' · ' + s.settings.unitName); t.font = FT.title; t.alignment = { horizontal: 'center' };
     sh.head.forEach((h, i) => { const c = ws.getRow(3).getCell(i + 1); c.value = h; c.font = FT.head; c.alignment = { ...al, wrapText: true }; c.border = border; });
     sh.rows.forEach((r, j) => r.forEach((v, i) => {
-      const c = ws.getRow(4 + j).getCell(i + 1); c.value = typeof v === 'string' ? upper(v) : v;
+      const c = ws.getRow(4 + j).getCell(i + 1); c.value = typeof v === 'string' ? upperOrd(v) : v;
       c.font = FT.data; c.alignment = al; c.border = border;
     }));
     if (!sh.rows.length) { ws.mergeCells(4, 1, 4, W); const c = ws.getCell(4, 1); c.value = 'ΚΑΝΕΝΑΣ'; c.alignment = { horizontal: 'center' }; c.font = { name: F, italic: true, size: Z }; }
@@ -329,13 +329,13 @@ function addRosterPrint(wb: ExcelJS.Workbook, s: AppState, d: ISODate): MadeShee
   const ws = wb.addWorksheet('ΔΥΝΑΜΟΛΟΓΙΟ', { pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } } });
   const thin = { style: 'thin' as const }; const border = { top: thin, left: thin, bottom: thin, right: thin };
   const W = sh.head.length; const T = Math.max(5, s.settings.unit.length + 2); const HEAD = T + 3;
-  s.settings.unit.forEach((u, i) => { ws.mergeCells(i + 1, 1, i + 1, 5); const c = ws.getCell(i + 1, 1); c.value = upper(u); c.font = FT.unit; c.alignment = { horizontal: 'center' }; });
-  ws.mergeCells(1, W - 3, 1, W); const dc = ws.getCell(1, W - 3); dc.value = upper((s.settings.place ? s.settings.place + ', ' : '') + hkDate(d)); dc.font = FT.date; dc.alignment = { horizontal: 'right' };
-  ws.mergeCells(T, 1, T, W); const t = ws.getCell(T, 1); t.value = upper('ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ ' + (s.settings.unitName || '') + ' ΤΗΣ ' + hkDate(d)).replace(/\s+/g, ' '); t.font = FT.title; t.alignment = { horizontal: 'center' };
+  s.settings.unit.forEach((u, i) => { ws.mergeCells(i + 1, 1, i + 1, 5); const c = ws.getCell(i + 1, 1); c.value = upperOrd(u); c.font = FT.unit; c.alignment = { horizontal: 'center' }; });
+  ws.mergeCells(1, W - 3, 1, W); const dc = ws.getCell(1, W - 3); dc.value = upperOrd((s.settings.place ? s.settings.place + ', ' : '') + hkDate(d)); dc.font = FT.date; dc.alignment = { horizontal: 'right' };
+  ws.mergeCells(T, 1, T, W); const t = ws.getCell(T, 1); t.value = upperOrd('ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ ' + (s.settings.unitName || '') + ' ΤΗΣ ' + hkDate(d)).replace(/\s+/g, ' '); t.font = FT.title; t.alignment = { horizontal: 'center' };
   ws.mergeCells(T + 1, 1, T + 1, W); const n = ws.getCell(T + 1, 1); n.value = 'ΔΥΝΑΜΗ: ' + sh.rows.length; n.font = { name: F, size: Z }; n.alignment = { horizontal: 'center' };
   sh.head.forEach((h, i) => { const c = ws.getRow(HEAD).getCell(i + 1); c.value = h; c.font = FT.head; c.alignment = { ...al, wrapText: true }; c.border = border; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } }; });
   sh.rows.forEach((r, j) => r.forEach((v, i) => {
-    const c = ws.getRow(HEAD + 1 + j).getCell(i + 1); c.value = typeof v === 'string' ? upper(v) : v;
+    const c = ws.getRow(HEAD + 1 + j).getCell(i + 1); c.value = typeof v === 'string' ? upperOrd(v) : v;
     c.font = FT.data; c.alignment = al; c.border = border;
   }));
   sh.head.forEach((h, i) => { ws.getColumn(i + 1).width = colWidth(ROSTER_W[h] || 12, h, sh.rows.map(r => r[i])); });
@@ -356,18 +356,18 @@ export async function weaponsBook(s: AppState, d: ISODate): Promise<Made> {
     const W = sh.head.length; let HEAD = 3; let title = ['A1', 'A2'];
     if (k === 0) {
       const T = Math.max(5, s.settings.unit.length + 2); HEAD = T + 3; title = ['A' + T, 'A' + (T + 1)];
-      s.settings.unit.forEach((u, i) => { ws.mergeCells(i + 1, 1, i + 1, 5); const c = ws.getCell(i + 1, 1); c.value = upper(u); c.font = FT.unit; c.alignment = { horizontal: 'center' }; });
-      ws.mergeCells(1, W - 3, 1, W); const dc = ws.getCell(1, W - 3); dc.value = upper((s.settings.place ? s.settings.place + ', ' : '') + hkDate(d)); dc.font = FT.date; dc.alignment = { horizontal: 'right' };
-      ws.mergeCells(T, 1, T, W); const t = ws.getCell(T, 1); t.value = upper('ΚΑΤΑΣΤΑΣΗ ΟΠΛΙΣΜΟΥ ' + (s.settings.unitName || '') + ' ΤΗΣ ' + hkDate(d)).replace(/\s+/g, ' '); t.font = FT.title; t.alignment = { horizontal: 'center' };
+      s.settings.unit.forEach((u, i) => { ws.mergeCells(i + 1, 1, i + 1, 5); const c = ws.getCell(i + 1, 1); c.value = upperOrd(u); c.font = FT.unit; c.alignment = { horizontal: 'center' }; });
+      ws.mergeCells(1, W - 3, 1, W); const dc = ws.getCell(1, W - 3); dc.value = upperOrd((s.settings.place ? s.settings.place + ', ' : '') + hkDate(d)); dc.font = FT.date; dc.alignment = { horizontal: 'right' };
+      ws.mergeCells(T, 1, T, W); const t = ws.getCell(T, 1); t.value = upperOrd('ΚΑΤΑΣΤΑΣΗ ΟΠΛΙΣΜΟΥ ' + (s.settings.unitName || '') + ' ΤΗΣ ' + hkDate(d)).replace(/\s+/g, ' '); t.font = FT.title; t.alignment = { horizontal: 'center' };
       const armed = sh.rows.filter(r => r[W_NUM]).length;
       ws.mergeCells(T + 1, 1, T + 1, W); const n = ws.getCell(T + 1, 1); n.value = 'ΔΥΝΑΜΗ: ' + (sh.people ?? sh.rows.length) + ' · ΜΕ ΟΠΛΟ: ' + armed; n.font = { name: F, size: Z }; n.alignment = { horizontal: 'center' };
     } else {
-      ws.mergeCells(1, 1, 1, W); const t = ws.getCell(1, 1); t.value = upper(sh.title + ' · ' + s.settings.unitName); t.font = FT.title; t.alignment = { horizontal: 'center' };
-      ws.mergeCells(2, 1, 2, W); const n = ws.getCell(2, 1); n.value = upper(sh.note); n.font = { name: F, italic: true, size: Math.max(7, Z - 1) }; n.alignment = { horizontal: 'center' };
+      ws.mergeCells(1, 1, 1, W); const t = ws.getCell(1, 1); t.value = upperOrd(sh.title + ' · ' + s.settings.unitName); t.font = FT.title; t.alignment = { horizontal: 'center' };
+      ws.mergeCells(2, 1, 2, W); const n = ws.getCell(2, 1); n.value = upperOrd(sh.note); n.font = { name: F, italic: true, size: Math.max(7, Z - 1) }; n.alignment = { horizontal: 'center' };
     }
     sh.head.forEach((h, i) => { const c = ws.getRow(HEAD).getCell(i + 1); c.value = h; c.font = FT.head; c.alignment = { ...al, wrapText: true }; c.border = border; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } }; });
     sh.rows.forEach((r, j) => { const row = ws.getRow(HEAD + 1 + j); if (k === 0) row.height = Math.max(20, Z * 2); r.forEach((v, i) => {
-      const c = row.getCell(i + 1); c.value = typeof v === 'string' ? upper(v) : v;
+      const c = row.getCell(i + 1); c.value = typeof v === 'string' ? upperOrd(v) : v;
       c.font = { ...FT.data, bold: FT.data.bold || sh.head[i] === 'ΑΡΙΘΜΟΣ ΟΠΛΟΥ' }; c.alignment = al; c.border = border;
     }); });
     if (!sh.rows.length) { ws.mergeCells(HEAD + 1, 1, HEAD + 1, W); const c = ws.getCell(HEAD + 1, 1); c.value = 'ΚΑΝΕΝΑΣ'; c.alignment = { horizontal: 'center' }; c.font = { name: F, italic: true, size: Z }; }
@@ -395,28 +395,28 @@ export async function imerBook(s: AppState, o: ImerReq): Promise<Made> {
   const thin = { style: 'thin' as const }; const border = { top: thin, left: thin, bottom: thin, right: thin };
   const gray = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFD9D9D9' } };
   const light = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFF2F2F2' } };
-  const esso = currentEsso(s); const title = upper(imerTitle(s.settings) + (esso ? ' ' + essoName(esso) : ''));
+  const esso = currentEsso(s); const title = upperOrd(imerTitle(s.settings) + (esso ? ' ' + essoName(esso) : ''));
   const used = new Set<string>();
   const legend: [string, string][] = [...IMER_ROWS.filter(r => imerRowOn(s.settings, r)).map(r => [imerCode(s.settings, r.key), r.label] as [string, string]),
     ...[['th', 'Θαλαμοφύλακας'], ['op', 'Οπλοφύλακας'], ['sk', 'Σκοπός'], ['mg', 'Μαγειρεία'], ['ly', 'Λ/Υ - Δ/Υ'], ['tae', 'ΤΑΕ'], ['other', 'Περιπολία / άλλη υπηρεσία']].map(([k, n]) => [DUTY_CODES[k as DutyKind], n] as [string, string]), ['ΓΡ', 'Γραφέας'], ['ΕΣΤ', 'Εστιάτορας']];
   for (const x of sheets) {
-    const nm = upper(x.g.name).replace(/^(\d+)ΟΣ/, '$1ος'); let name = sheetSafe(nm); for (let i = 2; used.has(name); i++) name = sheetSafe(nm).slice(0, 28) + ' ' + i; used.add(name);
+    const nm = upperOrd(x.g.name); let name = sheetSafe(nm); for (let i = 2; used.has(name); i++) name = sheetSafe(nm).slice(0, 28) + ' ' + i; used.add(name);
     const ws = wb.addWorksheet(name, { pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } } });
     const W = 5 + Math.max(days.length, 1); const HEAD = 9; const n = x.g.rows.length;
     // κεφαλίδα της μονάδας δεξιά, όπως στο δικό του Excel: 3 γραμμές της Ρυθμίσεων, ουλαμός, θάλαμοι
-    const bw = Math.min(5, W - 5); const c0 = W - bw + 1; const unitHead = [...s.settings.unit.map(u => upper(u)), x.g.name === 'ΣΥΝΟΛΙΚΟ ΙΛΗΣ' ? '' : nm, x.g.rooms];
+    const bw = Math.min(5, W - 5); const c0 = W - bw + 1; const unitHead = [...s.settings.unit.map(u => upperOrd(u)), x.g.name === 'ΣΥΝΟΛΙΚΟ ΙΛΗΣ' ? '' : nm, x.g.rooms];
     unitHead.forEach((t, i) => { ws.mergeCells(i + 1, c0, i + 1, W); const c = ws.getCell(i + 1, c0); c.value = t || null; c.font = FT.unit; c.alignment = { horizontal: 'center' }; });
     ws.mergeCells(7, 1, 7, W); const tc = ws.getCell(7, 1); tc.value = title; tc.font = FT.title; tc.alignment = { horizontal: 'center' };
     ws.mergeCells(8, 1, 8, 5); const uc = ws.getCell(8, 1); uc.value = nm; uc.font = FT.head;
     // μήνες πάνω από τις μέρες τους
     for (let i = 0; i < days.length;) { let j = i; while (j + 1 < days.length && days[j + 1].slice(0, 7) === days[i].slice(0, 7)) j++;
-      ws.mergeCells(8, 6 + i, 8, 6 + j); const mc = ws.getCell(8, 6 + i); mc.value = upper(MONTHS[+days[i].slice(5, 7) - 1]); mc.font = FT.head; mc.alignment = { horizontal: 'center' }; mc.border = border; i = j + 1; }
+      ws.mergeCells(8, 6 + i, 8, 6 + j); const mc = ws.getCell(8, 6 + i); mc.value = upperOrd(MONTHS[+days[i].slice(5, 7) - 1]); mc.font = FT.head; mc.alignment = { horizontal: 'center' }; mc.border = border; i = j + 1; }
     const head = ['Α/Α', 'ΒΑΘΜΟΣ', 'Ο-Σ', 'ΕΠΙΘΕΤΟ', 'ΟΝΟΜΑ', ...days.map(d => +d.slice(8, 10))];
     head.forEach((h, i) => { const c = ws.getRow(HEAD).getCell(i + 1); c.value = h; c.font = FT.head; c.alignment = { ...al, wrapText: true }; c.border = border; c.fill = gray; });
     x.g.rows.forEach((p, i) => {
       const row = ws.getRow(HEAD + 1 + i);
-      [i + 1, upper(rankTxt(p)), upper(p.spec), upper(p.last), upper(p.first + fatherTxt(p))].forEach((v, k) => { const c = row.getCell(k + 1); c.value = v; c.font = FT.data; c.alignment = al; c.border = border; });
-      x.cells[i].forEach((cl, k) => { const c = row.getCell(6 + k); c.value = cl.code ? upper(cl.code) : null; c.font = cl.code ? { ...FT.data, bold: true } : FT.data; c.alignment = al; c.border = border; if (cl.count === 'A' && cl.code) c.fill = light; });
+      [i + 1, upperOrd(rankTxt(p)), upperOrd(p.spec), upperOrd(p.last), upperOrd(p.first + fatherTxt(p))].forEach((v, k) => { const c = row.getCell(k + 1); c.value = v; c.font = FT.data; c.alignment = al; c.border = border; });
+      x.cells[i].forEach((cl, k) => { const c = row.getCell(6 + k); c.value = cl.code ? upperOrd(cl.code) : null; c.font = cl.code ? { ...FT.data, bold: true } : FT.data; c.alignment = al; c.border = border; if (cl.count === 'A' && cl.code) c.fill = light; });
     });
     ['Π', 'Α'].forEach((t, k) => {
       const r = HEAD + 1 + n + k; const row = ws.getRow(r);
@@ -426,7 +426,7 @@ export async function imerBook(s: AppState, o: ImerReq): Promise<Made> {
       for (let i = 1; i <= 5; i++) row.getCell(i).border = border;
     });
     let r = HEAD + n + 4;
-    legend.forEach(([code, what]) => { const a = ws.getRow(r++); const d = a.getCell(4); d.value = upper(what); d.font = { name: F, size: Math.max(7, Z - 1) }; const e = a.getCell(5); e.value = upper(code); e.font = { name: F, size: Math.max(7, Z - 1), bold: true }; });
+    legend.forEach(([code, what]) => { const a = ws.getRow(r++); const d = a.getCell(4); d.value = upperOrd(what); d.font = { name: F, size: Math.max(7, Z - 1) }; const e = a.getCell(5); e.value = upperOrd(code); e.font = { name: F, size: Math.max(7, Z - 1), bold: true }; });
     ws.getColumn(1).width = fitWidth(4, [n]); ws.getColumn(2).width = fitWidth(7, x.g.rows.map(p => rankTxt(p)), 14); ws.getColumn(3).width = fitWidth(5, x.g.rows.map(p => p.spec), 8);
     ws.getColumn(4).width = fitWidth(14, [...x.g.rows.map(p => p.last), ...legend.map(l => l[1])], 30); ws.getColumn(5).width = fitWidth(12, x.g.rows.map(p => p.first + fatherTxt(p)), 24);
     for (let i = 0; i < days.length; i++) ws.getColumn(6 + i).width = fitWidth(4.2, x.cells.map(r => r[i]?.code), 9, true);

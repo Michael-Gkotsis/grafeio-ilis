@@ -11,7 +11,7 @@ import { emptyState, type AppState } from '../src/shared/domain';
 import { Store } from '../src/main/db';
 import { weaponsBook } from '../src/main/excel';
 import ExcelJS from 'exceljs';
-import { fakeState } from './fixtures';
+import { fakeState, capsOk } from './fixtures';
 
 let seq = 0;
 const ctx: Ctx = { today: '2026-10-17', newId: () => 'a' + ++seq };
@@ -279,12 +279,12 @@ describe('Ένοπλες υπηρεσίες: Excel και έντυπο', () => {
     const wb = new ExcelJS.Workbook(); await wb.xlsx.load(r.data as any);
     const vals = (name: string) => { const out: string[] = []; wb.getWorksheet(name)!.eachRow(row => row.eachCell(c => { if (typeof c.value === 'string') out.push(c.value); })); return out; };
     const mv = vals('ΚΙΝΗΣΕΙΣ ΟΠΛΩΝ');
-    expect(mv).toContain('ΠΑΡΑΛΑΒΗ 13:45'); expect(mv).toContain('ΠΑΡΑΔΟΣΗ 18/10 14:15'); expect(mv).toContain('ΥΠΗΡΕΣΙΑ ΣΚΟΠΟΣ 3ΗΣ ΣΚΟΠΙΑΣ (Α)'); expect(mv).toContain('ΛΗΞ ΥΠΗΡΕΣΙΑΣ');
+    expect(mv).toContain('ΠΑΡΑΛΑΒΗ 13:45'); expect(mv).toContain('ΠΑΡΑΔΟΣΗ 18/10 14:15'); expect(mv).toContain('ΥΠΗΡΕΣΙΑ ΣΚΟΠΟΣ 3ης ΣΚΟΠΙΑΣ (Α)'); expect(mv).toContain('ΛΗΞ ΥΠΗΡΕΣΙΑΣ');
     expect(mv).toContain('17/10/2026 17:45');
-    expect(mv.every(v => v === v.toUpperCase() && !/[\u0300-\u036f]/.test(v.normalize('NFD')))).toBe(true);
+    expect(mv.every(v => capsOk(v) && !/[\u0300-\u036f]/.test(v.normalize('NFD')))).toBe(true);
     const main = vals('ΟΠΛΙΣΜΟΣ');
-    expect(main).toContain('ΕΚΤΟΣ: ΣΚΟΠΟΣ 3ΗΣ ΣΚΟΠΙΑΣ (Α) 17:45–20:15, 01:45–04:15, 09:45–12:15');
-    expect(main).toContain('ΕΚΤΟΣ: ΟΠΛΟΦΥΛΑΚΑΣ 1ΟΣ 13:45–14:15');
+    expect(main).toContain('ΕΚΤΟΣ: ΣΚΟΠΟΣ 3ης ΣΚΟΠΙΑΣ (Α) 17:45–20:15, 01:45–04:15, 09:45–12:15');
+    expect(main).toContain('ΕΚΤΟΣ: ΟΠΛΟΦΥΛΑΚΑΣ 1ος 13:45–14:15');
   });
   it('Έντυπο «Κινήσεις όπλων»: τα ίδια νούμερα με το Excel, «της θέσης» με ΠΑΡΑΛΑΒΗ/ΠΑΡΑΔΟΣΗ', () => {
     const s = post(base({ op1: 1, op2: 2, op3: 3, op4: 4 }));

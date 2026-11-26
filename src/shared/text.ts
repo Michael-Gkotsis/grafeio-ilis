@@ -8,3 +8,7 @@ export const translit = (s: unknown): string => norm(s).split('').map(c => GR2LA
 export const collator = new Intl.Collator('el', { sensitivity: 'base' });
 // Κεφαλαία χωρίς τόνους, όπως γράφονται στα έγγραφα (τα διαλυτικά μένουν): «Στέρηση εξόδου» → «ΣΤΕΡΗΣΗ ΕΞΟΔΟΥ»
 export const upper = (s: unknown): string => String(s ?? '').toUpperCase().normalize('NFD').replace(/́/g, '').normalize('NFC');
+// Κεφαλαία για ό,τι γράφει η εφαρμογή σε Excel/Word (Michael, 26/11): ο τακτικός αριθμός κρατά μικρή την κατάληξη, «1ο», «2η», «3ος», όχι «1Ο».
+// Μόνο αριθμός κολλητά με κατάληξη, χωρίς γράμμα ή ψηφίο γύρω του (έτσι τα «Θ1α», «2Η ΕΠΧΙΑ» κ.ά. κωδικοί δεν πειράζονται εκτός από την κατάληξη).
+const ORD_RE = /(?<![\p{L}\d])(\d+)(ΟΣ|ΟΥ|ΗΣ|ΟΙ|ΕΣ|ΩΝ|Ο|Η)(?![\p{L}\d])/gu;
+export const upperOrd = (s: unknown): string => upper(s).replace(ORD_RE, (_m, n: string, suf: string) => n + suf.toLowerCase());

@@ -5,6 +5,7 @@ import { Workbook } from '../src/main/xlsx';
 import { buildTemplate, fillReport, inspectTemplate, previewReport } from '../src/main/reports';
 import { PRESETS, candidates, defaultPick, guessField, pickRandom, replaceOne, rowsOf, sortRows, type Report } from '../src/shared/reports';
 import { fakeState as fakeNew } from './fixtures';
+import { upperOrd } from '../src/shared/text';
 // η παλιά διάταξη (κεφαλίδα αριστερά, ημερομηνία δεξιά): αυτά τα τεστ δεν αφορούν τη θέση τους (head-date-swap.test.ts)
 const fakeState: typeof fakeNew = n => { const s = fakeNew(n); return { ...s, settings: { ...s.settings, hdLeft: true } }; };
 
@@ -58,7 +59,7 @@ describe('Έντυπα', () => {
     expect(ws.formula('E13')).toBe('COUNTA(C7:C11)');
     expect(ws.get('E1')).toBe('ΑΥΛΩΝΑΣ, 19/10/2026');
     // η κεφαλίδα 3 γραμμών σε άδεια κελιά από κάτω, μία σε καθένα (όπως στο χαρτί)
-    expect(ws.get('A1')).toBe(s.settings.unit[0].toUpperCase()); expect(ws.get('A2')).toBe(s.settings.unit[1].toUpperCase());
+    expect(ws.get('A1')).toBe(upperOrd(s.settings.unit[0])); expect(ws.get('A2')).toBe(upperOrd(s.settings.unit[1]));
     expect(ws.style('B11')).toBe(ws.style('B7'));   // οι νέες γραμμές με τη μορφή της γραμμής-προτύπου
     expect(out.name).toBe('ΑΓΓΑΡΕΙΑ 19-10-2026.xlsx');
   });
@@ -92,7 +93,7 @@ describe('Έντυπα', () => {
     const r = rep({ sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells });
     const out = await fillReport(b.data, s, r, s.people.slice(0, 25).map(p => p.id), D);
     const wb = await Workbook.open(out.data); const ws = await wb.sheet(0);
-    expect(ws.get('A1')).toBe(s.settings.unit[0].toUpperCase());
+    expect(ws.get('A1')).toBe(upperOrd(s.settings.unit[0]));
     expect(ws.get('E1')).toMatch(/19 ΟΚΤ 26$/);
     expect(ws.get('A5')).toBe('ΟΝΟΜΑΣΤΙΚΗ ΚΑΤΑΣΤΑΣΗ');
     expect(ws.get('C7')).toBe('ΟΝΟΜΑΤΕΠΩΝΥΜΟ'); expect(ws.get('C32')).toBe(s.people[24].last + ' ' + s.people[24].first);

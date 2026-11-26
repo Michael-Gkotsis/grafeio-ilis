@@ -14,7 +14,7 @@ import { byName } from '../src/shared/hkaiText';
 import { HK_NCO, HK_OFFICERS, hkaiCounts, postBy, seatMap } from '../src/shared/rules';
 import { HK_COLS } from '../src/shared/sources';
 import { hkRowName, unitSettingsFor } from '../src/shared/unit';
-import { normGreek, norm } from '../src/shared/text';
+import { normGreek, norm, upperOrd } from '../src/shared/text';
 import { fakeState as fakeNew } from './fixtures';
 // η παλιά διάταξη (κεφαλίδα αριστερά, ημερομηνία δεξιά): αυτά τα τεστ δεν αφορούν τη θέση τους (head-date-swap.test.ts)
 const fakeState: typeof fakeNew = n => { const s = fakeNew(n); return { ...s, settings: { ...s.settings, hdLeft: true } }; };
@@ -169,7 +169,7 @@ describe('Εξοδούχοι σε τυχαία templates', () => {
           if (C.name) expect(N0(at(rows, r, C.name)), w).toContain(N0(p.last));
           if (C.room) expect(at(rows, r, C.room), w).toBe(p.room == null ? '' : String(p.room));
           if (C.phone) expect(at(rows, r, C.phone), w).toBe(p.phone || '');
-          if (C.note) expect(at(rows, r, C.note), w).toBe(note);
+          if (C.note) expect(at(rows, r, C.note), w).toBe(upperOrd(note));
         });
         // μετά τη λίστα: καμία γραμμή με στοιχεία ατόμου (οι έτοιμες κενές γραμμές που περίσσεψαν μένουν κενές)
         if (C.last) expect(at(rows, hr.r + 1 + list.length, C.last), why + ' μετά τη λίστα').toBe('');

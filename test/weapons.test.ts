@@ -7,7 +7,7 @@ import { weaponsBook } from '../src/main/excel';
 import { weaponBack } from '../src/shared/ranks';
 import { lyLine } from '../src/shared/froura';
 import { shortName, type AppState } from '../src/shared/domain';
-import { fakeState } from './fixtures';
+import { fakeState, capsOk } from './fixtures';
 
 let seq = 0;
 const ctx: Ctx = { today: '2026-10-17', newId: () => 'w' + ++seq };
@@ -67,10 +67,10 @@ describe('Οπλισμός', () => {
     const wb = new ExcelJS.Workbook(); await wb.xlsx.load(r.data as any);
     const ws = wb.getWorksheet('ΟΠΛΙΣΜΟΣ')!;
     const vals: string[] = []; ws.eachRow(row => row.eachCell(c => { if (typeof c.value === 'string') vals.push(c.value); }));
-    expect(vals).toContain('ΚΑΤΑΣΤΑΣΗ ΟΠΛΙΣΜΟΥ 4ΗΣ ΙΛΗΣ ΤΗΣ 17 ΟΚΤ 26');
+    expect(vals).toContain('ΚΑΤΑΣΤΑΣΗ ΟΠΛΙΣΜΟΥ 4ης ΙΛΗΣ ΤΗΣ 17 ΟΚΤ 26');
     expect(vals).toContain('ΑΥΛΩΝΑ, 17 ΟΚΤ 26');
     expect(vals).toContain('ΔΥΝΑΜΗ: 6 · ΜΕ ΟΠΛΟ: 3');
-    expect(vals.every(v => v === v.toUpperCase())).toBe(true);
+    expect(vals.every(v => capsOk(v))).toBe(true);
     expect(normWeapon('α-12')).toBe('Α-12');
   });
   it('τύπος όπλου και θέση οπλοβαστού: αλλάζει μόνο ό,τι δόθηκε, ίδια θέση σε δύο φαίνεται στο «Ίδιος αριθμός»', () => {

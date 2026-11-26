@@ -155,7 +155,7 @@ describe('δομή εντύπου υπηρεσιών άλλης μονάδας (
         b.rows.forEach((rw, q) => {
           const g = Math.floor(q / per), j = q % per; const row1 = rw.r + 1;
           if (det.cols.shift.c != null && per > 1 && cellTxt(w2.getCell(row1, form.sc! + 1).value) !== (j === 0 ? 'Φ' : 'Κ')) bad(2, seed);
-          if (j === 0 && cellTxt(w2.getCell(row1, form.nc + 1).value) !== (g + 1) + 'Ο') bad(3, seed);
+          if (j === 0 && cellTxt(w2.getCell(row1, form.nc + 1).value) !== (g + 1) + 'ο') bad(3, seed);
           const e = who(s, t.value, g, j); const gotName = cellTxt(w2.getCell(row1, form.nmc + 1).value), gotRank = cellTxt(w2.getCell(row1, form.rc + 1).value);
           if (e) { if (j < per) { filled++; if (e !== gotRank + '|' + gotName) bad(4, seed); } }
         });

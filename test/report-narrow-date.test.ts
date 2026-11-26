@@ -12,7 +12,7 @@ const D = '2026-10-19';
 const C = (f: string, h: string, w: BuildCol['w'] = 'auto'): BuildCol => ({ f, h, w });
 const LIST = [C('aa', 'Α/Α', 'narrow'), C('rank', 'ΒΑΘΜΟΣ'), C('name', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ')];
 const opts = (cols: BuildCol[], x: Partial<BuildOpts> = {}): BuildOpts => ({ ...blankBuild(), cols, sig: 'none', ...x });
-const st = (hdLeft: boolean) => { const s = fakeState(8); return { ...s, settings: { ...s.settings, hdLeft: hdLeft || undefined, unit: ['ΚΕΝ ΑΥΛΩΝΑ (ΚΕΤΘ)', '2Η ΕΠΧΙΑ Ν/Σ', '4Η ΙΛΗ'] as [string, string, string] } }; };
+const st = (hdLeft: boolean) => { const s = fakeState(8); return { ...s, settings: { ...s.settings, hdLeft: hdLeft || undefined, unit: ['ΚΕΝ ΑΥΛΩΝΑ (ΚΕΤΘ)', '2η ΕΠΧΙΑ Ν/Σ', '4η ΙΛΗ'] as [string, string, string] } }; };
 async function build(o: BuildOpts, kind: 'people' | 'blank' = 'people') {
   const b = await buildTemplate(o, kind);
   const r = withBuilt({ id: 'r', name: 'x', tpl: 't', kind, sheet: '', head: 1, cols: [], cells: [], pick: defaultPick(), sort: 'name', day: 'today', out: 'file', sigs: [] } as Report, b, o);
@@ -35,7 +35,7 @@ describe('Έντυπα: στενός πίνακας, η ημερομηνία δ�
   for (const hdLeft of [false, true]) {
     it('3 στήλες (Α/Α, βαθμός, ονοματεπώνυμο), hdLeft=' + hdLeft + ': κεφαλίδα στο A1 ολόκληρη, Β1 και Γ1 άδεια, ημερομηνία στη γραμμή 4 δεξιά (A4:Γ4), τίτλος στη γραμμή 5', async () => {
       const x = await out(opts(LIST), hdLeft);
-      expect([x.ws.get('A1'), x.ws.get('A2'), x.ws.get('A3')]).toEqual(['ΚΕΝ ΑΥΛΩΝΑ (ΚΕΤΘ)', '2Η ΕΠΧΙΑ Ν/Σ', '4Η ΙΛΗ']);
+      expect([x.ws.get('A1'), x.ws.get('A2'), x.ws.get('A3')]).toEqual(['ΚΕΝ ΑΥΛΩΝΑ (ΚΕΤΘ)', '2η ΕΠΧΙΑ Ν/Σ', '4η ΙΛΗ']);
       expect([x.ws.get('B1') ?? null, x.ws.get('C1') ?? null]).toEqual([null, null]);
       expect(String(x.ws.get('A4'))).toMatch(/19 ΟΚΤ 26$/); expect(x.al('A4')).toBe('right'); expect(x.merges).toContain('A4:C4'); expect(x.merges).not.toContain('B1:C1');
       expect(String(x.ws.get('A5'))).toBe('ΚΑΤΑΣΤΑΣΗ');

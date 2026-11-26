@@ -8,6 +8,7 @@ import { Workbook } from '../src/main/xlsx';
 import { PRESETS, defaultPick, type Report } from '../src/shared/reports';
 import { cleanLayout, dropSigMoves } from '../src/shared/layout';
 import { fakeState as fakeNew } from './fixtures';
+import { upperOrd } from '../src/shared/text';
 // η παλιά διάταξη (κεφαλίδα αριστερά, ημερομηνία δεξιά): αυτά τα τεστ δεν αφορούν τη θέση τους (head-date-swap.test.ts)
 const fakeState: typeof fakeNew = n => { const s = fakeNew(n); return { ...s, settings: { ...s.settings, hdLeft: true } }; };
 
@@ -30,7 +31,7 @@ describe('θέσεις πάνω στο χαρτί', () => {
     const s = withLayout(fakeState(30), { froura: { main: { head: [0, -11], s0: [2, 0] } } });
     const r = await fillFroura(T('froura.xlsx'), s, D);
     const ws = await open(r.data);
-    expect(ws.get('A1')).toBe(s.settings.unit[0].toUpperCase()); expect(ws.get('A3')).toBe(s.settings.unit[2].toUpperCase());
+    expect(ws.get('A1')).toBe(upperOrd(s.settings.unit[0])); expect(ws.get('A3')).toBe(upperOrd(s.settings.unit[2]));
     expect(ws.get('L1')).toBeNull();
     expect(ws.get('B47')).toBe('Ο'); expect(ws.get('B48')).toBe('ΑΛΧΙΑΣ ΙΛΗΣ');
     expect(ws.get('B45')).toBeNull(); expect(ws.get('D46')).toBe('ΔΚΤΗΣ ΙΛΗΣ');   // οι άλλες έμειναν
@@ -65,7 +66,7 @@ describe('θέσεις πάνω στο χαρτί', () => {
     const rep: Report = { id: 'r1', name: 'Α', tpl: 't1', kind: 'people', sheet: b.sheet, head: b.head, cols: b.cols, cells: b.cells, pick: defaultPick(), sort: 'name', day: 'today', out: 'file', layout: { head: [0, 2], s1: [2, 0] } };
     const out = await fillReport(b.data, s, rep, s.people.slice(0, 5).map(p => p.id), D);
     const ws = await open(out.data);
-    expect(ws.get('C1')).toBe(s.settings.unit[0].toUpperCase()); expect(ws.get('A1')).toBeNull();
+    expect(ws.get('C1')).toBe(upperOrd(s.settings.unit[0])); expect(ws.get('A1')).toBeNull();
     const bl = out.layout[0].blocks; expect(bl.map(x => x.id)).toEqual(expect.arrayContaining(['head', 's0', 's1']));
     const s0 = bl.find(x => x.id === 's0')!, s1 = bl.find(x => x.id === 's1')!;
     expect(s1.r1).toBe(s0.r1 + 2); expect(ws.get('D' + (s1.r1 + 1))).toBe('ΔΙΟΙΚΗΤΗΣ');

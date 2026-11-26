@@ -123,7 +123,7 @@ describe('Excel της εφαρμογής με επικεφαλίδα', () => {
     const s = withHead(12, 'imgLeft', ['κεν αυλώνα', '2η επχια', '4η ιλη']);
     const m = await rosterPrint(s, D); const r = await signMade(m.data, s, 'roster', m.marks, null, null, D);
     const { g } = await cellsOf(r.data); const flat = g.flat();
-    for (const t of ['ΚΕΝ ΑΥΛΩΝΑ', '2Η ΕΠΧΙΑ', '4Η ΙΛΗ']) expect(flat).toContain(t);
+    for (const t of ['ΚΕΝ ΑΥΛΩΝΑ', '2η ΕΠΧΙΑ', '4η ΙΛΗ']) expect(flat).toContain(t);
     expect(await nPics(r.data)).toBeGreaterThanOrEqual(1);
     const ex = new ExcelJS.Workbook(); await ex.xlsx.load(r.data); expect(ex.worksheets.length).toBeGreaterThan(0);
     expect(r.warnings).toEqual([]);

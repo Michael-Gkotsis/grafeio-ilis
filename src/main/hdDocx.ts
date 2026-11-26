@@ -5,7 +5,7 @@
 import JSZip from 'jszip';
 import type { DocHead, HeadAl, HeadItem } from '../shared/docHead';
 import { zonesOf } from '../shared/headLayout';
-import { upper } from '../shared/text';
+import { upperOrd } from '../shared/text';
 import { loadHeadImage } from './headImages';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -128,7 +128,7 @@ export async function putDocxHead(buf: Buffer, head: DocHead, o: DocxHeadOpts): 
   };
   const text = (it: Extract<HeadItem, { k: 'text' }> | { k: 'date' }) => {
     const isDate = it.k === 'date'; const t = isDate ? o.dateText : it.t; const st = isDate ? { b: true } : it;
-    return para(t ? `<w:r>${rpr(st)}<w:t xml:space="preserve">${esc(upper(t))}</w:t></w:r>` : '', (isDate ? 'c' : it.al) || 'c', rpr(st));
+    return para(t ? `<w:r>${rpr(st)}<w:t xml:space="preserve">${esc(upperOrd(t))}</w:t></w:r>` : '', (isDate ? 'c' : it.al) || 'c', rpr(st));
   };
   const cellOf = (items: HeadItem[], w: number): string => {
     const side = items.filter((x): x is Extract<HeadItem, { k: 'img' }> => x.k === 'img' && !!x.side);

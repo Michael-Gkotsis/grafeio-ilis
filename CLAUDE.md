@@ -25,6 +25,8 @@ Greek. Code comments on main are Greek too: match the file you edit.
    capitals, signatures, print layout, pagination. An output may change only as part of a feature Michael asked for;
    the PR says which outputs change. Never update a snapshot (`vitest -u`) or loosen an output test to make a PR pass.
 2. Everything the app writes into Excel is in CAPITALS. Dates are shown dd/mm/yyyy. Seat codes are exact (e.g. `Θ1α`).
+   One exception (Michael, 26/11): an ordinal keeps a lowercase ending: «1ο», «2η», «3ος», not «1Ο». The Excel and Word writers
+   call `upperOrd` (`src/shared/text.ts`): a number stuck to ο/η/ος/ου/ης/οι/ες/ων, with no letter or digit around it.
 3. **Frozen data contracts** (users upgrade in place; breaking one loses data or settings):
    - `data/ilh.db`: tables, `SCHEMA_VERSION`, `KV_KEYS`/`KV_ENTRIES` (`src/main/db.ts`) and the undo patch format
      (actions of the previous version must stay undoable). A new KV key is added, never renamed or removed.
