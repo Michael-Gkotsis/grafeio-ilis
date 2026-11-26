@@ -13,6 +13,8 @@ Greek. Code comments on main are Greek too: match the file you edit.
 - One test file: `npx vitest run test/<name>.test.ts`
 - Optional checks: `npm run bench` (hot paths), `npm run bench:full` (main/db), `npm run bench:ui` (screen timings;
   headless Linux: `xvfb-run -a npm run bench:ui`), `npm run bench:golden` (writes every output and prints hashes).
+  `npm run bench:screens` (headless: `xvfb-run -a npm run bench:screens`) opens every screen and tab in Electron at 1024×768
+  and reports console errors and cut-off buttons. `SOAK_SEEDS=220 npx vitest run test/elegxos-2611-p8-soak.test.ts` = long 90-day soak.
 - Never run `package:*`: releases are built by CI (`paketo.yml`) on every merge to main. Never build or attach
   zip/exe/deb packages.
 - There is no linter or formatter on main.
