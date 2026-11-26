@@ -15,8 +15,8 @@ export type Step = 'posts' | 'cols' | 'rooms' | 'try';
 const TONE: Record<string, { tone: string; label: string }> = { sure: { tone: 'ok', label: 'Σίγουρο' }, suggest: { tone: 'warn', label: 'Πρόταση' }, unknown: { tone: 'bad', label: 'Δεν το ξέρω' }, mine: { tone: 'info', label: 'Το όρισες εσύ' }, ignored: { tone: 'outline', label: 'Το αφήνω' } };
 const LETTERS = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
 
-export interface Edits { posts: Record<string, string>; creates: Record<string, string>; cols: Record<string, number | null>; rooms: Record<string, { on: boolean; who: string }>; show: Record<string, '' | 'keep' | 'remove'>; adds: ListAdd[] | null; skip: string[]; name: '' | 'short' | null }   // adds: null = όπως είναι αποθηκευμένα· skip: υπηρεσίες που ο χρήστης είπε «Όχι στο έντυπο» (μόνο στην οθόνη)
-export const noEdits = (): Edits => ({ posts: {}, creates: {}, cols: {}, rooms: {}, show: {}, adds: null, skip: [], name: null });
+export interface Edits { posts: Record<string, string>; creates: Record<string, string>; cols: Record<string, number | null>; rooms: Record<string, { on: boolean; who: string }>; show: Record<string, '' | 'keep' | 'remove'>; adds: ListAdd[] | null; skip: string[]; name: '' | 'short' | null; fit: boolean | null }   // adds: null = όπως είναι αποθηκευμένα· skip: υπηρεσίες που ο χρήστης είπε «Όχι στο έντυπο» (μόνο στην οθόνη)
+export const noEdits = (): Edits => ({ posts: {}, creates: {}, cols: {}, rooms: {}, show: {}, adds: null, skip: [], name: null, fit: null });
 export const showOf = (b: SvcBlockView, e: Edits): '' | 'keep' | 'remove' => (b.labelKey in e.show ? e.show[b.labelKey] : b.show);
 export function nowOf(b: SvcBlockView, e: Edits): { state: string; value: string } {
   if (b.labelKey in e.posts) { const v = e.posts[b.labelKey]; return { state: v === 'ignore' ? 'ignored' : v ? 'mine' : 'unknown', value: v }; }
@@ -111,7 +111,7 @@ function ColRow({ c, e, setCol }: { c: ListColView; e: Edits; setCol(k: string, 
       <option value="">Καμία (δεν γράφεται)</option>${LETTERS.map((l, i) => html`<option key=${l} value=${i}>Στήλη ${l}</option>`)}<//>
     <${Badge} tone=${(st === 'unknown' ? TONE.ignored : TONE[st]).tone}>${st === 'unknown' ? 'Δεν τη γράφω' : TONE[st].label}<//></div></div>`;
 }
-function ColsStep({ model, e, setCol, setName }: P) {
+function ColsStep({ model, e, setCol, setName, setFit }: P) {
   const groups: { title: string; cols: ListColView[] }[] = model.svc ? [{ title: 'Στήλες της λίστας', cols: model.svc.cols.filter((c: P) => c.role === 'rank' || c.role === 'name') }]
     : model.outs.lists.map((l: P) => ({ title: l.title + ' (' + l.ready + ' έτοιμες γραμμές)', cols: l.cols }));
   return html`<div className="tm">
@@ -119,10 +119,12 @@ function ColsStep({ model, e, setCol, setName }: P) {
     <div className="field" style=${{ maxWidth: '320px' }}><label className="field__label" htmlFor="lm-name">Μορφή ονόματος</label>
       <${Select} id="lm-name" className="ui-input" value=${e.name ?? model.name ?? ''} onChange=${(ev: P) => setName(ev.target.value)}>
         <option value="">Ονοματεπώνυμο (όπως τώρα)</option><option value="short">ΕΠΩΝΥΜΟ Α.</option><//></div>
+    ${model.svc && html`<label className="tm__check"><input type="checkbox" checked=${e.fit ?? model.fit === true} onChange=${(ev: P) => setFit(ev.target.checked)}/> <b>Οι γραμμές και οι ώρες ακολουθούν την εφαρμογή</b>
+      <small className="muted"> Κάθε μπλοκ που έχεις αντιστοιχίσει παίρνει τα Νούμερα × Άτομα της υπηρεσίας (η εφαρμογή προσθέτει ή βγάζει γραμμές στο αντίγραφο που βγαίνει) και τις ώρες της, όταν έχεις βάλει δικές της ώρες στην εφαρμογή. Το αρχείο σου δεν αλλάζει στον δίσκο.</small></label>`}
     ${groups.map(g => html`<section className="ui-card" key=${g.title}><div className="ui-card__head"><h2>${g.title}</h2></div>
       <div className="tm__wgrid tm__wgrid--head"><span>Τι γράφεται</span><span>Σε ποια στήλη</span><span></span></div>
       ${g.cols.map((c: ListColView) => html`<${ColRow} key=${c.key} c=${c} e=${e} setCol=${setCol}/>`)}</section>`)}
-    ${model.svc && html`<p className="note">Νούμερα, ώρες και βάρδιες (${model.svc.cols.filter((c: P) => c.role !== 'rank' && c.role !== 'name').map((c: P) => c.label + (c.ref ? ' ' + c.ref : '')).join(' · ')}) τα διαβάζει η εφαρμογή για να ξέρει ποια γραμμή είναι ποια. Δεν τα γράφει.</p>`}
+    ${model.svc && html`<p className="note">Νούμερα, ώρες και βάρδιες (${model.svc.cols.filter((c: P) => c.role !== 'rank' && c.role !== 'name').map((c: P) => c.label + (c.ref ? ' ' + c.ref : '')).join(' · ')}) τα διαβάζει η εφαρμογή για να ξέρει ποια γραμμή είναι ποια. Δεν τα γράφει, εκτός αν ανοίξεις την επιλογή «ακολουθούν την εφαρμογή» παραπάνω.</p>`}
   </div>`;
 }
 
@@ -155,7 +157,7 @@ function TrialStep({ trial }: P) {
 }
 
 // ------------------------------------------------------------------ το σώμα της οθόνης (μόνο εμφάνιση)
-export interface BodyProps { model: ListModel; step: Step; e: Edits; trial: ListTryRes | null; onStep(s: Step): void; setPost(b: SvcBlockView, v: string): void; setCreate(b: SvcBlockView, name: string): void; setShow(b: SvcBlockView, v: '' | 'keep' | 'remove'): void; addSvc(a: ListAdd): void; dropAdd(value: string): void; skipSvc(value: string): void; setCol(k: string, v: number | null): void; setName(v: '' | 'short'): void; setRoom(sheet: string, v: { on: boolean; who: string }): void }
+export interface BodyProps { model: ListModel; step: Step; e: Edits; trial: ListTryRes | null; onStep(s: Step): void; setPost(b: SvcBlockView, v: string): void; setCreate(b: SvcBlockView, name: string): void; setShow(b: SvcBlockView, v: '' | 'keep' | 'remove'): void; addSvc(a: ListAdd): void; dropAdd(value: string): void; skipSvc(value: string): void; setCol(k: string, v: number | null): void; setName(v: '' | 'short'): void; setFit(v: boolean): void; setRoom(sheet: string, v: { on: boolean; who: string }): void }
 export function ListMapBody(p: BodyProps) {
   const { model, step } = p;
   if (!model.found) return html`<${Alert} tone="bad"><span>${model.kind === 'services' ? 'Στο φύλλο δεν βρέθηκε λίστα υπηρεσιών (γραμμή με ΒΑΘΜΟΣ και ΟΝΟΜΑΤΕΠΩΝΥΜΟ και από κάτω οι θέσεις).' : 'Στο φύλλο δεν βρέθηκαν οι λίστες ΕΞΟΔΟΥΧΟΙ / ΑΔΕΙΟΥΧΟΙ.'} Διάλεξε άλλο φύλλο.</span><//>`;
@@ -165,7 +167,7 @@ export function ListMapBody(p: BodyProps) {
     ${model.svc && html`<div className="tm__sum"><${Badge} tone="ok">${n('sure')} σίγουρες<//><${Badge} tone="warn">${n('suggest')} προτάσεις<//><${Badge} tone="bad">${n('unknown')} δεν τις ξέρω<//>${n('mine') > 0 && html`<${Badge} tone="info">${n('mine')} τις όρισες εσύ<//>`}</div>`}
     <${Tabs} value=${step} onChange=${p.onStep} items=${items}/>
     ${step === 'posts' && model.svc && html`<${PostsStep} model=${model} e=${p.e} setPost=${p.setPost} setCreate=${p.setCreate} setShow=${p.setShow} addSvc=${p.addSvc} dropAdd=${p.dropAdd} skipSvc=${p.skipSvc}/>`}
-    ${step === 'cols' && html`<${ColsStep} model=${model} e=${p.e} setCol=${p.setCol} setName=${p.setName}/>`}
+    ${step === 'cols' && html`<${ColsStep} model=${model} e=${p.e} setCol=${p.setCol} setName=${p.setName} setFit=${p.setFit}/>`}
     ${step === 'rooms' && html`<${RoomsStep} model=${model} e=${p.e} setRoom=${p.setRoom}/>`}
     ${step === 'try' && html`<${TrialStep} trial=${p.trial}/>`}
   </div>`;
@@ -187,6 +189,7 @@ export function ListMapDialog({ form, file, sheet, onClose, onSaved }: { form: P
   const skipSvc = (value: string) => edit(x => ({ ...x, skip: [...x.skip, value] }));
   const setCol = (k: string, v: number | null) => edit(x => ({ ...x, cols: { ...x.cols, [k]: v } }));
   const setName = (v: '' | 'short') => edit(x => ({ ...x, name: v }));
+  const setFit = (v: boolean) => edit(x => ({ ...x, fit: v }));
   const setRoom = (sh: string, v: { on: boolean; who: string }) => edit(x => ({ ...x, rooms: { ...x.rooms, [sh]: v } }));
   const kind = form === 'outs' ? 'outs' : 'services';
   const prev = profilesOf(state.settings).find(p => p.kind === kind && p.lst) ?? null;
@@ -194,15 +197,16 @@ export function ListMapDialog({ form, file, sheet, onClose, onSaved }: { form: P
   const finalPosts = () => { const out: Record<string, string> = { ...(prev?.lst?.posts || {}) }; for (const [k, v] of Object.entries(e.posts)) { if (v) out[k] = v; else delete out[k]; } return out; };
   const finalShow = () => { const out: Record<string, 'keep' | 'remove'> = { ...(prev?.lst?.show || {}) }; for (const [k, v] of Object.entries(e.show)) { if (v) out[k] = v; else delete out[k]; } return out; };
   const finalAdd = (): ListAdd[] => e.adds ?? prev?.lst?.add ?? [];
+  const finalFit = (): true | undefined => ((e.fit ?? prev?.lst?.fit === true) ? true : undefined);
   const finalName = (): 'short' | undefined => ((e.name ?? prev?.lst?.name ?? '') === 'short' ? 'short' : undefined);
   const finalCols = () => { const out: Record<string, number> = { ...(prev?.lst?.cols || {}) }; for (const [k, v] of Object.entries(e.cols)) { if (v == null) delete out[k]; else out[k] = v; } return out; };
   const roomsOn = () => (model?.rooms || []).map(r => { const x = e.rooms[r.sheet] || { on: r.saved, who: r.who }; return { sheet: r.sheet, who: x.who, on: x.on }; });
-  const req = (): ListReq => ({ ...(file ? { file } : {}), ...(model ? { sheet: model.sheet } : {}), posts: finalPosts(), creates: Object.values(e.creates).map(name => ({ name })), cols: finalCols(), rooms: roomsOn(), show: finalShow(), add: finalAdd(), ...(finalName() ? { name: 'short' as const } : {}), heads: headsFor(finalCols(), model?.headTexts) });
+  const req = (): ListReq => ({ ...(file ? { file } : {}), ...(model ? { sheet: model.sheet } : {}), posts: finalPosts(), creates: Object.values(e.creates).map(name => ({ name })), cols: finalCols(), rooms: roomsOn(), show: finalShow(), add: finalAdd(), ...(finalName() ? { name: 'short' as const } : {}), ...(finalFit() ? { fit: true as const } : {}), heads: headsFor(finalCols(), model?.headTexts) });
   const runTry = async () => { const r: P = await window.api.listTry(form, req()); if (!r.ok && 'error' in r) { toast({ text: r.error }); return; } setTrial(r); };
   const goStep = (s: Step) => { setStep(s); if (s === 'try' && !trial) void runTry(); };
   const save = async () => {
     if (!model) return;
-    const profile = listProfileFrom(kind, { prev, sheet: model.sheet, posts: finalPosts(), cols: finalCols(), show: finalShow(), add: finalAdd(), name: finalName(), heads: headsFor(finalCols(), model.headTexts) });
+    const profile = listProfileFrom(kind, { prev, sheet: model.sheet, posts: finalPosts(), cols: finalCols(), show: finalShow(), add: finalAdd(), name: finalName(), fit: finalFit(), heads: headsFor(finalCols(), model.headTexts) });
     const r = await run({ t: 'adaptTpl', profile, create: Object.values(e.creates).map(name => ({ k: 'service' as const, name })), text: form === 'outs' ? 'εξοδούχοι/αδειούχοι της μονάδας' : 'κατάσταση υπηρεσιών της μονάδας' } as P);
     if ((r as P)?.ok === false) { toast({ text: (r as P).error }); return; }
     const on = roomsOn().filter(x => x.on);
@@ -219,6 +223,6 @@ export function ListMapDialog({ form, file, sheet, onClose, onSaved }: { form: P
     ${model && model.sheets.length > 1 && html`<div className="field" style=${{ maxWidth: '280px' }}><label className="field__label" htmlFor="lm-sh">Φύλλο</label>
       <${Select} id="lm-sh" className="ui-input" value=${model.sheet} onChange=${(ev: P) => { setE(noEdits()); setTrial(null); load(ev.target.value); }}>${model.sheets.map((n: string) => html`<option key=${n} value=${n}>${n}</option>`)}<//></div>`}
     ${err ? html`<${Alert} tone="bad"><span>${err}</span><//>` : !model ? html`<p className="note">Διαβάζεται το αρχείο… (ένα παλιό .xls μετατρέπεται πρώτα με το Excel, μπορεί να πάρει λίγο)</p>`
-      : html`<${ListMapBody} model=${model} step=${step} e=${e} trial=${trial} onStep=${goStep} setPost=${setPost} setCreate=${setCreate} setShow=${setShow} addSvc=${addSvc} dropAdd=${dropAdd} skipSvc=${skipSvc} setCol=${setCol} setRoom=${setRoom} setName=${setName}/>`}
+      : html`<${ListMapBody} model=${model} step=${step} e=${e} trial=${trial} onStep=${goStep} setPost=${setPost} setCreate=${setCreate} setShow=${setShow} addSvc=${addSvc} dropAdd=${dropAdd} skipSvc=${skipSvc} setCol=${setCol} setRoom=${setRoom} setName=${setName} setFit=${setFit}/>`}
   <//>`;
 }

@@ -11,7 +11,7 @@ import { svcKeyOf, type SvcBlock, type SvcSheet } from '../shared/unitLists';
 import { normGreek } from '../shared/text';
 
 // Υπηρεσία της εφαρμογής που μπαίνει στο έντυπο: nums νούμερα × per άτομα το καθένα· after / like = κλειδιά «λέξη#Ν» (after: '' στο τέλος, '^' στην αρχή)
-export interface AddSvc { value: string; label: string; nums: number; per: number; hours: string[]; after: string; like: string; state?: boolean }   // state: λίστα ατόμων σε κατάσταση (nums = γραμμές), χωρίς νούμερα/βάρδιες/ώρες
+export interface AddSvc { value: string; label: string; nums: number; per: number; hours: string[]; after: string; like: string; state?: boolean; stack?: boolean; shifts?: boolean }   // state: λίστα ατόμων σε κατάσταση (nums = γραμμές), χωρίς νούμερα/βάρδιες/ώρες· stack: τα per άτομα κάθε νούμερου είναι γραμμές το ένα κάτω από το άλλο ακόμα κι αν το αρχείο δεν έχει στήλη βάρδιας (αντικατάσταση υπάρχοντος μπλοκ)· shifts:false = χωρίς γράμματα βάρδιας
 export interface RestructureIn { remove: string[]; add: AddSvc[] }
 export interface Restructured {
   ok: true; data: Buffer; sheets: SheetModel[]; sheet: SheetModel; det: SvcSheet;
@@ -54,9 +54,10 @@ export async function restructureSvc(tpl: Buffer, sheet: SheetModel, det: SvcShe
   // διαχωριστικές γραμμές: υπάρχουν όταν κάποιο μπλοκ έχει κενή γραμμή από κάτω (οι γραμμές μπαίνουν/βγαίνουν χωρίς αυτές και τακτοποιούνται μετά)
   const gapOf = (i: number) => i + 1 < n && ex[i].bottom > ex[i].last;
   const anyGap = det.blocks.some((_, i) => gapOf(i));
+  const perOf = (a: AddSvc): number => (a.state ? 1 : a.stack ? Math.max(1, a.per) : a.per > 1 && det.cols.shift.c != null ? a.per : 1);
   const ins: Ins[] = [];
   o.add.forEach((a, order) => {
-    const like = idx.get(a.like) ?? 0; const k = Math.max(1, a.nums * (!a.state && a.per > 1 && det.cols.shift.c != null ? a.per : 1));
+    const like = idx.get(a.like) ?? 0; const k = Math.max(1, a.nums * perOf(a));
     if (a.after === '^') ins.push({ add: a, at: ex[0].top, k, like, pos: -1, order });
     else { const ai = a.after === '' ? n - 1 : idx.get(a.after); if (ai == null) { warnings.push('Η υπηρεσία «' + a.label + '» δεν μπήκε: δεν βρέθηκε το μπλοκ μετά το οποίο ζητήθηκε.'); return; }
       ins.push({ add: a, at: ex[ai].last + 1, k, like, pos: ai + 0.5, order }); }
@@ -91,11 +92,15 @@ export async function restructureSvc(tpl: Buffer, sheet: SheetModel, det: SvcShe
     ws.insertRows(after1, total, cur(likeSecond) + 1, wb);
     const newTop1 = after1 + 1;
     cloneRow(ws, lf1, newTop1, firstMerges);
+    // αντικατάσταση: κάθε γραμμή παίρνει τη μορφή της αντίστοιχης γραμμής του νούμερου του μπλοκ-προτύπου (1η γραμμή νούμερου, 2η…)
+    const perLike = like.groups.length > 1 ? like.rows[like.groups[1][0]].r - like.rows[like.groups[0][0]].r : lx.last - lx.top + 1;
+    if (x.add.stack) for (let j = 1; j < total; j++) { const src0 = Math.min(lx.top + (j % Math.max(1, perLike)), lx.last); cloneRow(ws, shiftIf(src0), newTop1 + j, rowMerges(ws, shiftIf(src0))); }
     // μορφή της συγχώνευσης της λέξης (κάθετη) και κάθε άλλης κάθετης συγχώνευσης του μπλοκ-προτύπου
     for (const m of sheet.merges) {
       if (m.r1 < lx.top || m.r2 > lx.last || m.r2 <= m.r1) continue;
       const off = m.r1 - lx.top; const len = m.r2 - m.r1;
       if (m.c1 === L) { if (x.k > 1) ws.addMerge(L1 + newTop1 + ':' + colName(m.c2 + 1) + (newTop1 + x.k - 1)); continue; }
+      if (x.add.stack) { const per = perOf(x.add); if (off < perLike && len < per) for (let gi = 0; gi < x.add.nums; gi++) ws.addMerge(colName(m.c1 + 1) + (newTop1 + gi * per + off) + ':' + colName(m.c2 + 1) + (newTop1 + gi * per + off + len)); continue; }
       if (off + len < x.k && x.add.per > 1) ws.addMerge(colName(m.c1 + 1) + (newTop1 + off) + ':' + colName(m.c2 + 1) + (newTop1 + off + len));
     }
     // λίστα κατάστασης: οι άδειες γραμμές της φαίνονται στην ανίχνευση μόνο μέσα από τη συγχωνευμένη λέξη, άρα η λέξη καλύπτει όλες τις γραμμές της
@@ -107,13 +112,18 @@ export async function restructureSvc(tpl: Buffer, sheet: SheetModel, det: SvcShe
         ws.addMerge(L1 + newTop1 + ':' + colName(c2) + (newTop1 + x.k - 1));
       }
     }
+    // αντικατάσταση με 2+ γραμμές ανά νούμερο: το κελί του νούμερου καλύπτει όλες τις γραμμές του (όπως στα έντυπα που έχουν 2ο άτομο σε άδεια γραμμή), ώστε να διαβάζονται ξανά ως θέσεις
+    if (x.add.stack && !x.add.state && det.cols.num.c != null && perOf(x.add) > 1) {
+      const per = perOf(x.add); const nc1 = det.cols.num.c + 1;
+      for (let gi = 0; gi < x.add.nums; gi++) { const r = newTop1 + gi * per; if (!ws.merges().some(m => m.c1 <= nc1 && m.c2 >= nc1 && m.r1 <= r && m.r2 >= r)) ws.addMerge(colName(nc1) + r + ':' + colName(nc1) + (r + per - 1)); }
+    }
     // οι τιμές: λέξη, νούμερα, βάρδιες, ώρες
     ws.set(L1 + newTop1, x.add.label);
-    const numC = det.cols.num.c, shC = det.cols.shift.c, hrC = det.cols.hours.c; const per = det.cols.shift.c != null ? Math.max(1, x.add.per) : 1;
+    const numC = det.cols.num.c, shC = det.cols.shift.c, hrC = det.cols.hours.c; const per = perOf(x.add);
     for (let gi = 0; gi < (x.add.state ? 0 : x.add.nums); gi++) {
       const r = newTop1 + gi * per;
       if (numC != null) ws.set(colName(numC + 1) + r, (gi + 1) + 'ο');
-      if (shC != null && per > 1) for (let j = 0; j < per; j++) ws.set(colName(shC + 1) + (r + j), SHIFTS[j % SHIFTS.length]);
+      if (shC != null && per > 1 && x.add.shifts !== false) for (let j = 0; j < per; j++) ws.set(colName(shC + 1) + (r + j), SHIFTS[j % SHIFTS.length]);
       const h = x.add.hours[gi]; if (hrC != null && h) ws.set(colName(hrC + 1) + r, h, true);
     }
     // τύποι που μετρούν τη λίστα (COUNTA(F5:F30)): ό,τι μπαίνει στην αρχή ή στο τέλος της ανήκει στην περιοχή τους
@@ -126,7 +136,7 @@ export async function restructureSvc(tpl: Buffer, sheet: SheetModel, det: SvcShe
   // αν φεύγει το πρώτο μπλοκ, οι περιοχές που ξεκινούσαν από αυτό ξεκινούν από το επόμενο (αλλιώς θα έπαιρναν την επικεφαλίδα)
   if (goneBlocks.has(0) && n > 1) ws.pullStarts(sheet.name, cur(ex[0].top) + 1, cur(ex[0].last) + 2);
   const rowsGone = [...gone].map(r0 => cur(r0) + 1).sort((a, b) => b - a);
-  for (const r1 of rowsGone) { if (!ws.deleteRow(r1, wb)) return fail('Το φύλλο έχει πίνακες, σχέδια ή σχόλια του Excel: δεν αλλάζει η δομή του εντύπου (μόνο γεμίζει).'); }
+  for (const r1 of rowsGone) { if (!ws.deleteRow(r1, wb, true)) return fail('Το φύλλο έχει πίνακες, σχέδια ή σχόλια του Excel: δεν αλλάζει η δομή του εντύπου (μόνο γεμίζει).'); }
   let data = await wb.save();
   let sheets = await modelOfBuffer(data); let sh2 = sheets.find(x => x.name === sheet.name); let det2 = sh2 ? redetect(sh2) : null;
   // η σειρά των μπλοκ στο νέο αρχείο: όσα έμειναν και τα νέα, με τη θέση τους
@@ -148,7 +158,7 @@ export async function restructureSvc(tpl: Buffer, sheet: SheetModel, det: SvcShe
     const jobs = touched.map((t, j) => ({ t, j })).filter(x => x.t && gapN[x.j] !== want).sort((a, b) => b.j - a.j);
     for (const { j } of jobs) {
       if (gapN[j] > want) {
-        for (let r1 = ex2[j + 1].top; r1 >= ex2[j].last + 2 + want; r1--) { if (w2.rowHasFormula(r1)) continue; if (!w2.deleteRow(r1, wb2)) return fail('Το φύλλο έχει πίνακες, σχέδια ή σχόλια του Excel: δεν αλλάζει η δομή του εντύπου (μόνο γεμίζει).'); del2.push(r1); }
+        for (let r1 = ex2[j + 1].top; r1 >= ex2[j].last + 2 + want; r1--) { if (w2.rowHasFormula(r1)) continue; if (!w2.deleteRow(r1, wb2, true)) return fail('Το φύλλο έχει πίνακες, σχέδια ή σχόλια του Excel: δεν αλλάζει η δομή του εντύπου (μόνο γεμίζει).'); del2.push(r1); }
       } else if (src1 > 0) {
         const at = ex2[j].last + 1; w2.insertRows(at, 1, src1, wb2); const sr = src1 > at ? src1 + 1 : src1;
         cloneRow(w2, sr, at + 1, sm); ins2.push(at); if (src1 > at) src1++;

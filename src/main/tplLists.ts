@@ -11,7 +11,7 @@ import { outsAndStay } from '../shared/outsStay';
 import { formatOf, frontTexts } from '../shared/backForm';
 import { sigsCustom, sigsFor, sigsSaved, type Sig } from '../shared/sigs';
 import { profilesOf, type ProfileKind, type TplProfile } from '../shared/tplStore';
-import { STATE_FILE_WORD, STATE_TARGETS, fixCols, headRowsOf, headTexts, hiddenBlockKeys, stateWho, detectOuts, detectRooms, detectSvc, matchSvc, oursKey, outsRowsOf, planOuts, planRooms, planSvc, planTitle, svcKeyOf, svcTargets, type OutsSheet, type RoomPlan, type SvcMatch, type SvcPlan, type SvcSheet, type SvcTarget } from '../shared/unitLists';
+import { STATE_FILE_WORD, STATE_TARGETS, appHours, fixCols, headRowsOf, headTexts, hiddenBlockKeys, stateWho, detectOuts, detectRooms, detectSvc, matchSvc, oursKey, outsRowsOf, planOuts, planRooms, planSvc, planTitle, svcKeyOf, svcTargets, type OutsSheet, type RoomPlan, type SvcMatch, type SvcPlan, type SvcSheet, type SvcTarget } from '../shared/unitLists';
 import type { SheetModel } from '../shared/sheetModel';
 import type { AppState, Post } from '../shared/domain';
 import type { ISODate } from '../shared/dates';
@@ -23,6 +23,7 @@ import { activePeople } from '../shared/rules';
 import { listProfileFrom, outsView, svcView, type ListForm, type ListModel, type ListReq, type ListTryRes } from '../shared/listMap';
 import { xlsxBuffer } from './tplAdapt';
 import { restructureSvc, type AddSvc } from './formEdit';
+import { key as cellKey } from '../shared/sheetModel';
 import type { ListProfile } from '../shared/tplStore';
 
 export interface ListsOut { data: Buffer; warnings: string[]; sheet: string; report: ListsReport }
@@ -88,6 +89,24 @@ async function shapeSvc(tpl: Buffer, sheets: SheetModel[], sh: SheetModel, det: 
     if (placed.has(a.value)) continue;                     // υπάρχει ήδη στο αρχείο (π.χ. το έντυπο έχει ήδη βγει από εδώ)
     add.push(addOf(t, a));
   }
+  // Οι γραμμές ακολουθούν την εφαρμογή (μόνο αν ο χρήστης το άνοιξε στην Αντιστοίχιση): μπλοκ με άλλα Νούμερα × Άτομα από την υπηρεσία του αντικαθίσταται από μπλοκ με τη μορφή του ίδιου του μπλοκ
+  if (lst.fit === true) {
+    const ms = matchSvc(det, targets, lst).filter(m => (m.sure === 'sure' || m.sure === 'mine') && m.value.startsWith('blk:') && !lst.show?.[m.labelKey]);
+    const cnt = new Map<string, number>(); for (const m of ms) cnt.set(m.value, (cnt.get(m.value) || 0) + 1);
+    for (const m of ms) {
+      const t = targets.find(x => x.value === m.value); const b = m.block; const bi = det.blocks.indexOf(b);
+      if (!t || t.kept || !t.groups.length || cnt.get(m.value) !== 1 || bi < 0 || remove.includes(svcKeyOf(b)) || add.some(a => a.value === m.value)) continue;
+      if (det.blocks.filter(x => x.key === b.key).length > 1 || !b.rows.length) continue;
+      if (b.groups.length === t.groups.length && b.groups.every((gr, i) => gr.length === t.groups[i].length)) continue;
+      const last = b.rows[b.rows.length - 1].r; let hasF = false;
+      for (let r = b.rows[0].r; r <= last && !hasF; r++) for (let c = 0; c < (sh.rows[r]?.length ?? 0); c++) if (sh.fx.has(cellKey(r, c))) { hasF = true; break; }
+      if (hasF) { warnings.push('Το μπλοκ «' + b.label + '» έχει τύπους μέσα στις γραμμές του: οι γραμμές του δεν προσαρμόστηκαν στην εφαρμογή.'); continue; }
+      const hc = det.cols.hours.c; const mine = appHours(s, t);
+      const fileHours = (gi: number) => { const ug = b.groups[gi]; const row = ug ? b.rows[ug[0]] : undefined; return hc != null && row ? String(sh.rows[row.r]?.[hc] ?? '').trim() : ''; };
+      add.push({ value: m.value, label: b.label, nums: t.groups.length, per: Math.max(1, ...t.groups.map(gp => gp.length)), hours: t.groups.map((_, gi) => mine?.[gi] || fileHours(gi)), after: bi === 0 ? '^' : svcKeyOf(det.blocks[bi - 1]), like: svcKeyOf(b), stack: true, shifts: b.rows.some(x => x.shift !== '') });
+      remove.push(svcKeyOf(b));
+    }
+  }
   if (!remove.length && !add.length) return null;
   const r = await restructureSvc(tpl, sh, det, { remove, add }, x => svcDetect(x, lst, lex));
   if (!r.ok) { warnings.push(...r.warnings); return null; }
@@ -118,13 +137,13 @@ export async function listsFill(tpl: Buffer, s: AppState, d: ISODate, o: FillIn)
     // δομή: μπλοκ που δεν υπάρχουν πια στο έντυπο βγαίνουν, υπηρεσίες που λείπουν μπαίνουν (στο αντίγραφο που βγαίνει)· οι θέσεις των γραμμών μετά είναι άλλες
     // ανενεργή υπηρεσία χωρίς «Να μένει στο έντυπο»: το μπλοκ της βγαίνει κι εδώ (υπολογίζεται κάθε φορά, δεν γράφεται στο προφίλ)
     const hidden = lstE ? hiddenBlockKeys(s, det, lstE, targets) : [];
-    if (lstE && (lstE.add?.length || hidden.length || Object.values(lstE.show || {}).includes('remove'))) {
+    if (lstE && (lstE.fit === true || lstE.add?.length || hidden.length || Object.values(lstE.show || {}).includes('remove'))) {
       const sp = await shapeSvc(tpl, sheets, hit.sh, det, lstE, targets, ours, lex, warnings, s, d, hidden);
       if (sp) { tplE = sp.tpl; sheets = sp.sheets; hit = { p: hit.p, sh: sp.sh, det: sp.det }; det = sp.det; lstE = sp.lst; ours = sp.ours; }
     }
     // τι είναι κάθε μπλοκ: οι επιλογές του χρήστη, αλλιώς μόνο ό,τι είναι σίγουρο (ό,τι μένει Πρόταση / άγνωστο δεν γράφεται)· «φαίνεται, δεν γεμίζει» = ανενεργό
     const ms: SvcMatch[] = matchSvc(det, targets, lstE).map(m => (lstE?.show?.[m.labelKey] ? { ...m, value: '', sure: 'ignored' as const } : m.sure === 'sure' || m.sure === 'mine' ? m : { ...m, value: '' }));
-    const sp: SvcPlan = planSvc(hit.sh, det, ms, targets, s, d, posts, ours, lex, lstE?.name);
+    const sp: SvcPlan = planSvc(hit.sh, det, ms, targets, s, d, posts, ours, lex, lstE?.name, lstE?.fit === true);
     plan.push(...sp.writes); placed = sp.placed.length; cleared = sp.cleared; unplaced.push(...sp.unplaced.map(x => x.label + ': ' + x.who));
     warnings.push(...sp.warnings);
     for (const x of sp.placed) { const p = seatMap(s).get(x.pid); const b = det.blocks.find(bl => bl.rows.some(rw => rw.r === x.r)); if (p) lines.push({ label: x.block || b?.label || '', text: [rankTxt(p), fullName(p)].join(' ') }); }
@@ -174,6 +193,7 @@ export async function listModelOf(file: string, s: AppState, form: ListForm, wan
     subs: [...new Set(activePeople(s).map(p => (p.sub || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'el'))
   };
   if (own?.name) model.name = own.name;
+  if (own?.fit === true) model.fit = true;
   if (sh && d) model.headTexts = headTexts(sh, headRowsOf(sh, kind));
   if (d && kind === 'services') model.svc = svcView(d as SvcSheet, svcTargets(s, postsOf(s.settings)), own);
   if (d && kind === 'outs') model.outs = outsView(d as OutsSheet);
@@ -185,7 +205,7 @@ export function draftState(s: AppState, form: ListForm, sheet: string, req: List
   const prev = pickProfile(s, kind)[0] ?? null;
   const ctx = { today: '2000-01-01', newId: () => 'x' };
   const cols = Object.fromEntries(Object.entries(req.cols).filter(([k, v]) => typeof v === 'number' && v >= 0));
-  const prof = listProfileFrom(kind, { prev, sheet, posts: req.posts, cols, show: req.show, add: req.add, name: req.name, heads: req.heads });
+  const prof = listProfileFrom(kind, { prev, sheet, posts: req.posts, cols, show: req.show, add: req.add, name: req.name, heads: req.heads, fit: req.fit });
   let st = apply(s, { t: 'adaptTpl', profile: prof, create: req.creates.map(c => ({ k: 'service' as const, name: c.name })), text: 'δοκιμή' }, ctx).state;
   const on = req.rooms.filter(r => r.on);
   if (on.length) st = apply(st, { t: 'adaptTpl', profile: listProfileFrom('rooms', { prev: pickProfile(st, 'rooms')[0] ?? null, sheet: on[0].sheet, rooms: on }), text: 'δοκιμή' }, ctx).state;
