@@ -39,10 +39,11 @@ export interface DutyProfile {
 //   who     (rooms) φύλλο → ποιοι μπαίνουν: '' όλοι με θάλαμο, αλλιώς το όνομα Ίλης/Λόχου
 //   show    (services) «λέξη του αρχείου#Ν» → keep (το μπλοκ φαίνεται στο έντυπο αλλά δεν γεμίζει) | remove (το μπλοκ δεν υπάρχει στο έντυπο που βγαίνει)· όσα λείπουν γεμίζουν κανονικά
 //   add     (services) υπηρεσίες της εφαρμογής που λείπουν από το αρχείο της μονάδας και μπαίνουν στο έντυπο που βγαίνει: value «blk:<υπηρεσία>» ή «st:<κατάσταση>» (λίστα ατόμων), after = λέξη#Ν του μπλοκ μετά το οποίο μπαίνουν ('' = στο τέλος), like = λέξη#Ν του μπλοκ που μιμείται η μορφή τους
+//   fit     (services) true = οι γραμμές και οι ώρες των αντιστοιχισμένων μπλοκ ακολουθούν τα Νούμερα × Άτομα / Ώρες της εφαρμογής (απούσα = το αρχείο μένει όπως είναι)
 //   name    (services / outs) μορφή ονόματος στο αρχείο: 'short' = «ΕΠΩΝΥΜΟ Α.» (χωρίς πατρώνυμο)· απούσα = πλήρες ονοματεπώνυμο όπως πάντα
 //   heads   (services / outs) ίδια κλειδιά με το cols → κανονικοποιημένο κείμενο της επικεφαλίδας της στήλης τη στιγμή της αποθήκευσης· αν το αρχείο αλλάξει, η στήλη ξαναβρίσκεται από αυτό
 export interface ListAdd { value: string; after: string; like: string }
-export interface ListProfile { sheet: string; posts?: Record<string, string>; cols?: Record<string, number>; who?: Record<string, string>; sheets?: string[]; show?: Record<string, 'keep' | 'remove'>; add?: ListAdd[]; name?: 'short'; heads?: Record<string, string> }
+export interface ListProfile { sheet: string; posts?: Record<string, string>; cols?: Record<string, number>; who?: Record<string, string>; sheets?: string[]; show?: Record<string, 'keep' | 'remove'>; add?: ListAdd[]; name?: 'short'; heads?: Record<string, string>; fit?: true }
 // Δυναμολόγιο ΑΛΛΗΣ μονάδας (phase 4), kind 'roster'. Μόνο ό,τι διάλεξε ο χρήστης· ό,τι βρίσκεται μόνο του ξαναβρίσκεται κάθε φορά.
 //   sheet   ο κύριος κατάλογος (ξαναβρίσκεται και με άλλο όνομα από τις επικεφαλίδες του)
 //   cols    ρόλος στήλης (aa, rank, name, last, first, asm, sub, status, remarks…) → επικεφαλίδα που διάλεξε ο χρήστης· ignore: επικεφαλίδες που δεν διαβάζονται
@@ -133,7 +134,7 @@ function cleanLst(x: Record<string, unknown>): ListProfile {
   const add: ListAdd[] = Array.isArray(x.add) ? x.add.filter((a): a is Record<string, unknown> => isObj(a) && typeof a.value === 'string' && /^(blk|st):./.test(a.value) && typeof a.after === 'string' && typeof a.like === 'string' && a.like !== '').map(a => ({ value: a.value as string, after: a.after as string, like: a.like as string })) : [];
   return { sheet: x.sheet as string, ...(Object.keys(posts).length ? { posts } : {}), ...(Object.keys(cols).length ? { cols } : {}), ...(Object.keys(who).length ? { who } : {}), ...(Array.isArray(x.sheets) ? { sheets: x.sheets.filter(str) } : {}),
     ...(Object.keys(show).length ? { show } : {}), ...(add.length ? { add } : {}),
-    ...(x.name === 'short' ? { name: 'short' as const } : {}), ...(Object.keys(heads).length ? { heads } : {}) };
+    ...(x.name === 'short' ? { name: 'short' as const } : {}), ...(Object.keys(heads).length ? { heads } : {}), ...(x.fit === true ? { fit: true as const } : {}) };
 }
 
 // Anything that may be in an old or damaged state file → valid profiles (absent = []). Profiles of a newer version are dropped

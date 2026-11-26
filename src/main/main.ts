@@ -1480,6 +1480,7 @@ else {
       show: Object.fromEntries(Object.entries(r?.show || {}).filter(([, v]) => v === 'keep' || v === 'remove')) as Record<string, 'keep' | 'remove'>,
       add: Array.isArray(r?.add) ? r.add.filter(a => typeof a?.value === 'string' && typeof a?.after === 'string' && typeof a?.like === 'string').map(a => ({ value: a.value, after: a.after, like: a.like })) : [],
       ...(r?.name === 'short' ? { name: 'short' as const } : {}),
+      ...(r?.fit === true ? { fit: true as const } : {}),
       ...(r?.heads && typeof r.heads === 'object' ? { heads: Object.fromEntries(Object.entries(r.heads).filter(([, v]) => typeof v === 'string')) as Record<string, string> } : {}),
       ...(typeof r?.sheet === 'string' ? { sheet: r.sheet } : {})
     });

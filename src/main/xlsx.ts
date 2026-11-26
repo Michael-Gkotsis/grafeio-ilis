@@ -503,8 +503,10 @@ export class Sheet {
   // Σβήνει τη γραμμή at (από 1) και ανεβάζει μία ό,τι είναι από κάτω. Οι αναφορές στη γραμμή που σβήστηκε δείχνουν πια τη
   // γραμμή από πάνω, οπότε το τέλος μιας περιοχής μικραίνει (COUNTIF(I4:I159) → I4:I158). Για να φύγει ξανά μια γραμμή
   // που είχε βάλει η εφαρμογή (αναίρεση)· όχι σε φύλλο με πίνακα του Excel (false: δεν σβήστηκε).
-  deleteRow(at: number, wb: Workbook): boolean {
-    if (/<tableParts\b|<drawing\b|<legacyDrawing\b/.test(this.tail)) return false;   // πίνακες, σχέδια, σχόλια: μόνο άδειασμα
+  // pics: true = επιτρέπονται εικόνες στο φύλλο (π.χ. το λογότυπο της μονάδας): όσες είναι κάτω από τη γραμμή ανεβαίνουν μαζί της (μόνο η αλλαγή δομής εντύπου άλλης μονάδας το ζητά)
+  deleteRow(at: number, wb: Workbook, pics = false): boolean {
+    if (/<tableParts\b|<legacyDrawing\b/.test(this.tail) || (!pics && /<drawing\b/.test(this.tail))) return false;   // πίνακες, σχέδια, σχόλια: μόνο άδειασμα
+    if (pics && /<drawing\b/.test(this.tail)) wb.shiftTables(this, at, -1);
     const after = at - 1, n = -1;
     this.rows = this.rows.filter(r => r.r !== at);
     for (const row of this.rows) {

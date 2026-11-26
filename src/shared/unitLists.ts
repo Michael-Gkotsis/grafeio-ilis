@@ -7,7 +7,7 @@
 import { Grid, key as cellKey, type SheetModel } from './sheetModel';
 import { buildLexicon, type Lexicon } from './lexicon';
 import { normGreek, upper } from './text';
-import { blocksOf, blockGroups, coversDay, fullName, groupKey, TYPES, type AppState, type BlockDef, type Person, type Post, type PostDef, type Status, type TypeKey } from './domain';
+import { blocksOf, blockGroups, coversDay, fullName, groupKey, hasShift, TYPES, type AppState, type BlockDef, type Person, type Post, type PostDef, type Status, type TypeKey } from './domain';
 import { seatMap, activePeople, dutyMin } from './rules';
 import { isAway, rankTxt } from './ranks';
 import { backBy } from './hours';
@@ -41,7 +41,7 @@ const mergeStart = (g: Grid, r: number, c: number): number => { const m = g.merg
 export type SvcRole = 'label' | 'num' | 'hours' | 'shift' | 'rank' | 'name';
 export const SVC_ROLES: SvcRole[] = ['num', 'hours', 'shift', 'rank', 'name'];
 export const SVC_ROLE_LABEL: Record<SvcRole, string> = { label: 'Θέση (λέξη του μπλοκ)', num: 'Νούμερο (1ο, 2ο…)', hours: 'Ώρες', shift: 'Βάρδια (Φ/Κ…)', rank: 'Βαθμός', name: 'Ονοματεπώνυμο' };
-export interface SvcRow { r: number; num: number | null; shift: string }
+export interface SvcRow { r: number; num: number | null; shift: string; cont?: boolean }   // cont: γραμμή που καλύπτεται από την κατακόρυφη συγχώνευση του νούμερου (2ο άτομο του ίδιου νούμερου)
 export interface SvcBlock { key: string; label: string; occ: number; r: number; rows: SvcRow[]; groups: number[][] }   // groups: ευρετήρια μέσα στο rows (μία ομάδα = ένα νούμερο, ζεύγος Φ/Κ μαζί)
 export interface SvcSheet { sheet: string; header: number; title: number | null; sig: number | null; end: number; cols: Record<SvcRole, ColPick>; blocks: SvcBlock[] }
 
@@ -119,6 +119,15 @@ export function detectSvc(sh: SheetModel, o: { lex?: Lexicon; cols?: Record<stri
       const n = numC != null ? NUM_LABEL.exec(nk(cell(x.r, numC))) : null; x.num = n ? Number(n[1]) : null;
       x.shift = shiftC != null ? nk(cell(x.r, shiftC)) : '';
     }
+    // γραμμή κάτω από συγχωνευμένο κελί νούμερου (Β56:Β57): ανήκει στην ομάδα του, ακόμα κι αν είναι άδεια (2ο άτομο του νούμερου, όχι διαχωριστική)
+    if (numC != null) {
+      const bi = blocks.indexOf(b); const lim = bi + 1 < blocks.length ? blocks[bi + 1].r : end; const have = new Map(b.rows.map(x => [x.r, x] as const)); const extra: SvcRow[] = [];
+      for (const x of [...b.rows]) {
+        if (x.num == null) continue; const m = g.mergeOf(x.r, numC); if (!m || m.r1 !== x.r || m.r2 <= x.r) continue;
+        for (let r = x.r + 1; r <= Math.min(m.r2, lim - 1); r++) { const e = have.get(r); if (e) { e.cont = true; continue; } const nr: SvcRow = { r, num: null, shift: '', cont: true }; have.set(r, nr); extra.push(nr); }
+      }
+      if (extra.length) b.rows = [...b.rows, ...extra].sort((a, c) => a.r - c.r);
+    }
     // ο αριθμός που ξαναρχίζει από 1 σε νέο μπλοκ με την ίδια λέξη (ΠΕΡΙΠ… 1ο 2ο, 1ο 2ο): δεύτερο μπλοκ της ίδιας λέξης
     const out: SvcBlock[] = []; let part: SvcRow[] = [];
     for (const x of b.rows) { if (x.num != null && prev && x.num <= prev && part.length) { out.push({ ...b, rows: part, groups: [] }); part = []; } if (x.num != null) prev = x.num; part.push(x); }
@@ -132,7 +141,7 @@ export function detectSvc(sh: SheetModel, o: { lex?: Lexicon; cols?: Record<stri
     b.occ = (occ2.get(b.key) || 0) + 1; occ2.set(b.key, b.occ);
     const gs: number[][] = [];
     b.rows.forEach((x, i) => {
-      const pair = gs.length && x.num == null && x.shift !== '' && b.rows[gs[gs.length - 1][0]].shift !== '';
+      const pair = gs.length && (x.cont || (x.num == null && x.shift !== '' && b.rows[gs[gs.length - 1][0]].shift !== ''));
       if (pair) gs[gs.length - 1].push(i); else gs.push([i]);
     });
     b.groups = gs;
@@ -306,7 +315,7 @@ export interface SvcPlan {
 // Μορφή ονόματος στο αρχείο της μονάδας: 'short' = «ΕΠΩΝΥΜΟ Α.» (χωρίς πατρώνυμο), αλλιώς το πλήρες ονοματεπώνυμο όπως πάντα
 export type NameFmt = 'short';
 export const nameOf = (p: Person, fmt?: NameFmt): string => (fmt === 'short' ? (p.last + ' ' + (p.first ? p.first.charAt(0) + '.' : '')).trim() : fullName(p));
-export function planSvc(sh: SheetModel, det: SvcSheet, matches: SvcMatch[], targets: SvcTarget[], s: AppState, date: ISODate, posts: Post[], ours: Record<string, string> = {}, lex?: Lexicon, nameFmt?: NameFmt): SvcPlan {
+export function planSvc(sh: SheetModel, det: SvcSheet, matches: SvcMatch[], targets: SvcTarget[], s: AppState, date: ISODate, posts: Post[], ours: Record<string, string> = {}, lex?: Lexicon, nameFmt?: NameFmt, fit: boolean = false): SvcPlan {
   const seatName = (p: Person) => nameOf(p, nameFmt);
   const l = lexOf(lex); const g = s.guards[date] || {}; const pm = seatMap(s); const g2 = new Grid(sh);
   const plan: SvcPlan = { writes: [], placed: [], unplaced: [], cleared: 0, kept: 0, warnings: [] };
@@ -323,33 +332,60 @@ export function planSvc(sh: SheetModel, det: SvcSheet, matches: SvcMatch[], targ
     plan.writes.push({ sheet: sh.name, r: at.r, c: at.c, value, ...(over ? { over } : {}) });
   };
   const assigned = new Set<string>();
+  // το κελί του ονόματος έχει δικό σου κείμενο ή τύπο: ο βαθμός δεν γράφεται μόνος του, το άτομο μένει χωρίς θέση (και το λέει)
+  const place = (post: Post, p: Person, row: SvcRow) => {
+    if (done.has(row.r + '')) return; done.add(row.r + ''); assigned.add(post.k);
+    if (nc != null) { const at = sit(row.r, nc); const cur = txt(sh.rows[at.r]?.[at.c]); if (sh.fx.has(cellKey(at.r, at.c)) || (cur && cur !== ours[oursKey(sh.name, at.r, at.c)])) { plan.unplaced.push({ post: post.k, label: post.label, who: seatName(p) }); return; } }
+    if (nc == null) { plan.unplaced.push({ post: post.k, label: post.label, who: seatName(p) }); return; }
+    put(row.r, rc, rankTxt(p), 'rank'); put(row.r, nc, seatName(p), 'name');
+    plan.placed.push({ post: post.k, pid: p.id, sheet: sh.name, r: row.r });
+  };
+  // καμία ανάθεση: καθαρίζονται μόνο όσα έγραψε η εφαρμογή άλλη φορά
+  const clearRow = (row: SvcRow) => {
+    if (done.has(row.r + '')) return; done.add(row.r + '');
+    for (const c of [rc, nc]) {
+      if (c == null) continue; const at = sit(row.r, c); const cur = txt(sh.rows[at.r]?.[at.c]);
+      if (cur && cur === ours[oursKey(sh.name, at.r, at.c)]) { plan.writes.push({ sheet: sh.name, r: at.r, c: at.c, value: null }); plan.cleared++; } else if (cur) plan.kept++;
+    }
+  };
+  // Μπλοκ του αρχείου που δείχνουν την ίδια υπηρεσία και η υπηρεσία έχει 2+ άτομα ανά νούμερο (ΠΕΡΙΠ… 1ο 2ο, 1ο 2ο): οι γραμμές τους συνεχίζουν η μία την άλλη,
+  // το 2ο μπλοκ είναι το 2ο άτομο κάθε νούμερου. Με 1 άτομο ανά νούμερο κάθε μπλοκ γεμίζει μόνο του, όπως πάντα.
+  const units: { t: SvcTarget; blocks: SvcBlock[] }[] = [];
   for (const m of matches) {
     if (!m.value || m.value === 'ignore') continue;
     const t = targets.find(x => x.value === m.value); if (!t) continue;
-    const b = m.block;
+    const same = Math.max(1, ...t.groups.map(gp => gp.length)) > 1 ? units.find(u => u.t.value === m.value) : undefined;
+    if (same) same.blocks.push(m.block); else units.push({ t, blocks: [m.block] });
+  }
+  for (const { t, blocks } of units) {
+    const rowsOf = (gi: number): SvcRow[] => blocks.flatMap(b => (b.groups[gi] || []).map(i => b.rows[i]));
+    const left: { post: Post; p: Person }[] = [];
     t.groups.forEach((gp, gi) => {
-      const ug = b.groups[gi];
+      const rows = rowsOf(gi);
       gp.forEach((post, pi) => {
-        const pid = g[post.k]; const p = pid != null ? pm.get(pid) : undefined;
-        const row = ug ? b.rows[ug[pi] ?? -1] : undefined;
-        if (!row) { if (p) plan.unplaced.push({ post: post.k, label: post.label, who: seatName(p) }); return; }
-        if (done.has(row.r + '')) return; done.add(row.r + ''); assigned.add(post.k);
-        if (p) {
-          // το κελί του ονόματος έχει δικό σου κείμενο ή τύπο: ο βαθμός δεν γράφεται μόνος του, το άτομο μένει χωρίς θέση (και το λέει)
-          if (nc != null) { const at = sit(row.r, nc); const cur = txt(sh.rows[at.r]?.[at.c]); if (sh.fx.has(cellKey(at.r, at.c)) || (cur && cur !== ours[oursKey(sh.name, at.r, at.c)])) { plan.unplaced.push({ post: post.k, label: post.label, who: seatName(p) }); return; } }
-          if (nc == null) { plan.unplaced.push({ post: post.k, label: post.label, who: seatName(p) }); return; }
-          put(row.r, rc, rankTxt(p), 'rank'); put(row.r, nc, seatName(p), 'name');
-          plan.placed.push({ post: post.k, pid: p.id, sheet: sh.name, r: row.r });
-        } else {
-          // καμία ανάθεση: καθαρίζονται μόνο όσα έγραψε η εφαρμογή άλλη φορά
-          for (const [c, role] of [[rc, 'rank'], [nc, 'name']] as const) {
-            if (c == null) continue; const at = sit(row.r, c); const cur = txt(sh.rows[at.r]?.[at.c]);
-            if (cur && cur === ours[oursKey(sh.name, at.r, at.c)]) { plan.writes.push({ sheet: sh.name, r: at.r, c: at.c, value: null }); plan.cleared++; } else if (cur) plan.kept++;
-            void role;
-          }
-        }
+        const pid = g[post.k]; const p = pid != null ? pm.get(pid) : undefined; const row = rows[pi];
+        if (!row) { if (p) left.push({ post, p }); return; }
+        if (p) place(post, p, row); else clearRow(row);
       });
+      for (const row of rows.slice(gp.length)) clearRow(row);       // γραμμές του νούμερου πάνω από τα άτομα της εφαρμογής: μένουν άδειες
     });
+    // άτομα που δεν έχουν γραμμή στο νούμερό τους: παίρνουν με τη σειρά τις γραμμές των νούμερων που το αρχείο έχει παραπάνω από την εφαρμογή (π.χ. 1ο, 2ο αντί για 1ο με 2 άτομα)
+    const spare = blocks.flatMap(b => b.groups.slice(t.groups.length).flatMap(grp => grp.map(i => b.rows[i])));
+    for (const { post, p } of left) {
+      const row = spare.shift();
+      if (row) place(post, p, row); else plan.unplaced.push({ post: post.k, label: post.label, who: seatName(p) });
+    }
+  }
+  // ώρες: όταν η υπηρεσία έχει δικές της ώρες στην εφαρμογή, γράφονται στη στήλη ώρες της πρώτης γραμμής κάθε νούμερου (ίδια ψηφία με το αρχείο = δεν πειράζεται)
+  const hc = det.cols.hours.c;
+  if (fit && hc != null) for (const { t, blocks } of units) {
+    const hs = appHours(s, t); if (!hs) continue;
+    blocks.forEach(b => hs.forEach((h, gi) => {
+      const ug = b.groups[gi]; const row = ug ? b.rows[ug[0]] : undefined; if (!row || !h) return;
+      const at = sit(row.r, hc); const cur = txt(sh.rows[at.r]?.[at.c]); if (sh.fx.has(cellKey(at.r, at.c))) return;
+      if (cur && digits(cur) === digits(h)) return;
+      plan.writes.push({ sheet: sh.name, r: at.r, c: at.c, value: h, exact: true, ...(cur && cur !== ours[oursKey(sh.name, at.r, at.c)] ? { over: cur } : {}) });
+    }));
   }
   // μπλοκ-καταστάσεις: όσοι είναι σε αυτή την κατάσταση τη μέρα, από πάνω προς τα κάτω. Γραμμή με δικό σου κείμενο ή τύπο στο όνομα παραλείπεται (ο επόμενος παίρνει την επόμενη)·
   // όσοι δεν χωράνε αναφέρονται, δεν προστίθενται γραμμές στο αρχείο σου
@@ -379,6 +415,17 @@ export function planSvc(sh: SheetModel, det: SvcSheet, matches: SvcMatch[], targ
   return plan;
 }
 export const oursKey = (sheet: string, r: number, c: number) => sheet + '|' + r + ':' + c;
+
+// Οι ώρες κάθε νούμερου μιας υπηρεσίας όταν τις έχει ορίσει ο χρήστης στην εφαρμογή (βάρδιες, ή ώρες σε μορφή ΩΩ:ΛΛ σε υπηρεσία χωρίς εναλλαγή)· οι προεπιλεγμένες ώρες (εναλλαγή 2 ωρών, «ημέρα») δεν μετρούν.
+// null = η υπηρεσία δεν έχει δικές της ώρες: το αρχείο μένει όπως είναι.
+export function appHours(s: AppState, t: SvcTarget): string[] | null {
+  if (!t.value.startsWith('blk:') || t.kept) return null;
+  const b = blocksOf(s.settings).find(x => 'blk:' + x.id === t.value); if (!b) return null;
+  const mine = hasShift(b.shift);
+  const out = t.groups.map(gp => { const h = (gp[0]?.hours || '').trim(); return mine || (gp[0]?.rot == null && /\d{1,2}\s*[:.]\s*\d{2}/.test(h)) ? h : ''; });
+  return out.some(Boolean) ? out : null;
+}
+const digits = (x: string) => x.replace(/\D/g, '');
 
 // τίτλος «ΚΑΤΑΣΤΑΣΗ ΥΠΗΡΕΣΙΩΝ ΤΗΣ <ημερομηνία>»: η παλιά ημερομηνία αντικαθίσταται, ό,τι άλλο γράφει ο τίτλος μένει
 const DATE_TAIL = /\s*(\d{1,2}\s+[Α-Ωα-ωά-ώΑ-ΩA-Za-z]{3,}\s+\d{2,4}|\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}|[_….\s]+)\s*$/u;

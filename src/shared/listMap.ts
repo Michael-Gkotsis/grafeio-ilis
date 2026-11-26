@@ -14,9 +14,9 @@ export interface ListModel {
   svc?: { header: number; title: boolean; sig: boolean; cols: ListColView[]; blocks: SvcBlockView[]; options: ListOption[]; targets: SvcTargetView[]; adds: ListAdd[] };
   outs?: { title: boolean; sig: boolean; lists: { side: 'o' | 'l'; title: string; ready: number; cols: ListColView[] }[] };
   rooms: RoomView[]; subs: string[];
-  name?: 'short'; headTexts?: Record<string, string[]>;   // name: μορφή ονόματος που είναι αποθηκευμένη· headTexts: κείμενα της γραμμής επικεφαλίδας ('' = υπηρεσίες, 'o'/'l' = εξοδούχοι/αδειούχοι) για να αποθηκεύεται η επικεφαλίδα κάθε στήλης που διαλέγεται
+  name?: 'short'; fit?: true; headTexts?: Record<string, string[]>;   // name: μορφή ονόματος που είναι αποθηκευμένη· headTexts: κείμενα της γραμμής επικεφαλίδας ('' = υπηρεσίες, 'o'/'l' = εξοδούχοι/αδειούχοι) για να αποθηκεύεται η επικεφαλίδα κάθε στήλης που διαλέγεται
 }
-export interface ListReq { file?: string; sheet?: string; posts: Record<string, string>; creates: { name: string }[]; cols: Record<string, number>; rooms: { sheet: string; who: string; on: boolean }[]; show?: Record<string, 'keep' | 'remove'>; add?: ListAdd[]; name?: 'short'; heads?: Record<string, string> }
+export interface ListReq { file?: string; sheet?: string; posts: Record<string, string>; creates: { name: string }[]; cols: Record<string, number>; rooms: { sheet: string; who: string; on: boolean }[]; show?: Record<string, 'keep' | 'remove'>; add?: ListAdd[]; name?: 'short'; heads?: Record<string, string>; fit?: true }
 export interface ListTryRes {
   placed: number; written: number; kept: number; cleared: number; refused: { ref: string; why: string }[]; unplaced: string[]; warnings: string[];
   lines: { label: string; text: string }[];
@@ -44,9 +44,9 @@ export function outsView(det: OutsSheet): NonNullable<ListModel['outs']> {
 }
 
 // Το προφίλ από τις επιλογές του χρήστη. Στις θέσεις μένουν μόνο όσες διάλεξε ο ίδιος (ή αποδέχτηκε με «Σωστό»)· οι σίγουρες της εφαρμογής ξαναβρίσκονται κάθε φορά.
-export function listProfileFrom(kind: Extract<ProfileKind, 'services' | 'outs' | 'rooms'>, o: { prev: TplProfile | null; sheet: string; posts?: Record<string, string>; cols?: Record<string, number>; rooms?: { sheet: string; who: string }[]; show?: Record<string, 'keep' | 'remove'>; add?: ListAdd[]; name?: 'short'; heads?: Record<string, string> }): TplProfile {
+export function listProfileFrom(kind: Extract<ProfileKind, 'services' | 'outs' | 'rooms'>, o: { prev: TplProfile | null; sheet: string; posts?: Record<string, string>; cols?: Record<string, number>; rooms?: { sheet: string; who: string }[]; show?: Record<string, 'keep' | 'remove'>; add?: ListAdd[]; name?: 'short'; heads?: Record<string, string>; fit?: true }): TplProfile {
   const base: TplProfile = o.prev && o.prev.kind === kind ? o.prev : { v: PROFILE_VERSION, id: kind + '-1', kind, fp: { sheets: [], regions: [] }, elements: [], words: {}, ignore: [] };
-  const lst: ListProfile = { sheet: o.sheet, ...(o.posts && Object.keys(o.posts).length ? { posts: o.posts } : {}), ...(o.cols && Object.keys(o.cols).length ? { cols: o.cols } : {}), ...(o.show && Object.keys(o.show).length ? { show: o.show } : {}), ...(o.add && o.add.length ? { add: o.add } : {}), ...(o.name === 'short' ? { name: 'short' as const } : {}), ...(o.heads && Object.keys(o.heads).length ? { heads: o.heads } : {}) };
+  const lst: ListProfile = { sheet: o.sheet, ...(o.posts && Object.keys(o.posts).length ? { posts: o.posts } : {}), ...(o.cols && Object.keys(o.cols).length ? { cols: o.cols } : {}), ...(o.show && Object.keys(o.show).length ? { show: o.show } : {}), ...(o.add && o.add.length ? { add: o.add } : {}), ...(o.name === 'short' ? { name: 'short' as const } : {}), ...(o.heads && Object.keys(o.heads).length ? { heads: o.heads } : {}), ...(o.fit === true ? { fit: true as const } : {}) };
   if (o.rooms) { lst.sheets = o.rooms.map(r => r.sheet); lst.who = Object.fromEntries(o.rooms.map(r => [r.sheet, r.who])); }
   return { ...base, lst };
 }
