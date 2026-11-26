@@ -77,6 +77,12 @@ describe('Υπηρεσίες στελεχών: μετά την αποθήκευ�
     expect(runs.length).toBe(1);
     expect(pendingLabels()).toEqual([]);
   });
+  it('κωδικός ως 8 γράμματα (πριν 4: Michael, 26/11 «γιατί οι κωδικοί έχουν limit 4 χαρακτήρες?»)', async () => {
+    const { el } = await mount(CadreDutyCard, seeded());
+    const inp = el.querySelector('input[id^="sv-s-"]') as HTMLInputElement;
+    expect(inp.maxLength).toBe(8);
+    await type(inp, 'ΕΠΟΠΤΗΣ'); expect(inp.value).toBe('ΕΠΟΠΤΗΣ');
+  });
   it('όριο, νέα ομάδα και ημέρες: η μπάρα φεύγει', async () => {
     const { el, runs } = await mount(CadreDutyCard, seeded());
     await click(byText(el, '+ Νέα ομάδα…')!);
