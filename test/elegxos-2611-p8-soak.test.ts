@@ -86,6 +86,7 @@ function linkErrors(s: AppState, d: ISODate, err: string[]) {
 
 // ---------- έλεγχος των Excel ----------
 const LOWER = /[a-zα-ωά-ώ]/;
+const ORD = /(?<![\p{L}\d])(\d+)(ος|ου|ης|οι|ες|ων|ο|η)(?![\p{L}\d])/gu;   // τακτικός αριθμός: η κατάληξη μένει με πεζά (1ο, 2η, 3ος)
 const SEAT = /^([Α-Ω]+\d*[α-ω]|\d+ο)$/;          // κωδικοί θέσεων, π.χ. Θ1α, και τα νούμερα «1ο» της ΦΡΟΥΡΑΣ: ακριβώς όπως είναι
 // Γνωστό (Π8, ερώτηση στον Michael): η σημείωση κάτω από τον Έλεγχο υπηρεσιών είναι με πεζά από το #362· περιμένει απάντηση πριν αλλάξει η έξοδος
 const KNOWN_LOWER = /^Θ1α… θαλαμοφύλακας/;
@@ -101,7 +102,7 @@ async function scan(tag: string, buf: Buffer, tpl?: Buffer): Promise<string[]> {
       const where = tag + ' ' + n + '!' + String.fromCharCode(65 + (ci % 26)) + (ri + 1) + ' «' + v.slice(0, 40) + '»';
       if (/\b\d{4}-\d{2}-\d{2}\b/.test(v)) e.push(where + ' ημερομηνία ISO');
       if (/undefined|NaN|\[object|#REF|#VALUE|#DIV|#N\/A/.test(v)) e.push(where + ' σκουπίδια');
-      if (LOWER.test(v) && !v.split(/[\s/,;:()·+\-–]+/).every(w => !LOWER.test(w) || SEAT.test(w))) e.push(where + ' όχι κεφαλαία');
+      if (LOWER.test(v.replace(ORD, '$1')) && !v.replace(ORD, '$1').split(/[\s/,;:()·+\-–]+/).every(w => !LOWER.test(w) || SEAT.test(w))) e.push(where + ' όχι κεφαλαία');
     }));
   }
   return e;

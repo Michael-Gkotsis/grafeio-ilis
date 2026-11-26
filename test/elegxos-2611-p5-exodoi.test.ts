@@ -44,6 +44,7 @@ function badCells(rows: unknown[][], sh: string): string[] {
   return out;
 }
 const LOWER = /[a-zα-ωάέήίόύώϊϋΐΰς]/;
+const ORD = /(?<![\p{L}\d])(\d+)(ος|ου|ης|οι|ες|ων|ο|η)(?![\p{L}\d])/gu;   // τακτικός αριθμός: η κατάληξη μένει με πεζά (1ο, 2η, 3ος)
 const MADE_FORM: Record<string, string> = { lists: 'roster', rosterPrint: 'roster' };
 async function everyFile(s: AppState, headId?: string): Promise<Record<string, { name?: string; data: Buffer }>> {
   const out: Record<string, { name?: string; data: Buffer }> = {};
@@ -96,7 +97,7 @@ describe('Π5: Έντυπα με κάθε στήλη, 400 άτομα, κενές
     const cols = FIELDS[kind].filter(f => f.k !== 'blank' && f.k !== 'text' && f.k !== 'col').map(f => ({ f: f.k, h: f.head, w: 'auto' as const }));
     const { ids, out } = await make(kind, cols); expect(ids.length).toBeGreaterThan(0);
     const wb = await Workbook.open(out.data); const bad: string[] = [];
-    for (const sh of wb.sheetNames()) { const v = await wb.values(sh, 500, 80); bad.push(...badCells(v, sh)); v.forEach((r, i) => r.forEach((c, j) => { if (typeof c === 'string' && LOWER.test(c) && !/@/.test(c) && !/^Θ\d/.test(c)) bad.push(sh + ' ' + (i + 1) + ':' + (j + 1) + ' πεζά ' + JSON.stringify(c)); })); }
+    for (const sh of wb.sheetNames()) { const v = await wb.values(sh, 500, 80); bad.push(...badCells(v, sh)); v.forEach((r, i) => r.forEach((c, j) => { if (typeof c === 'string' && LOWER.test(c.replace(ORD, '$1')) && !/@/.test(c) && !/^Θ\d/.test(c)) bad.push(sh + ' ' + (i + 1) + ':' + (j + 1) + ' πεζά ' + JSON.stringify(c)); })); }
     expect(bad).toEqual([]);
   }, 60000);
   it('χωρισμός σε φύλλα (θάλαμος, ουλαμός, Σ.Ι., λόχος με κενό ή με / : * ?): ίδιοι άνθρωποι σε κάθε χωρισμό, σωστά ονόματα φύλλων', async () => {

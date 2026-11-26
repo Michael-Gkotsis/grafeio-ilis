@@ -11,6 +11,7 @@ import { withArticle, genitive } from '../src/shared/greek';
 import { hkDate, hkDay } from '../src/shared/dates';
 import { hkLvOn, hkOn, hkToggle, type AppState } from '../src/shared/domain';
 import { fakeState } from './fixtures';
+import { upperOrd } from '../src/shared/text';
 
 const T = (n: string) => fs.readFileSync(path.join(__dirname, '..', 'templates', n));
 const D = '2026-10-16';
@@ -193,7 +194,7 @@ describe('1. ΕΓΓΡΑΦΕΣ / 2. ΔΙΑΓΡΑΦΕΣ από το προσωπι
     expect(s.people[2].outOn).toBe(D);
     expect(linesText(hkaiDiaLines(s, D))).toBe('1. ΣΤΡ (ΠΖ) ΥΠΟΘΕΤΙΔΗΣ ΓΑΜΜΑΣ ΤΟΥ ΠΑΤΕΡΑ, ΑΣΜ 900002, ΕΣΣΟ 2026 Γ΄: ΜΕΤΑΘΕΣΗ ΣΤΟ 2Ο ΣΠ.');
     const bk = await (await Workbook.open((await fillHkai(T('hkai.xlsx'), s, D)).data)).sheet(1);
-    expect(bk.get('G9')).toBe(linesText(hkaiDiaLines(s, D)));
+    expect(bk.get('G9')).toBe(upperOrd(linesText(hkaiDiaLines(s, D))));
     // «Να μη γραφτεί»
     expect(hkaiDiaLines(run(s, { t: 'setPersonMove', pid: 3, field: 'outOn', date: null }), D)).toHaveLength(0);
     s = run(s, { t: 'updatePerson', person: { ...s.people[2], active: true } });

@@ -6,7 +6,7 @@ import { hkaiCadreLeaveLines, hkaiDiaLines, hkaiEgrLines, hkaiPunLines, hkaiSold
 import { hkOffText, orderedCadre } from './cadre';
 import { rankTxt } from './ranks';
 import { mondayOf } from './imer';
-import { normGreek, upper } from './text';
+import { normGreek, upper, upperOrd } from './text';
 import { dutyCfgOf, serviceOf } from './cadreDuty';
 import type { DocHead, HeadItem } from './docHead';
 import { zonesOf } from './headLayout';
@@ -95,8 +95,8 @@ export function hdHeadHtml(v: HdHeadView, fs: number): string {
   const z = v.head.z; const used = [0, 1, 2].map(i => (z[i] || []).some(it => it.k === 'text' ? !!it.t : it.k === 'img' ? !!it.id : it.k === 'date'));
   const zs = zonesOf(Array.from({ length: 60 }, () => 10), used); const AL = { l: 'left', c: 'center', r: 'right' } as const;
   const img = (it: Extract<HeadItem, { k: 'img' }>, side: boolean) => { const u = it.id ? v.img(it.id, !!it.gray) : null; return u ? `<img src="${esc(u)}" alt="" style="height:${(it.h * 28.346 * fs / 12).toFixed(1)}px;max-width:100%;${side ? '' : 'display:block;margin:0 ' + (it.al === 'r' ? '0 0 auto' : it.al === 'l' ? 'auto 0 0' : 'auto')}">` : ''; };
-  const txt = (it: HeadItem) => it.k === 'gap' ? '<p style="margin:0;min-height:1.2em"></p>' : it.k === 'date' ? `<p style="margin:0;font-weight:700;text-align:center">${esc(upper(v.date))}</p>`
-    : it.k === 'text' ? `<p style="margin:0;min-height:1.2em;text-align:${AL[it.al || 'c']};font-size:${((it.sz ?? 12) / 12).toFixed(3)}em;${it.b ? 'font-weight:700;' : ''}${it.i ? 'font-style:italic;' : ''}${it.u ? 'text-decoration:underline;' : ''}">${esc(upper(it.t))}</p>` : '';
+  const txt = (it: HeadItem) => it.k === 'gap' ? '<p style="margin:0;min-height:1.2em"></p>' : it.k === 'date' ? `<p style="margin:0;font-weight:700;text-align:center">${esc(upperOrd(v.date))}</p>`
+    : it.k === 'text' ? `<p style="margin:0;min-height:1.2em;text-align:${AL[it.al || 'c']};font-size:${((it.sz ?? 12) / 12).toFixed(3)}em;${it.b ? 'font-weight:700;' : ''}${it.i ? 'font-style:italic;' : ''}${it.u ? 'text-decoration:underline;' : ''}">${esc(upperOrd(it.t))}</p>` : '';
   const col = (items: HeadItem[], w: number) => {
     const side = items.filter((x): x is Extract<HeadItem, { k: 'img' }> => x.k === 'img' && !!x.side && !!x.id);
     const body = (l: HeadItem[]) => l.map(it => (it.k === 'img' ? (it.side ? '' : img(it, false)) : txt(it))).join('');

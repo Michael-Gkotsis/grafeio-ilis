@@ -27,9 +27,9 @@ describe('χωρίς εικόνες, τίποτα δεν αλλάζει', () => 
     'froura': '2a2f8450506f3bfa/02f31a002126917d',
     'froura-spen': '99a6928d61607219/6b472816ee57350c',
     'exodouxoi': '557f273745515d35/88e22c25eb96a371',
-    'fill-hkai': '6a93832407123c92/51d17e98fe9588b7',
-    'fill-froura': '152680e298c9ba5b/ec6a6ecb0df8cd2e',
-    'fill-outs': '694958a78e1d6a25/0d7147193500866b'
+    'fill-hkai': 'c9fee6878bfbcdb3/7f24f41fcb3e614b',
+    'fill-froura': 'ca385019f59bc6c9/7b598eb5ac3e9b1b',
+    'fill-outs': '37b41167f36daee5/5881c3cfc81bf566'
   };
   for (const [name, get] of files) {
     it(name, async () => {

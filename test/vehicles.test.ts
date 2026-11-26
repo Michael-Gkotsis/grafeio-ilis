@@ -12,7 +12,7 @@ import { fillHkai } from '../src/main/exports';
 import { vehicleBook } from '../src/main/excel';
 import { Workbook } from '../src/main/xlsx';
 import { fileNameOf, FILE_ROWS } from '../src/shared/fileNames';
-import { fakeState } from './fixtures';
+import { fakeState, capsOk } from './fixtures';
 
 const D = '2026-11-17';
 const T = (n: string) => fs.readFileSync(path.join(__dirname, '..', 'templates', n));
@@ -181,7 +181,7 @@ describe('Οχήματα: Excel «ΚΑΤΑΣΤΑΣΗ ΟΧΗΜΑΤΩΝ»', () => 
     const wb = new ExcelJS.Workbook(); await wb.xlsx.load(r.data as any);
     expect(wb.worksheets.map(w => w.name)).toEqual(['ΤΡΟΧΟΦΟΡΑ', 'ΕΡΠΥΣΤΡΙΟΦΟΡΑ', 'ΠΟΛΙΤΙΚΟΥ ΤΥΠΟΥ', 'ΚΑΥΣΙΜΑ', 'ΣΥΝΤΗΡΗΣΕΙΣ']);
     expect(wb.getWorksheet('ΤΡΟΧΟΦΟΡΑ')!.pageSetup).toMatchObject({ paperSize: 9, orientation: 'landscape', fitToWidth: 1 });
-    const bad: string[] = []; wb.eachSheet(ws => ws.eachRow(row => row.eachCell(c => { if (typeof c.value === 'string' && c.value !== c.value.toUpperCase()) bad.push(ws.name + ':' + c.value); })));
+    const bad: string[] = []; wb.eachSheet(ws => ws.eachRow(row => row.eachCell(c => { if (typeof c.value === 'string' && !capsOk(c.value)) bad.push(ws.name + ':' + c.value); })));
     expect(bad).toEqual([]); expect(r.marks.length).toBe(5);
     const cell = (sheet: string, text: string) => { let f = false; wb.getWorksheet(sheet)!.eachRow(row => row.eachCell(c => { if (String(c.value).includes(text)) f = true; })); return f; };
     expect(cell('ΕΡΠΥΣΤΡΙΟΦΟΡΑ', 'ΑΚΙΝΗΣΙΑ: ΜΠΑΤΑΡΙΕΣ')).toBe(true); expect(cell('ΤΡΟΧΟΦΟΡΑ', '48.900 ΧΛΜ')).toBe(true);

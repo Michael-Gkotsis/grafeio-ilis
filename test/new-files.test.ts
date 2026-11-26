@@ -1,7 +1,7 @@
 // «Νέο αρχείο…» / «Νέο φύλλο…» για πόστα, εκτός δύναμης και δυνατότητες: η εφαρμογή φτιάχνει τον πίνακα από την αρχή
 // με τη δομή του Δυναμολογίου (τίτλος, Α/Α, Βαθμός, Ο/Σ, Επώνυμο… και οι στήλες του είδους), και ό,τι φτιάχνει το
 // ξαναδιαβάζει χωρίς αλλαγές. Μόνο ψεύτικα ονόματα.
-import { upper } from '../src/shared/text';
+import { upperOrd } from '../src/shared/text';
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import os from 'os';
@@ -129,7 +129,7 @@ describe('νέο Δυναμολόγιο', () => {
     const { s, sheets, b } = await make();
     expect(sheets.map(x => x.name)).toEqual(['ΣΥΝΟΛΙΚΟ', 'ΘΑΛΑΜΟΙ']);
     const sh = sheets[0];
-    expect(sh.rows[0][0]).toBe('ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ ' + upper(s.settings.unitName));
+    expect(sh.rows[0][0]).toBe('ΣΥΝΟΛΙΚΟ ΔΥΝΑΜΟΛΟΓΙΟ ' + upperOrd(s.settings.unitName));
     expect(sh.rows[1]).toEqual(['Α/Α', 'ΒΑΘΜΟΣ', 'Ο/Σ', 'ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'ΠΑΤΡΩΝΥΜΟ', 'ΑΣΜ', 'ΤΗΛΕΦΩΝΟ', 'ΘΑΛΑΜΟΣ', 'Σ.Ι', 'ΠΑΡΑΤΗΡΗΣΕΙΣ', 'ΔΝ']);
     const act = s.people.filter(p => p.active);
     const rows = sh.rows.slice(2, 2 + act.length);
@@ -149,7 +149,7 @@ describe('νέο Δυναμολόγιο', () => {
     const ws = await (await Workbook.open(fs.readFileSync(file))).sheet('ΣΥΝΟΛΙΚΟ');
     const n = s.people.filter(p => p.active).length; const r = 3 + n + 1;   // κενή γραμμή, μετά «ΘΑΛΑΜΟΙ»
     expect([ws.get('D' + r), ws.get('F' + r)]).toEqual(['ΘΑΛΑΜΟΙ', 'ΣΤΡΑΤΙΩΤΕΣ']);
-    expect([ws.get('D' + (r + 1)), fx(ws, 'F' + (r + 1))]).toEqual(['1ΟΣ', `COUNTIF(I3:I${2 + n},"1")`]);
+    expect([ws.get('D' + (r + 1)), fx(ws, 'F' + (r + 1))]).toEqual(['1ος', `COUNTIF(I3:I${2 + n},"1")`]);
     const k = 8;   // όλοι οι θάλαμοι των Ρυθμίσεων (8), και ο 7ος που δεν έχει κανέναν σε δύναμη: μετρά όποιον μπει αργότερα
     expect(ws.get('D' + (r + k + 1))).toBe('ΣΥΝΟΛΟ');
     expect(fx(ws, 'F' + (r + k + 1))).toBe(`SUM(F${r + 1}:F${r + k})`);

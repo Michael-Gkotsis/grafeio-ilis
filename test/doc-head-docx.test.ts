@@ -55,7 +55,7 @@ describe('Ημερήσια Διαταγή: Word με επικεφαλίδα', ()
     expect(xml.slice(xml.indexOf('<w:body>')).startsWith('<w:body><w:tbl>')).toBe(true);
     const hdTbl = xml.slice(xml.indexOf('<w:tbl>'), xml.indexOf('</w:tbl>') + 8);
     expect((hdTbl.match(/<w:tc>/g) || []).length).toBe(2);   // εικόνα και γραμμές μονάδας αριστερά, ημερομηνία δεξιά: η Μέση είναι κενή
-    for (const t of ['ΚΕΝ ΑΥΛΩΝΑ', '2Η ΕΠΧΙΑ', '4Η ΙΛΗ']) expect(xml).toContain(t);
+    for (const t of ['ΚΕΝ ΑΥΛΩΝΑ', '2η ΕΠΧΙΑ', '4η ΙΛΗ']) expect(xml).toContain(t);
     expect(xml).not.toContain('ΜΟΝΑΔΑ: ');   // η γραμμή «ΜΟΝΑΔΑ» αντικαταστάθηκε
     expect(xml).not.toContain('\u0001'); expect(xml).not.toContain('{ΚΕΦΑΛΙΔΑ}');
     expect(xml).toContain('ΗΜΕΡΗΣΙΑ ΔΙΑΤΑΓΗ ΤΗΣ');

@@ -1,6 +1,6 @@
 // ΗΚΑΙ πίσω σελίδα: αριθμημένες ποινές με υπογραμμισμένη διάρκεια, αιτήσεις, εκτύπωση, και η βάση (πίνακας αιτήσεων,
 // αναίρεση που κρατά μόνο τη μέρα που άλλαξε). Μόνο ψεύτικα ονόματα.
-import { upper } from '../src/shared/text';
+import { upperOrd } from '../src/shared/text';
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import os from 'os';
@@ -90,7 +90,7 @@ describe('ΗΚΑΙ: 5. ΑΙΤΗΣΕΙΣ', () => {
     s = run(s, { t: 'setHkaiManual', date: D, manual: { cells: {}, text: { ait: 'ΕΛΕΥΘΕΡΟ ΚΕΙΜΕΝΟ' } } });
     expect(linesText(hkaiReqLines(s, D))).toBe('1. ΣΤΡ (ΠΖ) ΠΑΡΑΔΕΙΓΜΑΤΑΚΗΣ ΒΗΤΑΣ: ΑΙΤΕΙΤΑΙ ΟΛΙΓΟΗΜΕΡΗ ΑΔΕΙΑ.\n2. ΣΤΡ (ΠΖ) ΥΠΟΘΕΤΙΔΗΣ ΓΑΜΜΑΣ: ΑΙΤΕΙΤΑΙ ΜΕΤΑΘΕΣΗ ΣΤΗΝ 2Η ΕΠΧΙΑ.\nΕΛΕΥΘΕΡΟ ΚΕΙΜΕΝΟ');
     const bk = await (await Workbook.open((await fillHkai(T('hkai.xlsx'), s, D)).data)).sheet(1);
-    expect(bk.get('G12')).toBe(upper(linesText(hkaiReqLines(s, D))));
+    expect(bk.get('G12')).toBe(upperOrd(linesText(hkaiReqLines(s, D))));
     // μόνο ελεύθερο κείμενο, όπως πριν
     const only = run(fakeState(5), { t: 'setHkaiManual', date: D, manual: { cells: {}, text: { ait: 'ΜΟΝΟ ΑΥΤΟ' } } });
     expect((await (await Workbook.open((await fillHkai(T('hkai.xlsx'), only, D)).data)).sheet(1)).get('G12')).toBe('ΜΟΝΟ ΑΥΤΟ');

@@ -15,6 +15,7 @@ import { cadrePlanBook } from '../src/main/excel';
 import { fileNameOf } from '../src/shared/fileNames';
 import { Store } from '../src/main/db';
 import { fakeState } from './fixtures';
+import { upperOrd } from '../src/shared/text';
 
 const D = '2026-11-17';
 let n = 0;
@@ -216,7 +217,7 @@ describe('Excel «ΠΡΟΓΡΑΜΜΑ ΑΔΕΙΩΝ ΣΤΕΛΕΧΩΝ»', () => {
     expect(sh.shade[4]).toBe('we'); expect(sh.shade[9]).toBe('hol'); expect(sh.shade[24]).toBe('hol'); expect(sh.shade[0]).toBe('');
     expect(sh.legend.map(l => l.code)).toEqual(['ΚΑ', 'ΑΜΔ', 'ΑΠ', 'X']);
     const all = [sh.title, ...sh.rows.flatMap(r => [r.rank, r.name, r.left, ...r.cells]), ...sh.legend.flatMap(l => [l.code, l.name])];
-    for (const t of all) expect(t).toBe(t.toUpperCase());
+    for (const t of all) expect(t).toBe(upperOrd(t));
     expect(planSheet(s, DEC, 'off').rows).toHaveLength(1);
   });
   it('το αρχείο: ένα φύλλο, A4 οριζόντια σε μία σελίδα φάρδος, γκρι ΣΚ/αργίες, όνομα από το fileNames, υπόμνημα κάτω', async () => {
@@ -234,7 +235,7 @@ describe('Excel «ΠΡΟΓΡΑΜΜΑ ΑΔΕΙΩΝ ΣΤΕΛΕΧΩΝ»', () => {
     expect(fg(5, 4 + 4)).toBe('FFD9D9D9'); expect(fg(5, 4 + 9)).toBe('FFBFBFBF'); expect(fg(5, 4 + 1)).toBeUndefined();   // ΣΚ, αργία, καθημερινή
     const legend = String(ws.getCell(7, 1).value); expect(legend).toMatch(/^ΥΠΟΜΝΗΜΑ: .*ΚΑ = ΚΑΝΟΝΙΚΗ ΑΔΕΙΑ.*ΑΜΔ = ΑΔΕΙΑ ΜΙΚΡΗΣ ΔΙΑΡΚΕΙΑΣ.*ΑΠ = ΑΠΑΛΛΑΓΗ.*X = ΔΕΝ ΘΕΛΕΙ ΥΠΗΡΕΣΙΑ/);
     // κανένα πεζό γράμμα σε κανένα κελί
-    ws.eachRow(r => r.eachCell(c => { if (typeof c.value === 'string') expect(c.value).toBe(c.value.toUpperCase()); }));
+    ws.eachRow(r => r.eachCell(c => { if (typeof c.value === 'string') expect(c.value).toBe(upperOrd(c.value)); }));
   });
   it('χωρίς στελέχη: φύλλο με «ΚΑΝΕΝΑΣ»', async () => {
     const m = await cadrePlanBook(fakeState(3), DEC, D);

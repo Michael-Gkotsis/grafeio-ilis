@@ -162,8 +162,8 @@ describe('θάλαμοι των Ρυθμίσεων στο νέο Δυναμολ�
     const w = await writeSource('people', b, s, undefined, D, { create: true }); expect(w.ok, JSON.stringify(w)).toBe(true);
     if (!w.ok) return;
     let { sheets } = await readBook(file);
-    const labels = sheets[0].rows.map(r => r[b.cols.last]).filter(v => typeof v === 'string' && /^\d+ΟΣ$/.test(v));
-    expect(labels).toEqual(['1ΟΣ', '2ΟΣ', '3ΟΣ', '4ΟΣ', '5ΟΣ', '6ΟΣ', '7ΟΣ', '8ΟΣ', '9ΟΣ', '10ΟΣ']);
+    const labels = sheets[0].rows.map(r => r[b.cols.last]).filter(v => typeof v === 'string' && /^\d+ος$/.test(v));
+    expect(labels).toEqual(['1ος', '2ος', '3ος', '4ος', '5ος', '6ος', '7ος', '8ος', '9ος', '10ος']);
     expect(roomBlocks(sheets[1]).map(x => [x.room, x.rows.length])).toEqual([[1, 2], [2, 2], [3, 2], [4, 2], [5, 2], [6, 2], [7, 2], [8, 2], [9, 0], [10, 0]]);
     const s2 = apply(s, { t: 'addPerson', person: { rank: 'ΣΤΡ', spec: 'ΠΖ', last: 'ΝΕΟΦΕΡΤΟΣ', first: 'ΑΛΦΑΣ', father: 'Χ', asm: '999', phone: '6999', room: 9, si: 'Ι1', post: null, role: null, essos: '', attached: false, notes: '' } as never }, ctx).state;
     const w2 = await writeSource('people', b, s2, { keys: w.meta.keys, snap: w.meta.snap } as never, D); expect(w2.ok, JSON.stringify(w2)).toBe(true);

@@ -46,8 +46,8 @@ describe('ΗΚΑΛ (λόχος)', () => {
     save(r.name, r.data);
     expect(r.name).toBe('ΗΚΑΛ 12.10.26.xlsx');
     const wb = await Workbook.open(r.data); const fr = await wb.sheet(0); const bk = await wb.sheet(1);
-    expect(fr.get('A4')).toBe('ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ 4ΟΥ ΛΟΧΟΥ ΤΗΣ 12 ΟΚΤ 26');
-    expect(fr.get('A2')).toBe('2Ο ΤΑΓΜΑ');
+    expect(fr.get('A4')).toBe('ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ 4ου ΛΟΧΟΥ ΤΗΣ 12 ΟΚΤ 26');
+    expect(fr.get('A2')).toBe('2ο ΤΑΓΜΑ');
     expect([fr.get('A17'), fr.get('A18'), fr.get('A19'), fr.get('A23'), fr.get('A29')]).toEqual(['ΤΑΓΜΑΤΑΡΧΕΣ', 'ΛΟΧΑΓΟΙ', 'ΥΠΟΛΟΧΑΓΟΙ-ΑΝΘΥΠΟΛΟΧΑΓΟΙ', 'ΑΡΧΙΛΟΧΙΕΣ', 'ΣΤΡΑΤΙΩΤΕΣ']);
     expect(fr.get('G37')).toBe('ΑΛΧΙΑΣ ΛΟΧΟΥ');
     expect(fr.get('V37')).toBe('ΔΙΟΙΚΗΤΗΣ ΛΟΧΟΥ');
@@ -59,9 +59,9 @@ describe('ΗΚΑΛ (λόχος)', () => {
     let s = fakeState(40);
     s = apply(s, { t: 'setSettings', settings: { unitKind: 'lochos', ...unitSettingsFor(s.settings, 'lochos') }, text: 'λόχος' }, ctx).state;
     const f = await (await Workbook.open((await fillFroura(T('froura.xlsx'), s, '2026-10-12')).data)).sheet(0);
-    expect([f.get('L2'), f.get('L3'), f.get('B46'), f.get('D46'), f.get('K46')]).toEqual(['2Ο ΤΑΓΜΑ Ν/Σ', '4ΟΣ ΛΟΧΟΣ', 'ΑΛΧΙΑΣ ΛΟΧΟΥ', 'ΔΚΤΗΣ ΛΟΧΟΥ', 'ΔΚΤΗΣ ΤΑΓΜΑΤΟΣ']);
+    expect([f.get('L2'), f.get('L3'), f.get('B46'), f.get('D46'), f.get('K46')]).toEqual(['2ο ΤΑΓΜΑ Ν/Σ', '4ος ΛΟΧΟΣ', 'ΑΛΧΙΑΣ ΛΟΧΟΥ', 'ΔΚΤΗΣ ΛΟΧΟΥ', 'ΔΚΤΗΣ ΤΑΓΜΑΤΟΣ']);
     const o = await (await Workbook.open((await fillOuts(T('exodouxoi.xlsx'), s, '2026-10-12')).data)).sheet(0);
-    expect(o.get('H3')).toBe('4ΟΣ ΛΟΧΟΣ');
+    expect(o.get('H3')).toBe('4ος ΛΟΧΟΣ');
     expect(Object.values(o.dump().cells).some(v => /ΙΛΗ/.test(v))).toBe(false);
   });
   it('στην ίλη τα έντυπα μένουν όπως πριν', async () => {
@@ -148,12 +148,12 @@ describe('άλλο όνομα γραμμής και κεφαλίδα της ΗΚ
     const A = async (st: typeof s) => { const fr = await (await Workbook.open((await fillHkai(T('hkai.xlsx'), st, '2026-10-12')).data)).sheet(0); return [fr.get('A1'), fr.get('A2'), fr.get('A3')]; };
     expect(await A(s)).toEqual(['ΚΕΤΘ', '2Η ΕΠΧΙΑ', 'ΚΑΤΑΣΤΑΣΗ']);
     s = apply(s, { t: 'setSettings', settings: { hkai: { head: ['ΚΕΝ Αυλώνα', '2η ΕΠΧΙΑ Ν/Σ'] } }, text: 'κεφαλίδα' }, ctx).state;
-    expect(await A(s)).toEqual(['ΚΕΝ ΑΥΛΩΝΑ', '2Η ΕΠΧΙΑ Ν/Σ', 'ΚΑΤΑΣΤΑΣΗ']);
+    expect(await A(s)).toEqual(['ΚΕΝ ΑΥΛΩΝΑ', '2η ΕΠΧΙΑ Ν/Σ', 'ΚΑΤΑΣΤΑΣΗ']);
     expect(hkaiFront(s, '2026-10-12', hkaiCounts(s, '2026-10-12')).rows[1][0]!.v).toBe('2η ΕΠΧΙΑ Ν/Σ');
     s = apply(s, { t: 'setSettings', settings: { unitKind: 'lochos' }, text: 'λόχος' }, ctx).state;
-    expect(await A(s)).toEqual(['ΚΕΝ ΑΥΛΩΝΑ', '2Ο ΤΑΓΜΑ Ν/Σ', 'ΚΑΤΑΣΤΑΣΗ']);
+    expect(await A(s)).toEqual(['ΚΕΝ ΑΥΛΩΝΑ', '2ο ΤΑΓΜΑ Ν/Σ', 'ΚΑΤΑΣΤΑΣΗ']);
     // μόνο η 2η γραμμή: η 1η μένει του εντύπου
     s = apply(s, { t: 'setSettings', settings: { unitKind: 'ili', hkai: { head: ['', '3η ΕΠΧΙΑ'] } }, text: 'κεφαλίδα' }, ctx).state;
-    expect((await A(s)).slice(0, 2)).toEqual(['ΚΕΤΘ', '3Η ΕΠΧΙΑ']);
+    expect((await A(s)).slice(0, 2)).toEqual(['ΚΕΤΘ', '3η ΕΠΧΙΑ']);
   });
 });

@@ -9,7 +9,7 @@ import { dayBook, whenList, DAY_GROUPS } from '../src/shared/outsDay';
 import { activePeople } from '../src/shared/rules';
 import { fatherTxt } from '../src/shared/domain';
 import { pskDays } from '../src/shared/dates';
-import { upper } from '../src/shared/text';
+import { upper, upperOrd } from '../src/shared/text';
 import { fakeState } from './fixtures';
 import { genState } from './outs-gen';
 import { genOuts } from './tplgen';
@@ -84,7 +84,7 @@ describe('Excel «Όλη η δύναμη»: δύο σελίδες', () => {
           expect(x.refs.includes('ΣΕΛ. 2') === w[i].rows.some(y => y.g[0] !== 'A'), tag).toBe(true);
         });
         // κεφαλαία παντού, και στα δύο φύλλα
-        for (const t of [...p1.texts, ...p2.texts]) expect(upper(t), tag + ' «' + t + '»').toBe(t);
+        for (const t of [...p1.texts, ...p2.texts]) expect(upperOrd(t), tag + ' «' + t + '»').toBe(t);
       }
     }
   }, 240000);

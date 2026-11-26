@@ -49,7 +49,7 @@ describe('εξαγωγή Excel', () => {
     const r = await fillHkai(T('hkai.xlsx'), s, '2026-10-12');
     save(r.name, r.data);
     const wb = await Workbook.open(r.data); const fr = await wb.sheet(0); const bk = await wb.sheet(1);
-    expect(fr.get('A4')).toBe('ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ 4ΗΣ ΙΛΗΣ ΤΗΣ 12 ΟΚΤ 26');
+    expect(fr.get('A4')).toBe('ΗΜΕΡΗΣΙΑΣ ΑΝΑΦΟΡΑΣ 4ης ΙΛΗΣ ΤΗΣ 12 ΟΚΤ 26');
     expect(fr.get('C29')).toBe('89');
     expect(fr.get('C26')).toBe('1');
     expect(fr.get('O29')).toBe('8');

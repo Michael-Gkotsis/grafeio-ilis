@@ -14,7 +14,7 @@ import { registry } from '../src/shared/assets';
 import { secondWeapons } from '../src/shared/weapons';
 import { autoFill } from '../src/shared/cadreDuty';
 import { assetBook, cadreDutyBook, cadreLeaveBook, cadrePlanBook, vehicleBook, weaponsBook } from '../src/main/excel';
-import { upper } from '../src/shared/text';
+import { upperOrd } from '../src/shared/text';
 import { fakeState } from './fixtures';
 
 const D = '2026-11-17';
@@ -78,7 +78,7 @@ describe('Τα νέα Excel της 17/11: ανοίγουν στο LibreOffice ί
         for (const [k, v] of a) {
           expect(b.get(k), x.what + ' ' + k).toBe(v);
           // capitals: every text the app wrote (numbers and dates aside); the disjunctive «Ή» keeps its accent
-          if (/[a-zα-ωά-ώ]/.test(v)) expect(v.replace(/ Ή /g, ' Η '), x.what + ' ' + k).toBe(upper(v));
+          if (/[a-zα-ωά-ώ]/.test(v)) expect(v.replace(/ Ή /g, ' Η '), x.what + ' ' + k).toBe(upperOrd(v));
         }
       }
       // ο ΟΠΛΙΣΜΟΣ έχει φύλλο ΑΠΟΝΤΑ με τα δύο όπλα, και το Μητρώο ΘΕΣΗ «ΑΠΩΝ (…)» και ΑΠΟΝΤΑ στα ΣΥΝΟΛΑ, όπως γύρισαν από το LibreOffice·

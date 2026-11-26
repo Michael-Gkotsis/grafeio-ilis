@@ -12,7 +12,7 @@ import { weaponSheets } from '../src/shared/weapons';
 import { assetBook } from '../src/main/excel';
 import { fileNameOf } from '../src/shared/fileNames';
 import { Store } from '../src/main/db';
-import { fakeState } from './fixtures';
+import { fakeState, capsOk } from './fixtures';
 
 const D = '2026-11-17';
 let n = 0;
@@ -251,7 +251,7 @@ describe('Excel «ΜΗΤΡΩΟ ΟΠΛΙΣΜΟΥ»', () => {
     expect(wb.worksheets.map(w => w.name)).toEqual(['G3A3', 'G3A4', 'Μ1911 Α1', 'MG3A1', 'ΔΙΟΠΤΡΕΣ', 'ΑΣΥΡΜΑΤΟΙ', 'ΣΥΝΟΛΑ']);
     const w = wb.getWorksheet('G3A3')!; expect(w.pageSetup).toMatchObject({ paperSize: 9, orientation: 'landscape', fitToWidth: 1 });
     expect(String(w.getCell(1, 1).value)).toMatch(/^ΜΗΤΡΩΟ ΟΠΛΙΣΜΟΥ G3A3 /);
-    const bad: string[] = []; wb.eachSheet(ws => ws.eachRow(row => row.eachCell(c => { if (typeof c.value === 'string' && c.value !== c.value.toUpperCase()) bad.push(ws.name + ':' + c.value); })));
+    const bad: string[] = []; wb.eachSheet(ws => ws.eachRow(row => row.eachCell(c => { if (typeof c.value === 'string' && !capsOk(c.value)) bad.push(ws.name + ':' + c.value); })));
     expect(bad).toEqual([]); expect(r.marks.length).toBe(7);
   });
 });

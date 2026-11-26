@@ -16,6 +16,7 @@ import { cadreDutyBook } from '../src/main/excel';
 import { fileNameOf } from '../src/shared/fileNames';
 import { Store } from '../src/main/db';
 import { fakeState } from './fixtures';
+import { upperOrd } from '../src/shared/text';
 
 const D = '2026-11-17';
 let n = 0;
@@ -344,7 +345,7 @@ describe('Excel «ΥΠΗΡΕΣΙΕΣ ΣΤΕΛΕΧΩΝ»', () => {
     const fg = (r: number, c: number) => (a.getCell(r, c).fill as any)?.fgColor?.argb;
     expect(fg(4, 4 + 5)).toBe('FFD9D9D9'); expect(fg(4, 4 + 10)).toBe('FFBFBFBF'); expect(fg(4, 4 + 1)).toBeUndefined();
     expect(String(b.getRow(3).values && (b.getRow(3).values as any[])[3])).toBe('ΥΠΗΡΕΣΙΑ');
-    for (const w of wb.worksheets) w.eachRow(r => r.eachCell(c => { if (typeof c.value === 'string') expect(c.value).toBe(c.value.toUpperCase()); }));
+    for (const w of wb.worksheets) w.eachRow(r => r.eachCell(c => { if (typeof c.value === 'string') expect(c.value).toBe(upperOrd(c.value)); }));
     expect(m.marks).toHaveLength(2);
   });
   it('χωρίς ομάδες: φύλλα με «ΚΑΝΕΝΑΣ» και χωρίς σφάλμα', async () => {
