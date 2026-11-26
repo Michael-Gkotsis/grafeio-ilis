@@ -13,7 +13,7 @@ import { hkOffText } from '../shared/cadre';
 import { absenceOf, frouraForm, dutyName, frouraLayout, frouraTables, lyLine, phaseOf, rows3, tableRowSpan, frouraPer, type FrouraTable } from '../shared/froura';
 import { sigsCustom, sigsFor, sigsSaved, type SigForm } from '../shared/sigs';
 import { hkaiVeh } from '../shared/vehicles';
-import { checkCadres, rosterCodes } from '../shared/cadreDuty';
+import { checkCadres, linkedSvc, rosterCodes } from '../shared/cadreDuty';
 import { countOf, onceKeyOfCadre, onceKeyOfPid } from '../shared/dutyOnce';
 
 // Οι υπογραφές στην προεπισκόπηση: όπως το έντυπο (base), ή οι δικές σου των Ρυθμίσεων μοιρασμένες στο πλάτος W
@@ -178,7 +178,7 @@ export function checkSheet(s: AppState, ym: string, only?: Set<number>): SheetMo
   days.forEach(d => {
     for (const e of s.dutyLog?.[d] || []) set(e.pid, d, { code: bareOf(undefined, e.kind), kind: e.kind });
     const g = s.guards[d] || {};
-    for (const k of Object.keys(g).sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0))) { let v = codes.get(k); if (v === undefined) { const p = postBy(s, k); v = p ? { code: codeOf(s.settings, k, p.kind), kind: p.kind } : null; codes.set(k, v); } if (v) set(g[k], d, v); }
+    for (const k of Object.keys(g).sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0))) { let v = codes.get(k); if (v === undefined) { const p = postBy(s, k); v = p ? { code: linkedSvc(s.settings, k)?.short || codeOf(s.settings, k, p.kind), kind: p.kind } : null; codes.set(k, v); } if (v) set(g[k], d, v); }
   });
   const W = 8 + nd;
   const rows: (Cell | null)[][] = [[E('ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + norm(MONTHS[m - 1]) + ' ' + y, 'ttl big', W)],
