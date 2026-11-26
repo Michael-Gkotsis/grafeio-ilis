@@ -8,15 +8,15 @@ import { W_NUM, weaponSheets } from '../shared/weapons';
 import { cadreSheets } from '../shared/cadre';
 import { leaveSheets } from '../shared/cadreBalance';
 import { planSheet } from '../shared/cadrePlan';
-import { dutySheet } from '../shared/cadreDuty';
+import { checkCadres, dutySheet, rosterCodes } from '../shared/cadreDuty';
+import { countOf, onceKeyOfCadre, onceKeyOfPid } from '../shared/dutyOnce';
 import { assetSheets, type AssetRow, type AssetSheet } from '../shared/assets';
 import { vehicleSheets } from '../shared/vehicles';
 import { norm, collator, upper } from '../shared/text';
 import { everyBlock, fatherTxt, type AppState, type DutyKind } from '../shared/domain';
 import { live, absCode, rankTxt } from '../shared/ranks';
 import { bareOf, codeOf } from '../shared/codes';
-import { activePeople, allPosts, cadreSeats, isHol, postBy, statusesFrom, dutyMin } from '../shared/rules';
-import { isUnit } from '../shared/mode';
+import { activePeople, allPosts, isHol, postBy, statusesFrom, dutyMin } from '../shared/rules';
 import { colName, fitBook, sheetSafe } from './xlsx';
 import { fileNameOf } from '../shared/fileNames';
 import { DUTY_CODES, IMER_ROWS, imerCode, imerDays, imerGrid, imerRowOn, imerSheets, imerTitle, sumTotals, type ImerPart, type ImerReq } from '../shared/imer';
@@ -65,16 +65,18 @@ export async function dutyCheck(s: AppState, ym: string): Promise<Made> {
   for (const b of everyBlock(s.settings)) if (b.custom && !BASE_KINDS.includes(b.kind)) ownOf.set(b.id, norm(b.name));
   const OWN = [...new Set(ownOf.values())];
   type V = { code: string; kind: DutyKind; own?: string };
-  // μονάδα: δύο υπηρεσίες την ίδια μέρα γράφονται και οι δύο στο κελί («Θ3/Μ2»), με τη σειρά των θέσεων· αλλιώς μία (όπως πάντα)
-  const unit = isUnit(s.settings); const order = new Map(allPosts(s.settings).map((p, i) => [p.k, i]));
+  // δύο υπηρεσίες την ίδια μέρα γράφονται και οι δύο στο κελί («Θ3/Μ2»), με τη σειρά των θέσεων (Michael, 26/11: και σε Κέντρο)
+  const order = new Map(allPosts(s.settings).map((p, i) => [p.k, i]));
   const per = new Map<number, Map<ISODate, V[]>>();
-  const set = (pid: number, d: ISODate, v: V) => { if (!per.has(pid)) per.set(pid, new Map()); const m = per.get(pid)!; const l = m.get(d); if (l && unit) l.push(v); else m.set(d, [v]); };
+  const set = (pid: number, d: ISODate, v: V) => { if (!per.has(pid)) per.set(pid, new Map()); const m = per.get(pid)!; const l = m.get(d); if (l) l.push(v); else m.set(d, [v]); };
   for (const d of days) {
     for (const e of s.dutyLog?.[d] || []) set(e.pid, d, { code: bareOf(undefined, e.kind), kind: e.kind });
     const g = s.guards[d] || {};
     for (const k of Object.keys(g).sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0))) { const p = postBy(s, k); if (p) set(g[k], d, { code: codeOf(s.settings, k, p.kind), kind: p.kind, own: ownOf.get(p.block) }); }
   }
-  const codeAt = (pid: number, d: ISODate) => per.get(pid)?.get(d)?.map(v => v.code).join('/');
+  // στελέχη: και οι υπηρεσίες του προγράμματος στελεχών (ΑΥΔΜ, ΕΕΑΣ…) που δεν είναι ήδη θέση, μετά τους κωδικούς των θέσεων
+  const rost = rosterCodes(s, ym);
+  const codeAt = (p: { id: number; cid?: string }, d: ISODate) => [...(per.get(p.id)?.get(d)?.map(v => v.code) || []), ...(p.cid ? rost.get(p.cid)?.get(d) || [] : [])].join('/') || undefined;
   const { F, Z, al, fitWidth, colWidth, FT } = lookOf(s);
   const wb = new ExcelJS.Workbook(); wb.creator = 'Γραφείο Λοχία';
   // Σταθερή ημερομηνία στις ιδιότητες του αρχείου: με τα ίδια δεδομένα βγαίνει το ίδιο αρχείο, οπότε η αυτόματη
@@ -99,14 +101,20 @@ export async function dutyCheck(s: AppState, ym: string): Promise<Made> {
     if (i >= FIX.length && i < FIX.length + nd && isHol(s.settings, days[i - FIX.length])) c.fill = gray;
   });
   // στελέχη που έκαναν υπηρεσία τον μήνα (Michael, 26/10): μετά τους στρατιώτες, με βαθμό
-  const people = [...activePeople(s).slice().sort((a, b) => (a.room ?? 99) - (b.room ?? 99) || collator.compare(a.last, b.last)), ...cadreSeats(s).filter(c => per.has(c.id))];
+  const people = [...activePeople(s).slice().sort((a, b) => (a.room ?? 99) - (b.room ?? 99) || collator.compare(a.last, b.last)), ...checkCadres(s, rost, pid => per.has(pid))];
   people.forEach((p, i) => {
     const row = ws.getRow(4 + i); const x = per.get(p.id) || new Map<ISODate, V[]>(); let nDuty = 0;
     let hol = 0; const c: Record<string, number> = {}; const o: Record<string, number> = {};
     const vals: (string | number)[] = [i + 1, upper(rankTxt(p)), upper(p.last), upper(p.first + fatherTxt(p))];
     for (const d of days) {
-      const v = x.get(d);
-      if (v) { for (const u of v) { nDuty++; if (isHol(s.settings, d)) hol++; c[u.kind] = (c[u.kind] || 0) + 1; if (u.own) o[u.own] = (o[u.own] || 0) + 1; } vals.push(unit ? v.map(u => u.code).join('/') : v[0].code); continue; }
+      const v = x.get(d); const code = codeAt(p, d);
+      if (code) {
+        const rc = p.cid ? rost.get(p.cid)?.get(d)?.length || 0 : 0; const n = (v?.length || 0) + rc;
+        for (const u of v || []) { c[u.kind] = (c[u.kind] || 0) + 1; if (u.own) o[u.own] = (o[u.own] || 0) + 1; }
+        if (isHol(s.settings, d)) hol += n;
+        nDuty += countOf(s.dutyOnce, d, p.cid ? onceKeyOfCadre(p.cid) : onceKeyOfPid(p.id), n);   // «Μετρά για 1»: η μέρα με 2+ υπηρεσίες μετρά μία
+        vals.push(code); continue;
+      }
       // απουσία: μικρός κωδικός του ημερολογίου κωλυομένων (Κ.Α, ΑΝ.ΑΔ, Ε.Υ…) για να φαίνεται γιατί δεν έχει υπηρεσία
       const st = statusesFrom(live(s), p.id, d, dutyMin(s.settings)).find(t => absCode(t, s.settings.lists));
       vals.push(st ? absCode(st, s.settings.lists)! : '');
@@ -124,7 +132,7 @@ export async function dutyCheck(s: AppState, ym: string): Promise<Made> {
   });
   ws.getColumn(1).width = fitWidth(4, [people.length]); [7, 18, 13].forEach((w, j) => { ws.getColumn(j + 2).width = Math.min(30, colWidth(w, FIX[j + 1], people.map(p => [rankTxt(p), p.last, p.first + fatherTxt(p)][j]))); });
   // ημέρες: όσο θέλει ο μεγαλύτερος κωδικός της στήλης (έντονος), ως 8
-  for (let j = 0; j < nd; j++) { const d = days[j]; ws.getColumn(FIX.length + 1 + j).width = fitWidth(3.2, people.map(p => (unit ? codeAt(p.id, d) : per.get(p.id)?.get(d)?.[0].code)), 8, true); }
+  for (let j = 0; j < nd; j++) { const d = days[j]; ws.getColumn(FIX.length + 1 + j).width = fitWidth(3.2, people.map(p => codeAt(p, d)), 8, true); }
   for (let j = 0; j < TAIL.length; j++) ws.getColumn(FIX.length + nd + 1 + j).width = j < 6 ? fitWidth(4.5, [TAIL[j]], 8, true) : fitWidth(4.5, [TAIL[j]], 14, true);
   const foot = 5 + people.length;
   ws.getCell(foot, 1).value = 'Θ1α… θαλαμοφύλακας (θέση) · Μ1… μαγειρεία · ΛΥ / ΔΥ · σκέτο γράμμα: χωρίς θέση · γκρι: ΣΚ και αργίες · πλάγια: λόγος απουσίας (Κ.Α άδεια, ΑΝ.ΑΔ αναρρωτική, Ε.Υ, Ε.Α)';

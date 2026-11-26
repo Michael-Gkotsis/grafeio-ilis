@@ -18,6 +18,8 @@ import {
   type AutoFillResult, type DutyCell, type Reason
 } from '../../shared/cadreDuty';
 import type { AppState, Cadre, CadreService } from '../../shared/domain';
+import { onceKeyOfCadre } from '../../shared/dutyOnce';
+import { useDutyOnce } from '../dutyOnce';
 
 const acc = (ym: string) => MONTHS[+ym.slice(5, 7) - 1].replace(/ς$/, '');   // «τον Ιανουάριο»
 const rowsOf = (days: ISODate[], from: number, to: number) => days.slice(from, to + 1);
@@ -121,7 +123,7 @@ function cellOf(x: DutyCell): GridCell {
 }
 
 export function CadreDutyView({ onInfo }: { onInfo: (c: Cadre) => void }) {
-  const { state, today, run, undoMark } = useStore(); const nav = useNav(); const toast = useToast();
+  const { state, today, run, undoMark } = useStore(); const nav = useNav(); const toast = useToast(); const once = useDutyOnce();
   const cfg = dutyCfgOf(state.settings);
   const ym: string = /^\d{4}-\d{2}$/.test(nav.params.cmonth || '') ? nav.params.cmonth : today.slice(0, 7);
   const mode: 'person' | 'svc' = nav.params.cdm === 'svc' ? 'svc' : 'person';
@@ -197,6 +199,7 @@ export function CadreDutyView({ onInfo }: { onInfo: (c: Cadre) => void }) {
     const ok = list.length === 1
       ? await run({ t: 'saveCadreDuty', duty: { date: list[0], svc: svc.id, cid: c.id, ...(why ? { why } : {}) } }, false)
       : await run({ t: 'setCadreDuties', add: list.map(d => ({ date: d, svc: svc.id, cid: c.id, ...(why ? { why } : {}) })), del: [], text: w + ', ' + svc.name + ' ' + rangeTxt({ from: list[0], to: list[list.length - 1] }) }, false);
+    once.ask(state, ok, list, [onceKeyOfCadre(c.id)]);   // 2 υπηρεσίες την ίδια μέρα (π.χ. και θέση στρατιωτών): ρωτά πόσες μετρούν
     if (ok) toast({ text: w + ': ' + svc.name + ' ' + (list.length === 1 ? dm(list[0]) : list.length + ' μέρες') + (why ? ' (παρά τα ⚠)' : ''), actions: [undoMark()] });
   };
   const choose = (c: Cadre, svc: CadreService, ds: ISODate[], reasons: Reason[], close: () => void) => {
@@ -221,7 +224,9 @@ export function CadreDutyView({ onInfo }: { onInfo: (c: Cadre) => void }) {
   const autoIds = useMemo(() => (state.cadreDuties || []).filter(x => x.auto && x.date.startsWith(ym)).map(x => x.id), [state.cadreDuties, ym]);
   const applyFill = async () => {
     const f = fill; setFill(null); const sn = f?.seats?.length || 0; if (!f || !(f.add.length + sn)) return;
-    if (await run({ t: 'setCadreDuties', add: f.add, del: [], ...(sn ? { seats: f.seats } : {}), text: 'αυτόματη συμπλήρωση ' + monthLabel(ym).toLowerCase() + ' (' + (f.add.length + sn) + ')' }, false)) toast({ text: 'Μπήκαν ' + (f.add.length + sn) + ' υπηρεσίες' + (f.empty.length + (f.seatEmpty?.length || 0) ? ', έμειναν ' + (f.empty.length + (f.seatEmpty?.length || 0)) + ' κενές' : ''), actions: [undoMark()] });
+    const ns = await run({ t: 'setCadreDuties', add: f.add, del: [], ...(sn ? { seats: f.seats } : {}), text: 'αυτόματη συμπλήρωση ' + monthLabel(ym).toLowerCase() + ' (' + (f.add.length + sn) + ')' }, false);
+    once.ask(state, ns, [...f.add.map(x => x.date), ...(f.seats || []).map(x => x.date)]);
+    if (ns) toast({ text: 'Μπήκαν ' + (f.add.length + sn) + ' υπηρεσίες' + (f.empty.length + (f.seatEmpty?.length || 0) ? ', έμειναν ' + (f.empty.length + (f.seatEmpty?.length || 0)) + ' κενές' : ''), actions: [undoMark()] });
   };
   const clearAuto = async () => {
     const ids = clr; setClr(null); if (!ids?.length) return;
@@ -280,6 +285,7 @@ export function CadreDutyView({ onInfo }: { onInfo: (c: Cadre) => void }) {
             ${!issues && !check.under.length && html`<p className="note" style=${{ margin: 0 }}>Δεν βρέθηκε κάτι.</p>`}
             <p className="note" style=${{ margin: '6px 0 0' }}>Κάθε υπηρεσία δίνει και μία απαλλαγή στην καρτέλα του στελέχους.</p></div><//>
       </aside></div>`}
+    ${once.dialog}
     ${fill && html`<${FillDialog} fill=${fill} ym=${ym} onClose=${() => setFill(null)} onApply=${applyFill}/>`}
     ${clr && html`<${Dialog} title="Σβήσιμο αυτόματων υπηρεσιών" onClose=${() => setClr(null)}
       footer=${html`<${Button} variant="outline" onClick=${() => setClr(null)}>Άκυρο<//><${Button} variant="destructive" onClick=${clearAuto}>Σβήσε ${clr.length}<//>`}>

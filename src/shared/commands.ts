@@ -152,6 +152,8 @@ export type Command =
   | { t: 'applyMoves' }
   | { t: 'extendOpen' }
   | { t: 'setNightTraining'; date: ISODate; on: boolean }
+  // 2 υπηρεσίες την ίδια μέρα (Michael, 26/11): once = η μέρα μετρά για ΜΙΑ· false = ξανά κάθε υπηρεσία (προεπιλογή). who: String(pid) ή 'c:' + id στελέχους (shared/dutyOnce.ts)
+  | { t: 'setDutyOnce'; date: ISODate; who: string; once: boolean }
   // Ώρες εξόδου/επιστροφής και πρωινή εκπαίδευση ανά ημέρα εβδομάδας (Michael, 24/10): week[getDay] = όσα αλλάζουν
   | { t: 'setWeekRules'; week: Partial<Record<number, DayPlan>> }
   // Αλλαγή ωρών/εκπαίδευσης για μία μέρα· plan κενό = πίσω στην ημέρα εβδομάδας
@@ -1673,6 +1675,15 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       if (c.on === !!nightTraining[c.date]) return { state: s, text: '', files: [] };
       if (c.on) nightTraining[c.date] = true; else delete nightTraining[c.date];
       return { state: { ...s, nightTraining }, text: (c.on ? 'Βραδινή εκπαίδευση ' : 'Βγήκε η βραδινή εκπαίδευση ') + dayName(c.date, ctx.today).toLowerCase() + ' ' + dm(c.date) + (c.on ? ' (δεν μετρά στη στέρηση εξόδου)' : ''), files: [] };
+    }
+    case 'setDutyOnce': {
+      const cur = s.dutyOnce?.[c.date] || [];
+      if (c.once === cur.includes(c.who)) return { state: s, text: '', files: [] };
+      const list = c.once ? [...cur, c.who] : cur.filter(w => w !== c.who);
+      const dutyOnce = { ...(s.dutyOnce || {}) }; if (list.length) dutyOnce[c.date] = list; else delete dutyOnce[c.date];
+      const cd = c.who.startsWith('c:') ? (s.cadreList || []).find(x => x.id === c.who.slice(2)) : undefined; const p = cd ? undefined : personMap(s.people).get(Number(c.who));
+      const name = cd ? rankTxt(cd) + ' ' + cd.last : p ? shortName(p) : c.who;
+      return { state: { ...s, dutyOnce }, text: name + ', ' + dm(c.date) + ': οι υπηρεσίες της μέρας μετρούν για ' + (c.once ? '1' : '2'), files: [] };
     }
     case 'setWeekRules': {
       const week: Record<number, DayPlan> = {}; const parts: string[] = [];

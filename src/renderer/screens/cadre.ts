@@ -20,7 +20,9 @@ import { PersonalTab } from './personal';
 import { LeaveTab } from './cadreLeave';
 import { CadrePlanView } from './cadrePlan';
 import { CadreDutyView, DutyPersonDialog } from './cadreDuty';
-import { dutyCfgOf, monthLimit, personOf } from '../../shared/cadreDuty';
+import { dutyCfgOf, dutyIndex, monthLimit, personOf } from '../../shared/cadreDuty';
+import { onceKeyOfCadre } from '../../shared/dutyOnce';
+import { OnceToggle } from '../dutyOnce';
 import { noDutyOf, quotaShort, rangeTxt } from '../../shared/cadrePlan';
 import { apalLeft, leaveCols, leaveOverdraft, summaries } from '../../shared/cadreBalance';
 import { NoteDot, NotesTab, TodayAlert, notesTabLabel } from './notes';
@@ -163,6 +165,8 @@ export function CadreSheet({ cid, list, onMove, onClose }: P) {
   // με υπηρεσίες από το πρόγραμμα στελεχών: μετρούν μαζί με όσες έκανε με το χέρι στις θέσεις (cadreDuty.ts)
   const month = dl && dl.roster > 0 ? dl.done + ' τον μήνα (πρόγραμμα ' + dl.roster + ' · θέσεις στρατιωτών ' + dl.seat + ') · όριο ' + dl.effBase + (dl.extra ? '+' + dl.extra : '') : month0;
   const dutyCfg = dutyCfgOf(state.settings); const dutyP = personOf(state, c.id);
+  // μέρες με 2+ υπηρεσίες (θέσεις και πρόγραμμα): διακόπτης «μετρά για 1/2» (Michael, 26/11)
+  const twice = [...(dutyIndex(state).get(c.id) || [])].filter(([, x]) => x.roster.length + x.seat.length > 1).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 12);
   const lim0 = c.active && c.pid != null ? dutyLimitInfo(state, today, cadreSeat(c), true) : null;   // «N από ΟΡΙΟ»: ένα όριο του μήνα για θέσεις στρατιωτών (Michael, 24/11)
   const wtxt = [c.wtype, c.weapon && 'αριθμός ' + c.weapon, (c.rack || c.wpos) && 'θέση ' + seatTxt(c.rack, c.wpos)].filter(Boolean).join(' · ');
   return html`<${Sheet} onClose=${onClose} wide=${true} actions=${html`<${SheetNav} at=${at} n=${total} move=${move}/>`} title=${html`<h2 style=${{ fontSize: '18px' }}>${rankTxt(c)} ${c.last} ${c.first}</h2>`}
@@ -177,7 +181,9 @@ export function CadreSheet({ cid, list, onMove, onClose }: P) {
       ${past.length > 0 && html`<div className="field"><span className="field__label">Προηγούμενες</span><ul className="rec">${past.map(a => line(a, false))}</ul></div>`}
       ${noDuty.length > 0 && html`<div className="field" data-cadre-noduty=""><span className="field__label">Δεν θέλει υπηρεσία</span>
         <ul className="rec">${noDuty.map(x => html`<li key=${x.id}><div><b>${dow(x.from)} ${rangeTxt(x)}</b><small>Μόνο για το πρόγραμμα, δεν είναι κατάσταση και δεν μπαίνει στην ${HK()}${x.note ? ' · ' + x.note : ''}</small></div><${Button} size="sm" variant="ghost" onClick=${() => delNoDuty(x.id)}>Διαγραφή<//></li>`)}</ul></div>`}
-      ${month && html`<div className="field"><span className="field__label">Υπηρεσίες τον μήνα</span><div data-cadre-month="">${month} <span className="muted" style=${{ fontSize: '12px' }}>${dl && dl.roster > 0 ? '(μαζί: πρόγραμμα στελεχών και θέσεις στρατιωτών)' : '(μόνο με το χέρι, στις Υπηρεσίες)'}</span></div></div>`}</div>`}
+      ${month && html`<div className="field"><span className="field__label">Υπηρεσίες τον μήνα</span><div data-cadre-month="">${month} <span className="muted" style=${{ fontSize: '12px' }}>${dl && dl.roster > 0 ? '(μαζί: πρόγραμμα στελεχών και θέσεις στρατιωτών)' : '(μόνο με το χέρι, στις Υπηρεσίες)'}</span></div></div>`}
+      ${twice.length > 0 && html`<div className="field" data-cadre-twice=""><span className="field__label">Μέρες με 2 υπηρεσίες</span>
+        <ul className="rec">${twice.map(([d, x]) => html`<li key=${d}><div><b>${dow(d)} ${dm(d)}</b><small>${x.roster.length + x.seat.length} υπηρεσίες · μετρά για</small></div><${OnceToggle} date=${d} who=${onceKeyOfCadre(c.id)}/></li>`)}</ul></div>`}</div>`}
     ${tab === 'leave' && html`<${LeaveTab} key=${cid} c=${c} year=${lvYear} setYear=${setLvYear} years=${leaveYears} onApal=${() => setStFor({ apal: true })}/>`}
     ${tab === 'info' && html`<dl className="kv"><dt>Βαθμός</dt><dd>${c.rank || '—'}</dd><dt>Προέλευση</dt><dd>${c.origin || '—'}</dd><dt>Ο/Σ</dt><dd>${c.spec || '—'}</dd><dt>Επίθετο</dt><dd>${c.last || '—'}</dd><dt>Όνομα</dt><dd>${c.first || '—'}</dd>
       <dt>ΑΜ</dt><dd className="num">${c.am || '—'}</dd><dt>Τηλέφωνο</dt><dd className="num">${c.phone || '—'}</dd><dt>Θέση</dt><dd>${c.role || '—'}</dd><dt>Γραμμή ${HK()}</dt><dd>${hkRowLabel(c.hk)}</dd>

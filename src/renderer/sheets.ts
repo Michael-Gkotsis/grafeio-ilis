@@ -2,7 +2,7 @@
 import { E, type Cell, type SheetModel } from './common';
 import { TYPES, coversDay, hkOn, fullName, phaseBase, type AppState, type DutyKind, type Status } from '../shared/domain';
 import { bareOf, codeOf } from '../shared/codes';
-import { activePeople, cadreSeats, isHol, dutyMin, seatMap, postBy, postsOf, type Hkai } from '../shared/rules';
+import { activePeople, allPosts, isHol, dutyMin, seatMap, postBy, postsOf, type Hkai } from '../shared/rules';
 import { absKeysOf, hkColShortOf, kolKeysOf, hkRowsOf, isAway, rankTxt } from '../shared/ranks';
 import { formText, hkHeadOf, hkRowLabel } from '../shared/unit';
 import { MON_SHORT, MONTHS, dm, hkDate, parseD, type ISODate } from '../shared/dates';
@@ -13,6 +13,8 @@ import { hkOffText } from '../shared/cadre';
 import { absenceOf, frouraForm, dutyName, frouraLayout, frouraTables, lyLine, phaseOf, rows3, tableRowSpan, frouraPer, type FrouraTable } from '../shared/froura';
 import { sigsCustom, sigsFor, sigsSaved, type SigForm } from '../shared/sigs';
 import { hkaiVeh } from '../shared/vehicles';
+import { checkCadres, rosterCodes } from '../shared/cadreDuty';
+import { countOf, onceKeyOfCadre, onceKeyOfPid } from '../shared/dutyOnce';
 
 // Οι υπογραφές στην προεπισκόπηση: όπως το έντυπο (base), ή οι δικές σου των Ρυθμίσεων μοιρασμένες στο πλάτος W
 function sigRows(s: AppState, form: SigForm, W: number, dash: boolean, base: (Cell | null)[][]): (Cell | null)[][] {
@@ -167,24 +169,31 @@ export function checkSheet(s: AppState, ym: string, only?: Set<number>): SheetMo
   const [y, m] = ym.split('-').map(Number); const nd = new Date(y, m, 0).getDate();
   const days = Array.from({ length: nd }, (_, i) => ym + '-' + String(i + 1).padStart(2, '0'));
   const hol = days.map(d => isHol(s.settings, d));   // μία φορά ανά μέρα, όχι ανά κελί
+  const order = new Map(allPosts(s.settings).map((p, i) => [p.k, i]));   // η σειρά των θέσεων, όπως στο Excel
   const codes = new Map<string, { code: string; kind: DutyKind } | null>();    // κωδικός ανά θέση (Θ1α, Μ2, ΛΥ), όχι αναζήτηση σε κάθε ανάθεση
-  const per = new Map<number, Map<string, { code: string; kind: DutyKind }>>();
-  const set = (pid: number, d: string, v: { code: string; kind: DutyKind }) => { if (!per.has(pid)) per.set(pid, new Map()); per.get(pid)!.set(d, v); };
+  const per = new Map<number, Map<string, { code: string; kind: DutyKind }[]>>();
+  // δύο υπηρεσίες την ίδια μέρα: και οι δύο κωδικοί στο κελί, όπως στο Excel (Michael, 26/11)
+  const set = (pid: number, d: string, v: { code: string; kind: DutyKind }) => { if (!per.has(pid)) per.set(pid, new Map()); const m = per.get(pid)!; const l = m.get(d); if (l) l.push(v); else m.set(d, [v]); };
   // όλες οι θέσεις που έχουν υπάρξει (και του άλλου εντύπου), και οι υπηρεσίες χωρίς θέση (σκέτο γράμμα): ίδια με την εξαγωγή
   days.forEach(d => {
     for (const e of s.dutyLog?.[d] || []) set(e.pid, d, { code: bareOf(undefined, e.kind), kind: e.kind });
     const g = s.guards[d] || {};
-    for (const k in g) { let v = codes.get(k); if (v === undefined) { const p = postBy(s, k); v = p ? { code: codeOf(s.settings, k, p.kind), kind: p.kind } : null; codes.set(k, v); } if (v) set(g[k], d, v); }
+    for (const k of Object.keys(g).sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0))) { let v = codes.get(k); if (v === undefined) { const p = postBy(s, k); v = p ? { code: codeOf(s.settings, k, p.kind), kind: p.kind } : null; codes.set(k, v); } if (v) set(g[k], d, v); }
   });
   const W = 8 + nd;
   const rows: (Cell | null)[][] = [[E('ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ' + norm(MONTHS[m - 1]) + ' ' + y, 'ttl big', W)],
     [...['Α/Α', 'ΟΝΟΜΑΤΕΠΩΝΥΜΟ', 'ΘΑΛ.', 'ΑΡΓ.', 'ΣΥΝ.', 'Θ', 'Μ', 'ΛΥ'].map(x => E(x, 'b hdr sm')), ...days.map((d, j) => E(j + 1, 'b hdr sm' + (hol[j] ? ' we' : '')))]];
-  // στελέχη που έκαναν υπηρεσία τον μήνα (Michael, 26/10): μετά τους στρατιώτες, με βαθμό
-  const cad = cadreSeats(s).filter(c => per.has(c.id) && (!only || only.has(c.id)));
+  // στελέχη που έκαναν υπηρεσία τον μήνα (Michael, 26/10), και όσα έχουν υπηρεσία στο πρόγραμμα στελεχών (26/11): μετά τους στρατιώτες, με βαθμό
+  const rost = rosterCodes(s, ym);
+  const cad = checkCadres(s, rost, pid => per.has(pid)).filter(c => !only || only.has(c.id));
   [...activePeople(s).filter(p => !only || only.has(p.id)).sort((a, b) => (a.room ?? 99) - (b.room ?? 99) || byName(a, b)), ...cad].forEach((p, i) => {
-    const x = per.get(p.id); let nh = 0; const c: Record<string, number> = {};
-    const cells = days.map((d, j) => { const v = x && x.get(d); if (v) { if (hol[j]) nh++; c[v.kind] = (c[v.kind] || 0) + 1; } return E(v ? v.code : '', hol[j] ? 'b code we' : 'b code'); });
-    rows.push([E(i + 1, 'b c'), E(p.cid ? rankTxt(p) + ' ' + fullName(p) : fullName(p), 'b'), E(p.room ?? '', 'b c'), E(nh, 'b c'), E(x ? x.size : 0, 'b c bold'), E(c.th || '', 'b c'), E(c.mg || '', 'b c'), E(c.ly || '', 'b c'), ...cells]);
+    const x = per.get(p.id); let nh = 0, nAll = 0; const c: Record<string, number> = {}; const who = p.cid ? onceKeyOfCadre(p.cid) : onceKeyOfPid(p.id);
+    const cells = days.map((d, j) => {
+      const v = x?.get(d); const rc = p.cid ? rost.get(p.cid)?.get(d) : undefined; const n = (v?.length || 0) + (rc?.length || 0);
+      if (n) { if (hol[j]) nh += n; for (const u of v || []) c[u.kind] = (c[u.kind] || 0) + 1; nAll += countOf(s.dutyOnce, d, who, n); }
+      return E(n ? [...(v || []).map(u => u.code), ...(rc || [])].join('/') : '', hol[j] ? 'b code we' : 'b code');
+    });
+    rows.push([E(i + 1, 'b c'), E(p.cid ? rankTxt(p) + ' ' + fullName(p) : fullName(p), 'b'), E(p.room ?? '', 'b c'), E(nh, 'b c'), E(nAll, 'b c bold'), E(c.th || '', 'b c'), E(c.mg || '', 'b c'), E(c.ly || '', 'b c'), ...cells]);
   });
   return { cols: [30, 172, 34, 34, 34, 26, 26, 26, ...days.map(() => 24)], rows };
 }

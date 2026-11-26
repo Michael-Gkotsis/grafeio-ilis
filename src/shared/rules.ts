@@ -7,6 +7,7 @@ import { cadreAbsOf, guessHk, hkClaimOf, hkOfRank, hkRowList, hkRowsOf, HK_COL_K
 import { siAllows, siIsUnarmed, siOf } from './si';
 import { STAT_ROWS, statDefault, statIsUnarmed, statNoOut, statOn, type StatCell } from './stat';
 import { backBy, hasTimes, mins } from './hours';
+import { onceDays, onceKeyOfCadre, onceKeyOfPid } from './dutyOnce';
 import { dayTimes, leaveOut, outHeld } from './returns';   // κυκλική εξάρτηση: καλείται μέσα σε συναρτήσεις (returns.ts)
 import {
   ADIK_APS_TYPES, TYPES, TYPE_KEYS, RECORD_CATS, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, STEP_COL, stepColOf, kolColName, kolColOf, kolColsOf, kolHk, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
@@ -93,9 +94,22 @@ export function monthDuties(s: AppState, date: ISODate, pid: number, idx?: Map<n
   const ds = (idx || dutyIndexOf(s)).get(pid);
   const ym = date.slice(0, 7); let n = 0;
   if (ds) for (const d of ds) if ((withDay || d !== date) && d.slice(0, 7) === ym) n++;
+  // κάθε υπηρεσία μετρά (Michael, 26/11): όποια μέρα έχει 2, μετρά 2· το «μετρά για 1» (state.dutyOnce) την κάνει 1 παρακάτω
+  const multi = ds ? multiIndex(s.guards, s.dutyLog || NO_LOG).get(pid) : undefined;
+  if (multi) for (const [d, k] of multi) if ((withDay || d !== date) && d.slice(0, 7) === ym) n += k - 1;
   // στέλεχος: μετρούν μαζί και οι υπηρεσίες του προγράμματος στελεχών (Michael, 17/11: «μετρούν μαζί»), όπως στο cadreDuty.ts monthCount
   const c = pid < 0 ? cadreOf(s, pid) : undefined;
   if (c && s.cadreDuties) for (const x of s.cadreDuties) if (x.cid === c.id && !x.via && (withDay || x.date !== date) && x.date.slice(0, 7) === ym) n++;
+  if (s.dutyOnce) {
+    const who = c ? onceKeyOfCadre(c.id) : pid > 0 ? onceKeyOfPid(pid) : null;
+    if (who) for (const d of onceDays(s.dutyOnce, who)) {
+      if (d.slice(0, 7) !== ym || (!withDay && d === date)) continue;
+      // οι υπηρεσίες εκείνης της μέρας (θέσεις και πρόγραμμα στελεχών): αν είναι 2+, μετρά 1
+      let k = ds?.has(d) ? multi?.get(d) || 1 : 0;
+      if (c && s.cadreDuties) for (const x of s.cadreDuties) if (x.cid === c.id && !x.via && x.date === d) k++;
+      if (k > 1) n -= k - 1;
+    }
+  }
   return n;
 }
 // Το όριο του μήνα ενός στελέχους σε θέση στρατιωτών (Michael, 24/11): ΕΝΑ όριο από τα δύο που υπήρχαν χωριστά. Πρώτα το δικό του
@@ -153,7 +167,11 @@ export function dutyLimitOf(rules: Pick<Rules, 'dutyMax' | 'dutyMaxPer'>, p: Pic
 export function dutyCount(s: AppState, date: ISODate, pid: number, per: 'all' | 'month', idx?: Map<number, Set<ISODate>>, withDay = false): number {
   if (per === 'month') return monthDuties(s, date, pid, idx, withDay);
   const st = statOf(s, pid); let n = st.total;
-  if (!withDay) for (let i = st.log.length - 1; i >= 0 && st.log[i].d >= date; i--) if (st.log[i].d === date) n--;
+  if (!withDay) {
+    let k = 0;
+    for (let i = st.log.length - 1; i >= 0 && st.log[i].d >= date; i--) if (st.log[i].d === date) { n--; k++; }
+    if (k > 1 && st.once?.includes(date)) n += k - 1;   // η μέρα μετρούσε 1 στο σύνολο: βγαίνει μόνο αυτό το 1
+  }
   return n;
 }
 // η αυτόματη συμπλήρωση μιας μέρας κρατά τους μετρητές όλης της δύναμης μία φορά (ίδια μέρα, ίδιο αποτέλεσμα)
@@ -668,6 +686,29 @@ export function dutyIndex(guards: Guards, log: DutyLog = NO_LOG): Map<number, Se
   return m;
 }
 export const dutyIndexOf = (s: AppState) => dutyIndex(s.guards, s.dutyLog || NO_LOG);
+// Μέρες με 2 ή περισσότερες υπηρεσίες για το ίδιο άτομο (μονάδα: 2η υπηρεσία, ή με το χέρι): πόσες έχει κάθε μέρα. Συνήθως άδειο.
+// Το dutyIndex κρατά μόνο ΜΕΡΕΣ (Set)· το «μετρά για 1» (dutyOnce.ts) και ο μήνας ορίου θέλουν και το πλήθος.
+const multiCache = new WeakMap<Guards, WeakMap<DutyLog, Map<number, Map<ISODate, number>>>>();
+function multiIndex(guards: Guards, log: DutyLog): Map<number, Map<ISODate, number>> {
+  let byLog = multiCache.get(guards); if (!byLog) { byLog = new WeakMap(); multiCache.set(guards, byLog); }
+  let m = byLog.get(log); if (m) return m;
+  m = new Map();
+  const day = (d: ISODate, g: Record<string, number> | undefined, l: DutyLog[string] | undefined) => {
+    const c = new Map<number, number>();
+    if (g) for (const k in g) c.set(g[k], (c.get(g[k]) || 0) + 1);
+    if (l) for (const e of l) c.set(e.pid, (c.get(e.pid) || 0) + 1);
+    c.forEach((n, pid) => { if (n > 1) { let x = m!.get(pid); if (!x) { x = new Map(); m!.set(pid, x); } x.set(d, n); } });
+  };
+  for (const d in guards) day(d, guards[d], log[d]);
+  for (const d in log) if (!guards[d]) day(d, undefined, log[d]);
+  byLog.set(log, m);
+  return m;
+}
+// το κλειδί του ατόμου στο «μετρά για 1»: στρατιώτης ο αριθμός του, στέλεχος 'c:' + id (και για τον αριθμό θέσης του)
+export function onceWho(s: Pick<AppState, 'cadreList'>, pid: number): string | null {
+  if (pid > 0) return onceKeyOfPid(pid);
+  const c = pid < 0 ? cadreOf(s, pid) : undefined; return c ? onceKeyOfCadre(c.id) : null;
+}
 export const seatlessOn = (s: AppState, date: ISODate, pid: number) => (s.dutyLog?.[date] || []).find(e => e.pid === pid);
 // Κ-13, Κ-14: ανάπαυση μετά από υπηρεσία, όχι αργία/ΣΚ δύο συνεχόμενες εβδομάδες
 export function ruleBlock(s: AppState, date: ISODate, pid: number, idx?: Map<number, Set<ISODate>>, k?: string | null): string | null {
@@ -757,13 +798,14 @@ export const outRoomsOn = (rules: Rules, d: ISODate): number[] | null => rules.o
 // --------------------------- Έλεγχος υπηρεσιών (από το ημερολόγιο υπηρεσιών) ---------------------------
 // log: k = θέση, κενό για υπηρεσία χωρίς θέση (από Excel)· kind = είδος
 // byKind: ανά είδος, και ανά δική σου υπηρεσία («b:» + id, μετρά ως δική της) · log.t: η δική σου υπηρεσία της θέσης
-export interface DutyStat { byKind: Record<string, number>; total: number; hol: number; last: ISODate | null; lastHol: ISODate | null; log: { d: ISODate; k: string; kind: DutyKind; h: boolean; t?: string }[] }
+// once: μέρες με 2+ υπηρεσίες που μετρούν για 1 (state.dutyOnce): το total τις έχει ήδη μετρήσει μία φορά, ο byKind και το log όχι
+export interface DutyStat { byKind: Record<string, number>; total: number; hol: number; last: ISODate | null; lastHol: ISODate | null; log: { d: ISODate; k: string; kind: DutyKind; h: boolean; t?: string }[]; once?: ISODate[] }
 // ανά ημερολόγιο υπηρεσιών, υπηρεσίες χωρίς θέση και λίστα αργιών: αν αλλάξουν οι αργίες, ξαναμετριούνται οι αργίες του καθενός
 const statsCache = new WeakMap<Guards, { hol: Settings['holidays']; off: Settings['holidaysOff']; log: DutyLog; st: Map<number, DutyStat> }>();
 export const emptyStat = (): DutyStat => ({ byKind: {}, total: 0, hol: 0, last: null, lastHol: null, log: [] });
 export function dutyStats(s: AppState): Map<number, DutyStat> {
   const c = statsCache.get(s.guards); const log = s.dutyLog || NO_LOG;
-  if (c && c.hol === s.settings.holidays && c.off === s.settings.holidaysOff && c.log === log) return withBaseline(s, c.st);
+  if (c && c.hol === s.settings.holidays && c.off === s.settings.holidaysOff && c.log === log) return withBaseline(s, withOnce(s, c.st));
   const st = new Map<number, DutyStat>();
   const one = (pid: number, d: ISODate, k: string, kind: DutyKind, h: boolean) => {
     let x = st.get(pid); if (!x) { x = emptyStat(); st.set(pid, x); }
@@ -778,7 +820,27 @@ export function dutyStats(s: AppState): Map<number, DutyStat> {
     for (const e of log[d] || []) one(e.pid, d, '', e.kind, h);
   }
   statsCache.set(s.guards, { hol: s.settings.holidays, off: s.settings.holidaysOff, log, st });
-  return withBaseline(s, st);
+  return withBaseline(s, withOnce(s, st));
+}
+// «Μετρά για 1»: το σύνολο όποιου έχει απάντηση σε μέρα με 2+ υπηρεσίες μετρά τη μέρα μία φορά. Ξεχωριστό αντίγραφο ανά dutyOnce (η βάση της μέτρησης μένει όπως είναι)
+const onceCache = new WeakMap<object, { from: Map<number, DutyStat>; cl: Cadre[] | undefined; out: Map<number, DutyStat> }>();
+function withOnce(s: AppState, st: Map<number, DutyStat>): Map<number, DutyStat> {
+  const once = s.dutyOnce; if (!once) return st;
+  const c = onceCache.get(once); if (c && c.from === st && c.cl === s.cadreList) return c.out;
+  const out = new Map(st); const done = new Map<number, DutyStat>();
+  const ids = new Map<string, number>();
+  for (const cd of s.cadreList || []) if (cd.pid != null) ids.set(onceKeyOfCadre(cd.id), cd.pid);
+  const seen = new Set<string>();
+  for (const d in once) for (const w of once[d]) {
+    if (seen.has(w)) continue; seen.add(w);
+    const pid = w.startsWith('c:') ? ids.get(w) : Number(w); const x0 = pid != null ? st.get(pid) : undefined; if (!x0) continue;
+    let cut = 0; const days: ISODate[] = [];
+    for (const dd of onceDays(once, w)) { let k = 0; for (const e of x0.log) if (e.d === dd) k++; if (k > 1) { cut += k - 1; days.push(dd); } }
+    if (cut) { const x = { ...x0, total: x0.total - cut, once: days }; out.set(pid!, x); done.set(pid!, x); }
+  }
+  const r = done.size ? out : st;
+  onceCache.set(once, { from: st, cl: s.cadreList, out: r });
+  return r;
 }
 // Προηγούμενες υπηρεσίες (χωρίς ημερομηνία) προστίθενται στα σύνολα, όχι στο ημερολόγιο
 const baseCache = new WeakMap<object, { from: Map<number, DutyStat>; out: Map<number, DutyStat> }>();
@@ -806,7 +868,8 @@ export function monthStats(st: Map<number, DutyStat>, ym: string): Map<number, D
     for (const e of x.log) {
       if (e.d.slice(0, 7) !== ym) continue;
       if (!m) { m = emptyStat(); out.set(pid, m); }
-      m.byKind[e.kind] = (m.byKind[e.kind] || 0) + 1; m.total++; if (e.t) m.byKind[e.t] = (m.byKind[e.t] || 0) + 1;
+      m.byKind[e.kind] = (m.byKind[e.kind] || 0) + 1; if (e.t) m.byKind[e.t] = (m.byKind[e.t] || 0) + 1;
+      if (!(x.once && m.last === e.d && x.once.includes(e.d))) m.total++;   // «μετρά για 1»: η 2η υπηρεσία της μέρας δεν προστίθεται στο σύνολο
       if (e.h) { m.hol++; m.lastHol = e.d; }
       m.last = e.d; m.log.push(e);
     }
@@ -856,7 +919,8 @@ function newcomerAvg(s: AppState, inOn: ISODate): { hol: number; total: number }
       if (q.inOn && q.inOn >= inOn) continue;
       n++;
       const b = s.baseline?.[q.id]; if (b) { total += baseTotal(b); hol += b.hol || 0; }
-      for (const e of stats.get(q.id)?.log || []) { if (e.d >= inOn) break; total++; if (e.h) hol++; }
+      const sx = stats.get(q.id); let cd = '';
+      for (const e of sx?.log || []) { if (e.d >= inOn) break; if (!sx!.once || e.d !== cd || !sx!.once.includes(e.d)) total++; cd = e.d; if (e.h) hol++; }
     }
     r = { hol: n ? hol / n : 0, total: n ? total / n : 0 }; byDay.set(inOn, r);
   }
@@ -866,10 +930,12 @@ function newcomerAvg(s: AppState, inOn: ISODate): { hol: number; total: number }
 export function fairOf(s: AppState, pid: number, date: ISODate): Fair {
   const st = statOf(s, pid);
   const f: Fair = { total: 0, hol: 0, byKind: {}, byType: {}, lastBefore: '', lastHolBefore: '' };
+  let cd = '';   // «μετρά για 1»: η 2η υπηρεσία της ίδιας μέρας δεν προστίθεται στο σύνολο
   for (const e of st.log) {
     if (e.d === date) continue;
     const kind = e.kind; const ty = dutyType(s, e.k, kind);
-    f.total++; f.byKind[kind] = (f.byKind[kind] || 0) + 1; f.byType[ty] = (f.byType[ty] || 0) + 1; if (ty !== kind && ty.startsWith('b:')) f.byKind[ty] = (f.byKind[ty] || 0) + 1;
+    if (!st.once || e.d !== cd || !st.once.includes(e.d)) f.total++;
+    cd = e.d; f.byKind[kind] = (f.byKind[kind] || 0) + 1; f.byType[ty] = (f.byType[ty] || 0) + 1; if (ty !== kind && ty.startsWith('b:')) f.byKind[ty] = (f.byKind[ty] || 0) + 1;
     if (e.h) { f.hol++; if (e.d < date && e.d > f.lastHolBefore) f.lastHolBefore = e.d; }
     if (e.d < date && e.d > f.lastBefore) f.lastBefore = e.d;
   }

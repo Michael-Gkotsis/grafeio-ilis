@@ -64,6 +64,7 @@ export function freshState(s: AppState, e: Esso, today: ISODate, outputDir: stri
   if (Object.keys(guards).length) keep.guards = guards;
   // το via μένει όσο μένει η θέση που δείχνει (ώστε η υπηρεσία να μετρά μία φορά)· αλλιώς φεύγει, γιατί οι φρουρές καθαρίζουν
   if (s.cadreDuties) keep.cadreDuties = s.cadreDuties.map(x => { if (!x.via) return x; const pid = guards[x.date]?.[x.via]; if (pid != null && s.cadreList.find(c => c.pid === pid)?.id === x.cid) return x; const { via: _v, ...r } = x; return r; });
+  if (s.dutyOnce) keep.dutyOnce = Object.fromEntries(Object.entries(s.dutyOnce).map(([d, l]) => [d, l.filter(w => w.startsWith('c:'))]).filter(([, l]) => l.length));   // μένουν μόνο των στελεχών
   if (s.assets) keep.assets = s.assets.map(a => { const { holder, driver, ...r } = a; return { ...r, ...(holder && holder.k !== 'person' ? { holder } : {}), ...(driver && driver.k !== 'person' ? { driver } : {}) }; });
   if (s.assetLog) keep.assetLog = s.assetLog;
   return { ...emptyState(), ...keep, rules: s.rules, settings, cadreList: s.cadreList, cadreAbs: s.cadreAbs, notes: (s.notes || []).map(normNote).filter(n => !n.pids || n.cids).map(({ pids: _x, ...n }) => n) };

@@ -35,6 +35,7 @@ import { NoteDot, NotesTab, TodayAlert, notesTabLabel } from './notes';
 import { PersonalTab } from './personal';
 import { ImerTab } from './imerologio';
 import { noteIndex, personGroups, remLine } from '../../shared/notes';
+import { OnceToggle } from '../dutyOnce';
 type P = any;
 
 const CATS: [string, string][] = [['med', 'Ιατρικά'], ['abs', 'Απουσίες'], ['out', 'Έξοδος'], ['other', 'Άλλα'], ['pun', 'Ποινή'], ['kol', 'Κωλυόμενος']];
@@ -292,7 +293,8 @@ export function PersonSheet({ pid, list, onMove, onClose }: P) {
   const posts = postsOf(state.settings);
   const hist = [...statusesOf(state.statuses, pid)].sort((a, b) => b.from.localeCompare(a.from));
   const dd = dutyStats(state).get(pid) || emptyStat();
-  const duties = dd.log.slice().reverse().slice(0, 40).map(e => ({ d: e.d, x: e.k ? posts.find(q => q.k === e.k) || postBy(state, e.k) : undefined, kind: e.kind, h: e.h }));
+  const perDay = new Map<string, number>(); for (const e of dd.log) perDay.set(e.d, (perDay.get(e.d) || 0) + 1);   // μέρες με 2+ υπηρεσίες: διακόπτης «μετρά για 1/2» (Michael, 26/11)
+  const duties = dd.log.slice().reverse().slice(0, 40).map((e, i, a) => ({ d: e.d, x: e.k ? posts.find(q => q.k === e.k) || postBy(state, e.k) : undefined, kind: e.kind, h: e.h, twice: (perDay.get(e.d) || 0) > 1 && a[i - 1]?.d !== e.d }));
   const ob = outBlock(state, today, pid); const lim = dutyLimitInfo(state, today, p);
   // ΕΑ/ΕΥ/ΕΟ/ΕΑΡΒ/ΣΤΕΠ όπως ορίζει ο πίνακας καταστάσεων· οι άλλες (άδειες, έξοδοι) όπως πριν
   const lists = state.settings.lists; const bl = (blocksOf(state.settings) || state.settings.blocks).filter(b => !b.hidden);
@@ -324,7 +326,7 @@ export function PersonSheet({ pid, list, onMove, onClose }: P) {
     `}
     ${tab === 'duty' && html`
     <dl className="kv"><dt>Υπηρεσίες</dt><dd className="num">${dd.total}</dd><dt className="kv__sub">Αργίες / ΣΚ</dt><dd><span className="num">${dd.hol}</span>${dd.lastHol && html` <span className="muted" style=${{ fontSize: '12px' }}>τελευταία ${holName(state.settings, dd.lastHol)} ${dm(dd.lastHol)}</span>`}</dd></dl>
-    <section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Ημερολόγιο υπηρεσιών <span className="muted" style=${{ fontWeight: 400, fontSize: '13px' }}>(τελευταίες 40)</span></h3>${duties.length ? html`<ul className="hist">${duties.map(({ d, x, kind, h }) => html`<li key=${d + (x?.k || kind)}><span className="num">${dow(d)} ${dm(d)}</span>${x ? x.label : KIND_NAME[kind] + ' χωρίς θέση (από Excel)'}${h && html` <${Badge} tone="warn">${holName(state.settings, d)}<//>`}</li>`)}</ul>` : html`<span className="muted">Καμία υπηρεσία ακόμα.</span>`}</section>
+    <section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Ημερολόγιο υπηρεσιών <span className="muted" style=${{ fontWeight: 400, fontSize: '13px' }}>(τελευταίες 40)</span></h3>${duties.length ? html`<ul className="hist">${duties.map(({ d, x, kind, h, twice }) => html`<li key=${d + (x?.k || kind)}><span className="num">${dow(d)} ${dm(d)}</span>${x ? x.label : KIND_NAME[kind] + ' χωρίς θέση (από Excel)'}${h && html` <${Badge} tone="warn">${holName(state.settings, d)}<//>`}${twice && html` <span className="muted" style=${{ fontSize: '12px' }}>${perDay.get(d)} υπηρεσίες · μετρά για</span> <${OnceToggle} date=${d} who=${String(pid)}/>`}</li>`)}</ul>` : html`<span className="muted">Καμία υπηρεσία ακόμα.</span>`}</section>
     `}
     ${tab === 'hist' && html`
     <section><h3 style=${{ fontSize: '15px', marginBottom: '8px' }}>Καταστάσεις</h3>${hist.length ? html`<ul className="hist">${hist.map((s: Status) => html`<li key=${s.id}>${medNote(s, lists) ? html`<${Badge} tone="note">${badgeLbl(s, lists) + ' · σημείωση'}<//>` : html`<${Badge} tone=${TYPES[s.type].tone}>${badgeLbl(s, state.settings.lists)}<//>`}<span className="num">${dow(s.from)} ${dm(s.from)}${s.open ? ' – χωρίς λήξη' : s.to !== s.from ? ' – ' + dow(s.to) + ' ' + dm(s.to) : ''}</span><span className="muted">(${daysBetween(s.from, s.to)} ημ.${timesTxt(s) ? ', ' + timesTxt(s) : ''}${s.dest ? ', → ' + s.dest : ''})</span>${hasTimes(s.type) && !s.pending && s.to >= today && html`<${Button} variant="link" onClick=${() => setTimes(s)} data-tip=${'Ώρα ' + timeNames(s.type).fromG + ' την πρώτη μέρα και ώρα ' + timeNames(s.type).toG + ' την τελευταία'}>Ώρες…<//>`}${TYPES[s.type].cat === 'abs' && awayNow(s, today, nowM) && html`<${Button} variant="link" onClick=${() => setEnd(s)} data-tip=${leaveStarted(s, today) ? 'Γύρισε νωρίτερα: η άδεια τελειώνει τη μέρα και ώρα που λες' : 'Δεν θα φύγει: η άδεια φεύγει ολόκληρη'}>${leaveStarted(s, today) ? 'Λήξη νωρίτερα…' : 'Ακύρωση…'}<//>`}${(RECORD_CATS.includes(TYPES[s.type].cat) || s.type === 'KOL' || TYPES[s.type].cat === 'abs') && html`<${Button} variant="link" onClick=${() => setFix(s)} data-tip=${TYPES[s.type].cat === 'abs' ? 'Μπήκε λάθος; Άλλαξε είδος, ημερομηνίες, ώρες και κατεύθυνση' : 'Μπήκε λάθος; Άλλαξε ημερομηνίες και στοιχεία ή διάγραψέ το'}>Διόρθωση…<//>`}${s.pending && html`<${Badge} tone="warn">αιτείται<//>`}${s.to < today && RECORD_CATS.includes(TYPES[s.type].cat) && html`<span className="muted" style=${{ fontSize: '12px' }}>έληξε</span>`}</li>`)}</ul>` : html`<span className="muted">Καμία καταχώρηση ακόμα.</span>`}</section>

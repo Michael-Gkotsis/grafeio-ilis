@@ -4,12 +4,13 @@
 // την οθόνη και το Excel. Τίποτα εδώ δεν μπλοκάρει· ό,τι δεν ταιριάζει γυρνά ως «λόγοι» και η οθόνη ζητά αιτία. Δεν αγγίζει την
 // αυτόματη συμπλήρωση και τη σειρά δικαιοσύνης των στρατιωτών (rules.ts).
 import { MONTHS, addDays, dm, dmy, weekday, type ISODate } from './dates';
-import { KIND_NAME, type AppState, type Cadre, type CadreDuty, type CadreDutyCfg, type CadreDutyGroup, type CadreDutyPerson, type CadreService, type Settings } from './domain';
+import { KIND_NAME, type AppState, type Cadre, type Person, type CadreDuty, type CadreDutyCfg, type CadreDutyGroup, type CadreDutyPerson, type CadreService, type Settings } from './domain';
 import { hkRowsOf, rankTxt } from './ranks';
 import { cadreStatusOn, orderedCadre } from './cadre';
-import { cadreOf, cadreOnlyAll, cadreOnlyOf, dutyStats, nextCadrePid, isHol, postBy, setCadreFiller, type CadreOnly, type CadreSeatFill, type DutyStat } from './rules';
+import { PROV, cadreOf, cadreSeat, cadreOnlyAll, cadreOnlyOf, dutyStats, nextCadrePid, isHol, postBy, setCadreFiller, type CadreOnly, type CadreSeatFill, type DutyStat } from './rules';
 import { daysOfMonth, monthIndex, monthOf, planDays, shiftMonth, type MonthIndex, type PlanCell, type PlanDay } from './cadrePlan';
 import { upper } from './text';
+import { countOf, onceKeyOfCadre } from './dutyOnce';
 
 // ---- ρυθμίσεις ----
 export const DEFAULT_DUTY: CadreDutyCfg = { groups: [], limits: { off: { base: 3, extra: 1 }, nco: { base: 4, extra: 1 } }, rest: 1, carry: true, fairHol: true };
@@ -149,7 +150,9 @@ export function monthCount(s: AppState, cid: string, ym: string, exclude?: strin
     const d = ym + '-' + String(i).padStart(2, '0'); const x = m.get(d); if (!x) continue;
     const r = exclude ? x.roster.filter(y => y.id !== exclude).length : x.roster.length; const n = r + x.seat.length;
     if (!n) continue;
-    out.roster += r; out.seat += x.seat.length; out.done += n; if (isHol(s.settings, d)) out.hol += n;
+    // «Μετρά για 1» (Michael, 26/11): μέρα με 2+ υπηρεσίες μετρά μία στα όρια και στα σύνολα· roster και seat μένουν όπως έγιναν
+    const k = s.dutyOnce ? countOf(s.dutyOnce, d, onceKeyOfCadre(cid), n) : n;
+    out.roster += r; out.seat += x.seat.length; out.done += k; if (isHol(s.settings, d)) out.hol += k;
   }
   return out;
 }
@@ -492,3 +495,29 @@ function fillSeats(s: AppState, date: ISODate): CadreSeatFill {
   return { put: (r.seats || []).map(x => ({ k: x.k, cid: x.cid })), empty: (r.seatEmpty || []).map(x => ({ k: x.k, group: cadreOnlyOf(s.settings).get(x.k)?.group || '' })), extra: (r.seatExtra || []).map(x => ({ k: x.k, cid: x.cid })) };
 }
 setCadreFiller(fillSeats);
+
+// ---- Έλεγχος υπηρεσιών (Excel και οθόνη, Michael 26/11): και οι υπηρεσίες του προγράμματος στελεχών ----
+// Οι υπηρεσίες του προγράμματος που δεν είναι ήδη θέση (χωρίς via: τη θέση την δείχνει ήδη το ημερολόγιο υπηρεσιών) ενός μήνα:
+// cid → μέρα → κωδικοί (short της υπηρεσίας: ΑΥΔΜ, ΕΕΑΣ), με τη σειρά του προγράμματος
+export function rosterCodes(s: Pick<AppState, 'cadreDuties' | 'settings'>, ym: string): Map<string, Map<ISODate, string[]>> {
+  const out = new Map<string, Map<ISODate, string[]>>(); const cfg = dutyCfgOf(s.settings);
+  for (const x of s.cadreDuties || NO_DUTIES) {
+    if (x.via || x.date.slice(0, 7) !== ym) continue;
+    let m = out.get(x.cid); if (!m) { m = new Map(); out.set(x.cid, m); }
+    const l = m.get(x.date); const code = serviceOf(cfg, x.svc)?.svc.short || '?';
+    if (l) l.push(code); else m.set(x.date, [code]);
+  }
+  return out;
+}
+// Τα στελέχη του Ελέγχου υπηρεσιών, με τη σειρά της λίστας στελεχών: όσα έχουν θέση τον μήνα (seated: ο αριθμός θέσης έχει υπηρεσία) ή υπηρεσία στο πρόγραμμα.
+// Όσα δεν έχουν ακόμα αριθμό θέσης παίρνουν προσωρινό (PROV - θέση στη λίστα), όπως στην επιλογή θέσης· ο κωδικός τους έρχεται από το rosterCodes με το cid.
+export function checkCadres(s: AppState, roster: Map<string, unknown>, seated: (pid: number) => boolean): Person[] {
+  return (s.cadreList || []).flatMap((c, i) => (c.pid != null ? seated(c.pid) || roster.has(c.id) : roster.has(c.id)) ? [cadreSeat(c, c.pid ?? PROV - i)] : []);
+}
+// Πόσες υπηρεσίες μετρά ένα στέλεχος στη λίστα του Ελέγχου υπηρεσιών (θέσεις και πρόγραμμα, με το «μετρά για 1»): ym κενό = όλες
+export function cadreCheckTotal(s: AppState, c: Cadre, ym?: string): number {
+  const m = dutyIndex(s).get(c.id); if (!m) return 0;
+  let n = 0;
+  for (const [d, x] of m) { if (ym && d.slice(0, 7) !== ym) continue; n += countOf(s.dutyOnce, d, onceKeyOfCadre(c.id), x.roster.length + x.seat.length); }
+  return n;
+}

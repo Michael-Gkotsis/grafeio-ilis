@@ -696,6 +696,7 @@ export interface AppState {
   cadreDutyOf?: Record<string, CadreDutyPerson>;   // ανά στέλεχος (cid): ομάδα, όριο, περιορισμοί (kv «cadreDutyOf»), ΟΧΙ στην εγγραφή Cadre ώστε το ΣΤΕΛΕΧΗ.xlsx να μένει ίδιο
   assets?: Asset[];                      // μητρώο οπλισμού και υλικού (kv «assets», shared/assets.ts): τα όπλα των ατόμων που δεν έχουν εγγραφή φαίνονται ως «εικονικές» γραμμές
   assetLog?: AssetEvent[];               // ιστορικό του μητρώου (kv «assetLog»)
+  dutyOnce?: Record<ISODate, string[]>;  // «Μετρά για 1» (kv «dutyOnce», shared/dutyOnce.ts): ανά μέρα, όσοι έχουν 2+ υπηρεσίες και η μέρα τους μετρά ΜΙΑ· κλειδί: στρατιώτης String(pid), στέλεχος 'c:' + cadre.id. Χωρίς απάντηση μετρά κάθε υπηρεσία
   cadreGrants?: CadreGrant[];            // έξτρα άδειες, υπόλοιπο από πέρσι και αρχική απαλλαγών ανά στέλεχος (kv «cadreGrants», shared/cadreBalance.ts)
   requests: PersonRequest[];             // αιτήσεις στρατιωτών (ΗΚΑΙ, 5. ΑΙΤΗΣΕΙΣ)
   dutyLog: DutyLog;                      // υπηρεσίες με ημερομηνία αλλά χωρίς θέση (από Excel με σκέτο «Θ», «Μ», «Σ»)
