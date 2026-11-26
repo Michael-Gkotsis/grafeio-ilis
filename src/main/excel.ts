@@ -8,7 +8,7 @@ import { W_NUM, weaponSheets } from '../shared/weapons';
 import { cadreSheets } from '../shared/cadre';
 import { leaveSheets } from '../shared/cadreBalance';
 import { planSheet } from '../shared/cadrePlan';
-import { checkCadres, dutySheet, rosterCodes } from '../shared/cadreDuty';
+import { checkCadres, dutySheet, linkedSvc, rosterCodes } from '../shared/cadreDuty';
 import { countOf, onceKeyOfCadre, onceKeyOfPid } from '../shared/dutyOnce';
 import { assetSheets, type AssetRow, type AssetSheet } from '../shared/assets';
 import { vehicleSheets } from '../shared/vehicles';
@@ -72,7 +72,7 @@ export async function dutyCheck(s: AppState, ym: string): Promise<Made> {
   for (const d of days) {
     for (const e of s.dutyLog?.[d] || []) set(e.pid, d, { code: bareOf(undefined, e.kind), kind: e.kind });
     const g = s.guards[d] || {};
-    for (const k of Object.keys(g).sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0))) { const p = postBy(s, k); if (p) set(g[k], d, { code: codeOf(s.settings, k, p.kind), kind: p.kind, own: ownOf.get(p.block) }); }
+    for (const k of Object.keys(g).sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0))) { const p = postBy(s, k); if (p) set(g[k], d, { code: linkedSvc(s.settings, k)?.short || codeOf(s.settings, k, p.kind), kind: p.kind, own: ownOf.get(p.block) }); }
   }
   // στελέχη: και οι υπηρεσίες του προγράμματος στελεχών (ΑΥΔΜ, ΕΕΑΣ…) που δεν είναι ήδη θέση, μετά τους κωδικούς των θέσεων
   const rost = rosterCodes(s, ym);
