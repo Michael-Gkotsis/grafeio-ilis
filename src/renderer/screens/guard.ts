@@ -15,7 +15,10 @@ import { checkSheet } from '../sheets';
 import { RealPreview } from '../realPreview';
 import { fileNameOf, frouraName } from '../../shared/fileNames';
 import { roomCfg, blockShape, groupKey, TYPES, KIND_LBL, KIND_NAME, OUTS_FMT, isOutsAll, PHASE_NAME, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, blocksOf, everyBlock, dutyStartOf, phaseBase, phaseList, phaseName, fullName, shortName, unitOf, roomTxt, postTxt, type DutyKind, type OutsFmt, type Rules, type Person, type Phase, type Post, type Status, type TypeKey } from '../../shared/domain';
-import { dutyPool, dutyLimitInfo, secondDuty, whyAll, fairKey, isEpop, monthTxt, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, seatMap, seatPeople, pickPeople, postOf, postsOf, ruleBlock, statusesFrom, outMinOn, dutyMin, DEFAULT_HK_TIME, statusWarn, strengthOf, activePeople, strictKeys, aheadDays } from '../../shared/rules';
+import { cadreCheckTotal } from '../../shared/cadreDuty';
+import { onceKeyOfCadre, onceKeyOfPid } from '../../shared/dutyOnce';
+import { useDutyOnce } from '../dutyOnce';
+import { cadreOf, dutyPool, dutyLimitInfo, secondDuty, whyAll, fairKey, isEpop, monthTxt, lastResort, monthStats, dutyMonths, nextFor, swapCheck, capBlock, capCell, capCols, dutyBlock, dutyStats, emptyStat, guardUnavailable, holName, offDayBlock, isHol, outBlock, outRoomsOn, personMap, seatMap, seatPeople, pickPeople, postOf, postsOf, ruleBlock, statusesFrom, outMinOn, dutyMin, DEFAULT_HK_TIME, statusWarn, strengthOf, activePeople, strictKeys, aheadDays } from '../../shared/rules';
 import { addDays, dayName, daysBetween, dm, dmy, dow, parseD, pskDays, weekday, DOW_FULL, DOW_GEN, MONTHS } from '../../shared/dates';
 import { collator, norm } from '../../shared/text';
 import { useRowH } from '../prefs';
@@ -77,6 +80,8 @@ function DutyCheck({ onOpen, m }: P) {
   const allSt = dutyStats(state);
   const idle = (pid: number): number => { const l = allSt.get(pid)?.last; return l ? Math.max(0, daysBetween(l, today) - 1) : 9999; };
   const { ym, setYm, allM, setAllM, st } = m as DutyMonth;
+  // στέλεχος: στο Σύν. μετρούν και οι υπηρεσίες του προγράμματος στελεχών, με το «μετρά για 1» (όπως στο Excel, Michael 26/11)
+  const cadreTotal = (p: P, d: P) => { const c = p.cid ? cadreOf(state, p.id) : undefined; return c ? { ...d, total: cadreCheckTotal(state, c, allM ? undefined : ym) } : d; };
   // στήλες: τα είδη του εντύπου και κάθε δική σου υπηρεσία χωριστά (μετρά ως δική της), και των ανενεργών όσο έχουν
   // υπηρεσίες στο διάστημα (δεν χάνονται)· «Άλλη» μόνο για υπηρεσίες χωρίς θέση (π.χ. «Υ» από το Excel)
   const kinds = useMemo(() => {
@@ -91,8 +96,8 @@ function DutyCheck({ onOpen, m }: P) {
   // ταξινόμηση με κλικ στην επικεφαλίδα της στήλης (ξανά κλικ: αντίστροφα)
   const [sk, setSk] = useState<{ k: string; dir: number } | null>(null);
   const val = (r: P, k: string): number | string => (k === 'name' ? r.p.last + ' ' + r.p.first : k === 'total' ? r.d.total : k === 'hol' ? r.d.hol : k === 'last' ? r.d.last || '' : k === 'idle' ? r.idle : k === 'lim' ? (r.lim ? r.lim.n - (+r.lim.limit.split('+')[0]) : -1e9) : r.d.byKind[k] || 0);
-  const rows = useMemo(() => searchPeople(seatPeople(state), dq).map(p => ({ p, d: st.get(p.id) || emptyStat(), idle: idle(p.id), lim: dutyLimitInfo(state, today, p) })).sort((a, b) => { if (sk) { const x = val(a, sk.k), y = val(b, sk.k); const c = typeof x === 'number' ? x - (y as number) : collator.compare(x, y as string); if (c) return c * sk.dir; } // σειρά δικαιοσύνης (Michael, 17/10): πρώτα όσοι έχουν τις περισσότερες μέρες χωρίς υπηρεσία, μετά οι λιγότερες συνολικά, μετά οι λιγότερες αργίες
-    return (hol ? a.d.hol - b.d.hol : 0) || b.idle - a.idle || a.d.total - b.d.total || a.d.hol - b.d.hol || collator.compare(a.p.last, b.p.last); }), [dq, st, hol, state.people, state.cadreList, state.rules, state.cadreDuties, state.cadreDutyOf, state.settings, sk, allSt, today]);
+  const rows = useMemo(() => searchPeople(seatPeople(state), dq).map(p => ({ p, d: cadreTotal(p, st.get(p.id) || emptyStat()), idle: idle(p.id), lim: dutyLimitInfo(state, today, p) })).sort((a, b) => { if (sk) { const x = val(a, sk.k), y = val(b, sk.k); const c = typeof x === 'number' ? x - (y as number) : collator.compare(x, y as string); if (c) return c * sk.dir; } // σειρά δικαιοσύνης (Michael, 17/10): πρώτα όσοι έχουν τις περισσότερες μέρες χωρίς υπηρεσία, μετά οι λιγότερες συνολικά, μετά οι λιγότερες αργίες
+    return (hol ? a.d.hol - b.d.hol : 0) || b.idle - a.idle || a.d.total - b.d.total || a.d.hol - b.d.hol || collator.compare(a.p.last, b.p.last); }), [dq, st, hol, state.people, state.cadreList, state.rules, state.cadreDuties, state.cadreDutyOf, state.dutyOnce, state.settings, sk, allSt, today, ym, allM]);
   const limOn = rows.some(r => r.lim);   // «Όριο»: μόνο όταν κάποιος έχει όριο (Michael, 24/11)
   const H = (k: string, l: string, tip?: string) => html`<button type="button" className="chk__sort" data-tip=${tip} aria-sort=${sk?.k === k ? (sk.dir > 0 ? 'ascending' : 'descending') : 'none'} onClick=${() => setSk(sk?.k === k ? { k, dir: -sk.dir } : { k, dir: k === 'name' ? 1 : -1 })}>${l}${sk?.k === k ? (sk.dir > 0 ? ' ▲' : ' ▼') : ''}</button>`;
   const mon = MONTHS[+ym.slice(5) - 1];
@@ -297,7 +302,7 @@ function RoomsDialog({ value, onSave, onClose }: { value: number[]; onSave: (v: 
 
 export function GuardScreen() {
   const { state, run, today, tomorrow, undoMark } = useStore(); const toast = useToast(); const nav = useNav(); const mobile = useMedia('(max-width: 767px)');
-  const ex = useExport(); const xb = useExportBusy(); const hpF = useHeadPick('froura'); const hpPf = useHeadPick('froura'); const hpPo = useHeadPick('outs');
+  const once = useDutyOnce(); const ex = useExport(); const xb = useExportBusy(); const hpF = useHeadPick('froura'); const hpPf = useHeadPick('froura'); const hpPo = useHeadPick('outs');
   const date = nav.params.guardDate || tomorrow; const setDate = (d: string) => nav.set({ guardDate: d });
   const [tab, setTab] = useState('posts'); const [rules, setRules] = useState(false);
   // θάλαμοι μόνο για την επόμενη αυτόματη συμπλήρωση (κενό = όλοι)· μετά τη συμπλήρωση ξαναγυρίζει σε όλους
@@ -350,7 +355,9 @@ export function GuardScreen() {
   const assign = useCallback(async (k: string, pid: number | null, instead?: number, reason?: string, move?: string) => {
     const x = posts.find(q => q.k === k)!;
     const who = pid ? pm.get(pid) || pickPeople(state).find(q => q.id === pid) : undefined;   // στέλεχος χωρίς αριθμό θέσης ακόμα: τον δίνει το assign
-    if (await run({ t: 'assign', date, k, pid, force: reason, move, ...(who?.cid ? { cid: who.cid } : {}) }, false)) toast({ text: (pid ? rkShort(who!) + (instead ? ' αντί για ' + rkShort(pm.get(instead)!) : '') + ' σε ' : 'Κενή η θέση ') + postTxt(x) + (printed ? ' · Είχε βγει Excel: χρειάζεται νέα εκτύπωση' : ''), actions: [undoMark()] });
+    const ns = await run({ t: 'assign', date, k, pid, force: reason, move, ...(who?.cid ? { cid: who.cid } : {}) }, false);
+    if (ns && pid) once.ask(state, ns, [date], [who?.cid ? onceKeyOfCadre(who.cid) : onceKeyOfPid(pid)]);   // 2η υπηρεσία την ίδια μέρα: ρωτά πόσες μετρούν
+    if (ns) toast({ text: (pid ? rkShort(who!) + (instead ? ' αντί για ' + rkShort(pm.get(instead)!) : '') + ' σε ' : 'Κενή η θέση ') + postTxt(x) + (printed ? ' · Είχε βγει Excel: χρειάζεται νέα εκτύπωση' : ''), actions: [undoMark()] });
   }, [date, printed, state]);
   // Τίποτα δεν απαγορεύεται πλήρως (Michael, 17/10): κατάσταση (ΕΥ, άδεια…), ανάπαυση, ΣΚ, δυνατότητα περνούν με αιτιολογία.
   // Ήδη σε άλλη θέση: ανταλλαγή αν η θέση μας έχει κάποιον, αλλιώς μετακίνηση (ή και στις δύο, με αιτία).
@@ -382,7 +389,7 @@ export function GuardScreen() {
   const psk = [5, 6, 0].includes(parseD(date).getDay()) ? pskDays(date) : null;
   const pskEmpty = (d: string) => posts.filter(x => !(state.guards[d] || {})[x.k]).length;
   const pill = (list: P[]) => html`<div className="avail">${list.map(({ p, s }: P) => html`<button key=${p.id} type="button" className="na linkish" onClick=${() => nav.openPerson(p.id)}>${rkShort(p)} <${Badge} tone=${TYPES[s.type as TypeKey].tone} data-tip=${s.type === 'KOL' && s.note ? 'Κωλυόμενος: ' + s.note : TYPES[s.type as TypeKey].long}>${s.type === 'LEAVE' ? statusLbl(s, state.settings.lists) : TYPES[s.type as TypeKey].label}<//></button>`)}</div>`;
-  const autofill = async () => { const ns = await run({ t: 'autofill', date, ...rArg }, false); const left = ns ? postsOf(ns.settings).filter(x => !(ns.guards[date] || {})[x.k]).length : 0; if (ns) { setOnlyRooms([]); toast({ text: left ? 'Συμπληρώθηκαν όσες θέσεις γινόταν' + fromTxt + '. ' + left + (left === 1 ? ' έμεινε κενή' : ' έμειναν κενές') + ' γιατί κανείς' + (onlyRooms.length ? ' από αυτούς τους θαλάμους' : '') + ' δεν επιτρέπεται εκεί με τους κανόνες.' : 'Συμπληρώθηκαν οι κενές θέσεις' + fromTxt + ' με τη σειρά δικαιοσύνης, τηρώντας όλους τους κανόνες', actions: [undoMark()] }); } };
+  const autofill = async () => { const ns = await run({ t: 'autofill', date, ...rArg }, false); once.ask(state, ns, [date]); const left = ns ? postsOf(ns.settings).filter(x => !(ns.guards[date] || {})[x.k]).length : 0; if (ns) { setOnlyRooms([]); toast({ text: left ? 'Συμπληρώθηκαν όσες θέσεις γινόταν' + fromTxt + '. ' + left + (left === 1 ? ' έμεινε κενή' : ' έμειναν κενές') + ' γιατί κανείς' + (onlyRooms.length ? ' από αυτούς τους θαλάμους' : '') + ' δεν επιτρέπεται εκεί με τους κανόνες.' : 'Συμπληρώθηκαν οι κενές θέσεις' + fromTxt + ' με τη σειρά δικαιοσύνης, τηρώντας όλους τους κανόνες', actions: [undoMark()] }); } };
   const [preview, setPreview] = useState(false);
   // «Επόμενη κενή» (κουμπί ή πλήκτρο Ν): πάει στην επόμενη κενή θέση, ανοίγει την ομάδα της και την επιλογή ατόμου
   // Συνεχίζει μετά την τελευταία θέση που πήγες (ή που γράφεις τώρα), αλλιώς από όσα φαίνονται στην οθόνη
@@ -440,7 +447,7 @@ export function GuardScreen() {
       footer=${html`<${Button} variant="outline" data-autofocus="" onClick=${() => setClearAsk(false)}>Όχι<//><${Button} variant="destructive" onClick=${async () => { setClearAsk(false); if (await run({ t: 'clearDay', date }, false)) toast({ text: 'Άδειασαν οι θέσεις ' + dow(date) + ' ' + dm(date), actions: [undoMark()] }); }}>Ναι, άδειασέ τη<//>`}>
       <p style=${{ margin: 0 }}>Βγαίνουν και οι <b>${Object.values(g).filter(Boolean).length}</b> από τις θέσεις αυτής της μέρας (μένουν κενές). Μπορείς να το αναιρέσεις αμέσως μετά.</p><//>`}
     ${psk && html`<div className="psk"><div><b>Φρουρά ΠΣΚ</b><small>${psk.map(d => dow(d) + ' ' + dm(d) + ': ' + (pskEmpty(d) ? pskEmpty(d) + ' κενές' : 'πλήρης')).join(' · ')}</small></div>
-      <span className="psk__acts"><${Button} size="sm" variant="outline" disabled=${!people.length || psk.every(d => !pskEmpty(d)) || psk.some(d => d < today && !unlocked[d])} why=${!people.length ? 'Δεν έχουν μπει στρατιώτες (μενού Στρατιώτες)' : psk.every(d => !pskEmpty(d)) ? 'Δεν υπάρχουν κενές θέσεις στο ΠΣΚ' : 'Μια μέρα του ΠΣΚ πέρασε: ξεκλείδωσέ τη πρώτα'} onClick=${async () => { if (await run({ t: 'autofillRange', dates: psk.filter(d => pskEmpty(d)), ...rArg }, false)) { setOnlyRooms([]); toast({ text: 'Συμπληρώθηκε το ΠΣΚ ' + dm(psk[0]) + '–' + dm(psk[2]) + fromTxt + ', μία μέρα μετά την άλλη, με τους κανόνες και ανάμεσά τους.', actions: [undoMark()] }); } }} data-tip="Γεμίζει Παρασκευή, Σάββατο και Κυριακή μαζί. Οι κανόνες (ανάπαυση, νούμερα, ΣΚ) ισχύουν και ανάμεσα στις τρεις μέρες.">Συμπλήρωση ΠΣΚ${rTag}<//>
+      <span className="psk__acts"><${Button} size="sm" variant="outline" disabled=${!people.length || psk.every(d => !pskEmpty(d)) || psk.some(d => d < today && !unlocked[d])} why=${!people.length ? 'Δεν έχουν μπει στρατιώτες (μενού Στρατιώτες)' : psk.every(d => !pskEmpty(d)) ? 'Δεν υπάρχουν κενές θέσεις στο ΠΣΚ' : 'Μια μέρα του ΠΣΚ πέρασε: ξεκλείδωσέ τη πρώτα'} onClick=${async () => { const ns = await run({ t: 'autofillRange', dates: psk.filter(d => pskEmpty(d)), ...rArg }, false); once.ask(state, ns, psk); if (ns) { setOnlyRooms([]); toast({ text: 'Συμπληρώθηκε το ΠΣΚ ' + dm(psk[0]) + '–' + dm(psk[2]) + fromTxt + ', μία μέρα μετά την άλλη, με τους κανόνες και ανάμεσά τους.', actions: [undoMark()] }); } }} data-tip="Γεμίζει Παρασκευή, Σάββατο και Κυριακή μαζί. Οι κανόνες (ανάπαυση, νούμερα, ΣΚ) ισχύουν και ανάμεσα στις τρεις μέρες.">Συμπλήρωση ΠΣΚ${rTag}<//>
       ${hpPf.nodeAt('psk')}<${Button} size="sm" variant="outline" disabled=${!!xb} onClick=${() => ex('frouraPsk', psk[0], 'η ΦΡΟΥΡΑ του ΠΣΚ', false, undefined, hpPf.take())} data-tip="Ένα Excel με τρία φύλλα: Παρ, Σαβ, Κυρ">${xb === 'frouraPsk' ? 'Δημιουργία…' : 'Excel ΠΣΚ'}<//>
       ${hpPo.nodeAt('psk')}<${Button} size="sm" variant="ghost" disabled=${!!xb} onClick=${() => ex('outsPsk', psk[0], 'οι εξοδούχοι του ΠΣΚ', false, undefined, hpPo.take())} data-tip=${'Εξοδούχοι' + (isOutsAll(state.settings) ? ' (όλη η δύναμη)' : '-παραμένοντες') + ' για τις τρεις μέρες, ένα φύλλο ανά μέρα' + (isOutsAll(state.settings) ? ' (στην «Όλη η δύναμη» δύο: σελίδα 1 οι εξοδούχοι, σελίδα 2 η υπόλοιπη δύναμη)' : '') + '. Η μορφή αλλάζει από τους Εξοδούχους.'}>${xb === 'outsPsk' ? 'Δημιουργία…' : 'Εξοδούχοι ΠΣΚ'}<//></span></div>`}
     <div className="gtable">
@@ -506,6 +513,7 @@ export function GuardScreen() {
     ${cur === 'skips' ? html`<${SkipsView} onPerson=${setProf}/>` : cur === 'who' ? whoTab : mobile ? (cur === 'posts' ? left : cur === 'check' ? check : xl) : (cur === 'posts' ? html`<div className="guard">${left}${side}</div>` : check)}
     ${preview && html`<${Dialog} size="xl" title=${'Προεπισκόπηση · ' + fileName} description="Είναι το ίδιο αρχείο που βγαίνει στο Excel." onClose=${() => setPreview(false)}
       footer=${html`<${Button} variant="outline" onClick=${() => setPreview(false)}>Κλείσε<//><${PrintButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών" variant="outline" take=${hpF.take}/>${hpF.nodeAt('pv')}<${Button} disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>`}>${sheet()}<//>`}
+    ${once.dialog}
     ${rules && html`<${RulesDialog} onClose=${() => setRules(false)} onTab=${setTab} onFixed=${() => { setTab('posts'); setFixedOpen('ly'); }}/>`}
     ${roomsOpen && html`<${RoomsDialog} value=${onlyRooms} onSave=${setOnlyRooms} onClose=${() => setRoomsOpen(false)}/>`}
     ${fixedOpen && html`<${FixedDialog} block=${fixedOpen} onClose=${() => setFixedOpen(false)}/>`}${addOpen && html`<${AddBlockDialog} onClose=${() => setAddOpen(false)}/>`}
