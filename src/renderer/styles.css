@@ -254,9 +254,9 @@ body:has(.pendbar) .ui-toasts{bottom:80px}
 .shell.is-rail{--side-w:var(--rail-w)}
 .topbar{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:10px 16px;min-height:var(--top-h);background:var(--bar);color:var(--bar-fg);position:sticky;top:env(safe-area-inset-top,0px);z-index:40}
 .topbar :focus-visible{outline-color:var(--gold)}
-.brand{display:flex;align-items:center;gap:10px;white-space:nowrap;height:40px}
+.brand{display:flex;align-items:center;gap:10px;white-space:nowrap;height:40px;min-width:0;flex-shrink:20}
 .brand .logo{flex:none}
-.brand > span{font-family:var(--f-display);font-weight:700;font-size:17px;text-transform:uppercase;letter-spacing:.05em}
+.brand > span{font-family:var(--f-display);font-weight:700;font-size:17px;text-transform:uppercase;letter-spacing:.05em;min-width:0;overflow:hidden;text-overflow:ellipsis} /* (έλεγχος 26/11) μακριά γραμμή μονάδας στα 1024: η μπάρα έσπρωχνε και έκοβε την «Αναίρεση»· τώρα μικραίνει το όνομα με «…» */
 .brand small{font-family:var(--f-mono);font-weight:400;color:var(--bar-muted);font-size:13px;letter-spacing:0;text-transform:none;margin-left:6px}
 .searchbtn{flex:1;max-width:560px;display:flex;align-items:center;gap:8px;height:38px;padding:0 14px;border:1px solid var(--bar-line);border-radius:999px;background:var(--bar-field);color:var(--bar-muted);cursor:pointer;text-align:left;min-width:0}
 .searchbtn:hover{border-color:var(--bar-muted)}
