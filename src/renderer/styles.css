@@ -2000,7 +2000,7 @@ thead .mg-tail--n{font-size:11px}
 .hand{max-height:56vh;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);font-size:13px}
 .hand__head,.hand__row{display:grid;align-items:center;min-width:max-content}
 .hand__head{position:sticky;top:0;z-index:2;background:var(--muted);font-weight:600;min-height:44px;border-bottom:1px solid var(--border)}
-.hand__head > span,.hand__row > span{padding:0 6px}.hand__head > :not(:first-child){text-align:center;font-size:12px;line-height:1.2}
+.hand__head > span,.hand__row > span{padding:0 6px}.hand__head > :not(:first-child){text-align:center;font-size:12px;line-height:1.2;overflow-wrap:break-word}
 .hand__row{height:38px;border-bottom:1px solid var(--border)}.hand__row:hover{background:var(--hover)}
 .hand__head > :first-child,.hand__row > :first-child{position:sticky;left:0;z-index:1;background:inherit;box-shadow:1px 0 0 var(--border)}
 .hand__head > :first-child{background:var(--muted)}.hand__row > :first-child{background:var(--card);height:100%;display:flex;align-items:center;gap:6px;white-space:nowrap}

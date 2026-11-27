@@ -120,10 +120,12 @@ export function DutyHandDialog({ ym: ym0, onClose }: P) {
       <span className="toolbar__count">${shown.length} άτομα · ${active.length} ενεργές υπηρεσίες</span></div>
     <p className="note" style=${{ margin: '0 0 8px' }}>Γράψε το σύνολο του μήνα για κάθε υπηρεσία. Ο γκρι αριθμός είναι όσες έχει ήδη η εφαρμογή με ημερομηνία. Όσες γράψει η εφαρμογή μετά την αποθήκευση προστίθενται.</p>
     <div className="hand" key=${ym + ':' + gen}>
-      <div className="hand__head" style=${{ gridTemplateColumns: 'minmax(190px,1fr) repeat(' + (cols.length + 1) + ',100px) 86px' }}><span>Ονοματεπώνυμο</span>${cols.map(c => html`<span key=${c.key} data-tip=${c.label}>${c.label}</span>`)}<span>Από αυτές ΣΚ/αργία</span><span>Σύνολο μήνα</span></div>
+      <div className="hand__head" style=${{ gridTemplateColumns: 'minmax(190px,1fr) repeat(' + (cols.length + 1) + ',100px) 86px' }}><span>Ονοματεπώνυμο</span>${cols.map(c => html`<span key=${c.key} data-tip=${c.label}>${soft(c.label)}</span>`)}<span>Από αυτές ΣΚ/αργία</span><span>Σύνολο μήνα</span></div>
       ${shown.map((r, i) => html`<${Row} key=${r.p.id} r=${r} ri=${i} cols=${cols} draft=${draft.current} onEdit=${onEdit}/>`)}
     </div>
     <p className="note" style=${{ margin: '8px 0 0' }}>Enter ή ↓ κάτω · Tab ή → δεξιά · ↑ ← πίσω · γράψε ψηφίο για να αλλάξει η τιμή · Del = 0. Οι αριθμοί μετρούν στη σειρά δικαιοσύνης και στα όρια· δεν αλλάζει κανένα Excel.</p>
   <//>`;
 }
+// μακριά ονόματα στην επικεφαλίδα (στήλη 100px): σπάνε σε «Θαλαμο-/φύλακας» και όχι πάνω στην επόμενη στήλη
+const soft = (t: string) => t.replace(/(Θαλαμο|Οπλο)(φύλακας)/, '$1\u00ad$2');
 const label = (state: P, k: string): string => (k.startsWith('b:') ? everyBlock(state.settings).find((b: any) => 'b:' + b.id === k)?.name || '?' : KIND_NAME[k as DutyKind] || k);
