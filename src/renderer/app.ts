@@ -193,8 +193,11 @@ function Shell() {
     moveTo({ view, params: { ...base, ...(params || {}) } }, true);
   }, [moveTo]);
   const goBack = useCallback(() => {
-    const b = cur.current.back; if (!b.length) return;
-    moveTo(b[b.length - 1], false, () => setBack(b.slice(0, -1)));
+    // το «Πίσω» προσπερνά οθόνες που κρύφτηκαν στο μεταξύ (Ρυθμίσεις › Οθόνες και καρτέλες)
+    const st = hidRef.current.settings; const b = cur.current.back; let i = b.length - 1;
+    while (i >= 0 && !isShown(st, b[i].view)) i--;
+    if (i < 0) { if (b.length) setBack([]); return; }
+    moveTo(b[i], false, () => setBack(b.slice(0, i)));
   }, [moveTo]);
   // οδηγός χρήσης στο θέμα της οθόνης που βλέπεις· μέσα στον οδηγό μένει όπου είσαι
   const help = useCallback(() => { const r = cur.current.route; if (r.view !== 'guide') go('guide', { topic: topicFor(r.view, r.params) }); }, [go]);
