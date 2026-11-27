@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { html, cx, Alert, Badge, Button, Why, Card, Dialog, Icon, PageHeader, Segmented, Strip, Tabs, useEscape, useMedia, useToast } from '../ui';
 import { Combo, Select } from '../select';
 import { useNav, useStore, searchPeople } from '../store';
+import { isShown, pickTab, shownTabs } from '../shown';
 import { requestLeave, usePending } from '../pending';
 import { useNowMin } from '../clock';
 import { LeaveEndDialog, StatusFixDialog } from './people';
@@ -44,6 +45,7 @@ import { TodayMoves } from './moves';
 export function TodayScreen() {
   const { state, today, tomorrow, boot, audit } = useStore(); const nav = useNav(); const usb = useUsbCopy();
   const [forms, setForms] = useState(false);
+  const sh = (v: string, t?: string) => isShown(state.settings, v, t);   // κρυφές οθόνες: οι κάρτες και οι εργασίες τους δεν φαίνονται
   const due = usbDue(boot.lastUsb, today);
   const news = newsSince(audit, boot.seenUntil, boot.sessionStart);
   const pm = personMap(state.people);
@@ -103,29 +105,32 @@ export function TodayScreen() {
   const tasks: { key: string; title: string; sub: string; urgent?: boolean; btn: string; fn: () => void }[] = [];
   if (empty > 0) tasks.push({ key: 'empty', title: 'Υπηρεσίες αύριο, ' + dow(tomorrow) + ' ' + dm(tomorrow), sub: empty + (empty === 1 ? ' κενή θέση' : ' κενές θέσεις') + ' · πριν τις ' + dutyStartOf(state.settings), urgent: true, btn: 'Συμπλήρωσε', fn: () => nav.go('guard', { guardDate: tomorrow }) });
   const waiting = reqWaiting(state.requests).filter(r => pm.has(r.pid));
-  if (waiting.length) tasks.push({ key: 'req', title: waiting.length === 1 ? 'Αίτηση περιμένει απάντηση' : waiting.length + ' αιτήσεις περιμένουν απάντηση', sub: waiting.map(r => shortName(pm.get(r.pid)!)).join(', ') + ' · πάτα «Εγκρίθηκε» ή «Απορρίφθηκε» όταν υπογράψει ο Διοικητής', btn: 'Άνοιξε', fn: () => nav.go('hkai', { hkTab: 'req' }) });
+  if (waiting.length && sh('hkai', 'req')) tasks.push({ key: 'req', title: waiting.length === 1 ? 'Αίτηση περιμένει απάντηση' : waiting.length + ' αιτήσεις περιμένουν απάντηση', sub: waiting.map(r => shortName(pm.get(r.pid)!)).join(', ') + ' · πάτα «Εγκρίθηκε» ή «Απορρίφθηκε» όταν υπογράψει ο Διοικητής', btn: 'Άνοιξε', fn: () => nav.go('hkai', { hkTab: 'req' }) });
   // σημειώσεις με υπενθύμιση που έφτασε (Michael, 24/10): πρώτες οι πιο παλιές
   const remNotes = noteGroups((state.notes || []).filter(n => noteDue(n, today)), today).due;
-  if (remNotes.length) tasks.push({ key: 'notes', title: remNotes.length === 1 ? 'Σημείωση με υπενθύμιση' : remNotes.length + ' σημειώσεις με υπενθύμιση',
+  if (remNotes.length && sh('notes')) tasks.push({ key: 'notes', title: remNotes.length === 1 ? 'Σημείωση με υπενθύμιση' : remNotes.length + ' σημειώσεις με υπενθύμιση',
     sub: remNotes.slice(0, 2).map(n => { const w = noteWho(state, n); return (w.kind === 'gen' ? '' : w.label + ': ') + '«' + noteHead(n.text, 46) + '»' + (n.rem! < today ? ' (εκπρόθεσμη)' : ''); }).join(' · ') + (remNotes.length > 2 ? ' · και ' + (remNotes.length - 2) + ' ακόμα' : ''),
     urgent: remNotes.some(n => n.rem! < today), btn: 'Δες τις', fn: () => nav.go('notes', { nfilter: 'rem' }) });
   if (due) tasks.push({ key: 'usb', title: 'Αντίγραφο σε USB', sub: (boot.lastUsb ? 'Πέρασαν ' + usbAge(boot.lastUsb, today) + ' μέρες από το τελευταίο' : 'Δεν έχει παρθεί ποτέ') + '. Αν χαλάσει ο δίσκος του PC, χάνονται όλα (κάθε ' + USB_DAYS + ' μέρες).', btn: 'Αντίγραφο σε USB', fn: usb });
   // συντήρηση: οχήματα (οθόνη Οχήματα) και οπλισμός/υλικό (Οπλισμός › Μητρώο)· οι καθυστερημένες πρώτες
   const maintTask = (key: string, vehicle: boolean) => {
+    if (vehicle ? !sh('vehicles') : !(sh('weapons', 'mitroo') || sh('weapons', 'yliko'))) return;
     const l = maint.filter(m => (m.row.cat?.kind === 'vehicle') === vehicle).sort((a, b) => Number(b.overdue) - Number(a.overdue)); if (!l.length) return;
     const od = l.filter(m => m.overdue).length; const nm = (m: { row: { a: { type: string; no: string } } }) => (m.row.a.type + ' ' + m.row.a.no).trim() || '(χωρίς αριθμό)';
     tasks.push({ key, title: (vehicle ? 'Συντήρηση οχημάτων' : 'Συντήρηση οπλισμού και υλικού'), urgent: od > 0,
       sub: (od ? od + (od === 1 ? ' καθυστερημένη' : ' καθυστερημένες') + ' · ' : '') + l.length + (l.length === 1 ? ' είδος' : ' είδη') + ' με συντήρηση: ' + l.slice(0, 3).map(nm).join(', ') + (l.length > 3 ? ' κ.ά.' : ''),
-      btn: 'Άνοιξε', fn: () => (vehicle ? nav.go('vehicles') : nav.go('weapons', { wtab: 'mitroo' })) });
+      btn: 'Άνοιξε', fn: () => (vehicle ? nav.go('vehicles') : nav.go('weapons', { wtab: sh('weapons', 'mitroo') ? 'mitroo' : 'yliko' })) });
   };
   maintTask('maintV', true); maintTask('maintA', false);
-  if (cgaps.length) tasks.push({ key: 'cduty', title: 'Υπηρεσίες στελεχών αύριο, ' + dow(tomorrow) + ' ' + dm(tomorrow), sub: 'Χωρίς κανέναν: ' + cgaps.slice(0, 4).map(v => v.name).join(', ') + (cgaps.length > 4 ? ' κ.ά.' : ''), btn: 'Συμπλήρωσε', fn: () => nav.go('cadre', { cview: 'duty', cmonth: tomorrow.slice(0, 7), cdm: 'svc' }) });
+  if (cgaps.length && sh('cadre', 'duty')) tasks.push({ key: 'cduty', title: 'Υπηρεσίες στελεχών αύριο, ' + dow(tomorrow) + ' ' + dm(tomorrow), sub: 'Χωρίς κανέναν: ' + cgaps.slice(0, 4).map(v => v.name).join(', ') + (cgaps.length > 4 ? ' κ.ά.' : ''), btn: 'Συμπλήρωσε', fn: () => nav.go('cadre', { cview: 'duty', cmonth: tomorrow.slice(0, 7), cdm: 'svc' }) });
   const ends = [
     ...expired.map(s => ({ s, when: 'έληξε χθες, αφαιρέθηκε αυτόματα', tip: 'Από σήμερα δεν ισχύει· γράφτηκε στο Ιστορικό' })),
     ...ending.map(s => ({ s, when: 'λήγει σήμερα', tip: endTxt(s) })),
     ...endTom.map(s => ({ s, when: 'λήγει αύριο', tip: '' }))
   ];
-  const kpi = (l: string, n: number, fn: () => void, tone?: string, tip?: string) => html`<button type="button" className=${'kpi' + (tone ? ' kpi--' + tone : '')} data-tip=${tip} onClick=${fn}><span className="kpi__l">${l}</span><span className="kpi__n">${n}</span></button>`;
+  const kpi = (l: string, n: number, fn: () => void, tone?: string, tip?: string, view?: string) => view && !sh(view)
+    ? html`<div className=${'kpi' + (tone ? ' kpi--' + tone : '')} data-tip=${tip}><span className="kpi__l">${l}</span><span className="kpi__n">${n}</span></div>`   // η οθόνη είναι κρυφή: ο αριθμός μένει, χωρίς κλικ
+    : html`<button type="button" className=${'kpi' + (tone ? ' kpi--' + tone : '')} data-tip=${tip} onClick=${fn}><span className="kpi__l">${l}</span><span className="kpi__n">${n}</span></button>`;
   return html`<div>
     <${PageHeader} title="Σήμερα" sub=${'Ημερήσια κατάσταση ' + DOW_GEN[parseD(today).getDay()] + ' ' + dmy(today) + '. ' + (tasks.length ? tasks.length + (tasks.length === 1 ? ' πράγμα θέλει εσένα' : ' πράγματα θέλουν εσένα') + (empty > 0 ? '. Το πρώτο πριν τις ' + dutyStartOf(state.settings) + '.' : '.') : 'Τίποτα δεν περιμένει από σένα αυτή τη στιγμή.')}>
       <div className="page-head__acts"><${Button} variant="outline" onClick=${() => setForms(true)} data-tip=${'Αυριανή ΦΡΟΥΡΑ, σημερινή ' + HK() + ' και Εξοδούχοι: ένας έλεγχος για όλα, μετά «Βγάλε όλα» ή «Τύπωσε όλα»'}>${Icon.print}Έντυπα ημέρας<//><${Button} variant="outline" onClick=${() => nav.go('outs', { outDate: today })}>Εξοδούχοι σήμερα<//><${Button} variant="outline" onClick=${() => nav.go('hkai', { hkaiDate: today })} data-tip="Βγαίνει μόνη της από τις υπηρεσίες και τις καταστάσεις">${HK()} σήμερα<//><${Button} onClick=${() => nav.declare({})} data-tip="Ιατρικό, άδεια, έξοδος, ΔΝ ή ποινή, για έναν ή πολλούς">+ Δήλωσε κατάσταση<//></div><//>
@@ -133,29 +138,29 @@ export function TodayScreen() {
     <${SourcesAlert}/>
     <div className="kpis">
       ${kpi('Στρατιώτες', c.total, () => nav.go('people', { filter: 'all' }), undefined, 'Στρατιώτες σε δύναμη. Η ' + HK() + ' μετρά και τα στελέχη, με τις 08:00')}
-      ${kpi('Παρόντες', c.present - kol.minus.length, () => nav.go('strength', { strengthDate: today, svCat: 'present' }), undefined, 'Χωρίς τους απόντες και τους κωλυόμενους που αφαιρούνται (' + kol.minus.length + '), όπως η Δύναμη')}
-      ${kpi('Απόντες', c.absent, () => nav.go('strength', { strengthDate: today, svCat: 'away' }), undefined, (awayText(c) || 'Κανείς') + '. Κάθε άτομο μία φορά. Ιατρικά σε ισχύ: ' + nRec)}
-      ${kpi('Εξοδούχοι', c.counts.OUT + c.counts.DN, () => nav.go('outs', { outDate: today }), undefined, c.counts.OUT + ' έξοδος · ' + c.counts.DN + ' ΔΝ')}
-      ${wOut > 0 && kpi('Όπλα εκτός', wOut, () => nav.go('weapons', { wtab: 'moves', wmoves: 'open' }), 'warn', 'Όπλα εκτός οπλοβαστού τώρα, κινήσεις και ένοπλες υπηρεσίες: οι ίδιοι που μετράει ο Οπλισμός. Πάτα για να δεις ποιοι και γιατί')}
-      ${kpi('Κενές αύριο', empty, () => nav.go('guard', { guardDate: tomorrow }), empty ? 'bad' : 'ok')}
+      ${kpi('Παρόντες', c.present - kol.minus.length, () => nav.go('strength', { strengthDate: today, svCat: 'present' }), undefined, 'Χωρίς τους απόντες και τους κωλυόμενους που αφαιρούνται (' + kol.minus.length + '), όπως η Δύναμη', 'strength')}
+      ${kpi('Απόντες', c.absent, () => nav.go('strength', { strengthDate: today, svCat: 'away' }), undefined, (awayText(c) || 'Κανείς') + '. Κάθε άτομο μία φορά. Ιατρικά σε ισχύ: ' + nRec, 'strength')}
+      ${kpi('Εξοδούχοι', c.counts.OUT + c.counts.DN, () => nav.go('outs', { outDate: today }), undefined, c.counts.OUT + ' έξοδος · ' + c.counts.DN + ' ΔΝ', 'outs')}
+      ${wOut > 0 && sh('weapons', 'moves') && kpi('Όπλα εκτός', wOut, () => nav.go('weapons', { wtab: 'moves', wmoves: 'open' }), 'warn', 'Όπλα εκτός οπλοβαστού τώρα, κινήσεις και ένοπλες υπηρεσίες: οι ίδιοι που μετράει ο Οπλισμός. Πάτα για να δεις ποιοι και γιατί')}
+      ${kpi('Κενές αύριο', empty, () => nav.go('guard', { guardDate: tomorrow }), empty ? 'bad' : 'ok', undefined, 'guard')}
     </div>
     <div className="cols">
       <${Card} flush=${true} title="Πρέπει σήμερα" actions=${html`<span className="card__meta">${tasks.length ? tasks.length + ' ανοιχτά' : 'όλα εντάξει'}</span>`}>
         ${tasks.length ? html`<ol className="tasks">${tasks.map((t, i) => html`<li key=${t.key}><span className="tasks__n">${i + 1}</span><div><b>${t.title}</b><small className=${t.urgent ? 'txt-bad' : undefined}>${t.sub}</small></div><${Button} variant=${i === 0 ? 'default' : 'outline'} onClick=${t.fn}>${t.btn}<//></li>`)}</ol>` : html`<div className="empty">Όλα εντάξει. Τίποτα δεν περιμένει από σένα αυτή τη στιγμή.</div>`}
       <//>
-      <${Card} flush=${true} title=${'Απόντες σήμερα · ' + nAway} actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('strength', { strengthDate: today, svCat: 'away' })}>Δύναμη<//>`}>
+      <${Card} flush=${true} title=${'Απόντες σήμερα · ' + nAway} actions=${sh('strength') && html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('strength', { strengthDate: today, svCat: 'away' })}>Δύναμη<//>`}>
         ${nAway ? html`<ul className="rows">${away.slice(0, 12).map(({ p, s }) => html`<li key=${s.id}><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}><${RkName} p=${p}/></button><${Badge} tone=${TYPES[s.type].tone} className="tag" data-tip=${TYPES[s.type].long} data-tip-side="left">${statusLbl(s, state.settings.lists)} ${TYPES[s.type].cat === 'out' ? outUntil(s) : s.open ? 'χωρίς λήξη' : 'έως ' + dm(s.to) + (s.toTime ? ' ' + s.toTime : '')}<//></li>`)}${c.awaySvc.slice(0, Math.max(0, 12 - away.length)).map(p => html`<li key=${'svc' + p.id}><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}><${RkName} p=${p}/></button><${Badge} tone="outline" className="tag" data-tip="Υπηρεσία εκτός στρατοπέδου (π.χ. φυλάκιο): μετρά απών, όπως στην ΗΚΑΙ" data-tip-side="left">${SVC_AWAY_LBL}<//></li>`)}</ul>
           ${nAway > 12 && html`<p className="note rows__more">Και άλλοι ${nAway - 12} στη Δύναμη.</p>`}` : html`<div className="empty">Κανείς δεν λείπει σήμερα.</div>`}
       <//>
     </div>
     <div className="cols cols--b">
-      ${kol.man.length > 0 && html`<${Card} flush=${true} title=${'Κωλυόμενοι · ' + kol.man.length} actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('strength', { strengthDate: today, svCat: kol.minus.length ? 'kol' : 'present' })} data-tip="Δύναμη, με τους κωλυόμενους και γιατί">Δύναμη<//>`}>
+      ${kol.man.length > 0 && html`<${Card} flush=${true} title=${'Κωλυόμενοι · ' + kol.man.length} actions=${sh('strength') && html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('strength', { strengthDate: today, svCat: kol.minus.length ? 'kol' : 'present' })} data-tip="Δύναμη, με τους κωλυόμενους και γιατί">Δύναμη<//>`}>
         <ul className="rows">${kol.man.map(({ p, st, col, minus }) => html`<li key=${st.id}><span style=${{ minWidth: 0 }}><button type="button" className="linkish" onClick=${() => nav.openPerson(p.id)}><${RkName} p=${p}/></button><small className="muted" style=${{ display: 'block' }}>${st.type === 'STEP' ? [TYPES.STEP.long, st.note].filter(Boolean).join(' · ') : st.type === 'LEAVE' ? [statusLbl(st, state.settings.lists), st.note].filter(Boolean).join(' · ') : st.note || 'Κωλυόμενος'}${st.noOut || st.type === 'LEAVE' ? ' · χωρίς έξοδο' : ''} · ${st.open ? 'χωρίς λήξη' : 'έως ' + dm(st.to) + (st.toTime ? ' ' + st.toTime : '')}</small></span><${Badge} tone=${minus ? 'warn' : 'outline'} className="tag" data-tip=${minus ? 'Αφαιρείται από τους παρόντες· ' + (col && col !== '-' ? 'στην ' + HK() + ': ' + kolColName(col) : 'δεν μετρά σε στήλη της ' + HK()) : 'Μένει στους παρόντες, δεν μπαίνει στην ' + HK()} data-tip-side="left">${minus ? (col && col !== '-' ? kolColName(col) : 'εκτός ' + HK()) : 'παρών'}<//></li>`)}</ul>
         <p className="note rows__more">${kol.minus.length} αφαιρούνται από τους παρόντες${kol.keep.length ? ', ' + kol.keep.length + ' μένουν παρόντες' : ''}.</p>
       <//>`}
-      ${away.length > 0 && html`<${Card} flush=${true} title="Ποιοι γυρίζουν και πότε" actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('outs', { outDate: today })}>Εξοδούχοι<//>`}><${ReturnsList} date=${today} limit=${12} at=${strengthAt(state.rules, today, today, now)}/><//>`}
+      ${away.length > 0 && html`<${Card} flush=${true} title="Ποιοι γυρίζουν και πότε" actions=${sh('outs') && html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('outs', { outDate: today })}>Εξοδούχοι<//>`}><${ReturnsList} date=${today} limit=${12} at=${strengthAt(state.rules, today, today, now)}/><//>`}
       ${isUnit(state.settings) && html`<${TodayMoves}/>`}
-      ${ends.length > 0 && html`<${Card} flush=${true} title="Λήγουν" actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('records', { recTab: expired.length ? 'expired' : 'med' })}>Ιατρικά<//>`}>
+      ${ends.length > 0 && html`<${Card} flush=${true} title="Λήγουν" actions=${sh('records') && html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('records', { recTab: expired.length ? 'expired' : 'med' })}>Ιατρικά<//>`}>
         <ul className="rows">${ends.map(({ s, when, tip }) => html`<li key=${s.id}><button type="button" className="linkish" onClick=${() => nav.openPerson(s.pid)}><${RkName} p=${pm.get(s.pid)!}/></button><span className="muted" data-tip=${tip || undefined} data-tip-side="left">${what(s)} · ${when}</span></li>`)}</ul>
       <//>`}
       ${news.length > 0 && html`<${Card} flush=${true} title="Από το προηγούμενο άνοιγμα" actions=${html`<${Button} size="sm" variant="ghost" onClick=${() => nav.go('history')}>Όλο το ιστορικό<//>`}>
@@ -323,7 +328,7 @@ export function StrengthScreen() {
 // Από το μενού (ή Alt+αριθμός) ανοίγει πάντα η καρτέλα ΗΚΑΙ (Shell, MENU_TAB).
 export function HkaiScreen() {
   const { state, today } = useStore(); const nav = useNav();
-  const tab: string = nav.params.hkTab || 'hkai';
+  const tab: string = pickTab(state.settings, 'hkai', nav.params.hkTab || 'hkai');   // κρυφή καρτέλα: ανοίγει η πρώτη που φαίνεται
   const pm = useMemo(() => personMap(state.people), [state.people]);
   const nPun = useMemo(() => state.statuses.filter(s => s.type === 'PUN' && s.to >= today && pm.has(s.pid)).length, [state.statuses, today, pm]);
   const now = useNowMin();
@@ -332,7 +337,7 @@ export function HkaiScreen() {
   const nReq = useMemo(() => reqWaiting(state.requests).filter(r => pm.get(r.pid)?.active).length, [state.requests, pm]);
   const n = (l: string, k: number) => (k ? l + ' (' + k + ')' : l);
   return html`<div>
-    <div style=${{ marginBottom: '14px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ hkTab: v })} items=${[{ value: 'hkai', label: HK() }, { value: 'pun', label: n('Ποινές', nPun) }, { value: 'leave', label: n('Άδειες', nLeave) }, { value: 'req', label: n('Αιτήσεις', nReq) }, { value: 'hd', label: 'Ημερήσια Διαταγή' }]}/></div>
+    <div style=${{ marginBottom: '14px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ hkTab: v })} items=${shownTabs(state.settings, 'hkai', [{ value: 'hkai', label: HK() }, { value: 'pun', label: n('Ποινές', nPun) }, { value: 'leave', label: n('Άδειες', nLeave) }, { value: 'req', label: n('Αιτήσεις', nReq) }, { value: 'hd', label: 'Ημερήσια Διαταγή' }])}/></div>
     ${tab === 'pun' ? html`<${RecordList} mode="pun"/>` : tab === 'leave' ? html`<${LeavesTab}/>` : tab === 'req' ? html`<${RequestsTab}/>` : tab === 'hd' ? html`<${HdTab}/>` : html`<${HkaiMain}/>`}
   </div>`;
 }
@@ -350,7 +355,7 @@ function RequestsLink({ date }: { date: string }) {
   const pm = useMemo(() => personMap(state.people), [state.people]);
   const nDay = state.requests.filter(r => r.date === date && pm.has(r.pid)).length;
   const nWait = reqWaiting(state.requests).filter(r => pm.get(r.pid)?.active).length;
-  return html`<${Card} title="5. Αιτήσεις" actions=${html`<${Button} size="sm" variant="outline" onClick=${() => nav.set({ hkTab: 'req' })}>Αιτήσεις<//>`}>
+  return html`<${Card} title="5. Αιτήσεις" actions=${isShown(state.settings, 'hkai', 'req') && html`<${Button} size="sm" variant="outline" onClick=${() => nav.set({ hkTab: 'req' })}>Αιτήσεις<//>`}>
     <p className="note" style=${{ margin: 0 }}>${nDay ? nDay + (nDay === 1 ? ' αίτηση' : ' αιτήσεις') : 'Καμία αίτηση'} για ${date === today ? 'σήμερα' : dm(date)}${nWait ? ' · ' + nWait + (nWait === 1 ? ' αίτηση περιμένει' : ' αιτήσεις περιμένουν') + ' απάντηση' : ''}.</p>
   <//>`;
 }
@@ -614,26 +619,26 @@ export function CommandPalette({ onClose }: P) {
   const { state, today, tomorrow } = useStore(); const nav = useNav(); const usb = useUsbCopy();
   const [q, setQ] = useState(''); const [sel, setSel] = useState(0); const dq = useDeferredValue(q);
   const ACTIONS = [
-    { t: 'Εξοδούχοι σήμερα', k: 'ΕΞΟΔΟΥΧΟΙ ΕΞΟΔΟΣ ΔΝ ΔΙΑΝΥΚΤΕΡΕΥΣΗ ΠΑΡΑΜΕΝΟΝΤΕΣ', fn: () => nav.go('outs', { outDate: today }) },
-    { t: 'Υπηρεσίες αύριο', k: 'ΥΠΗΡΕΣΙΕΣ ΦΡΟΥΡΑ ΘΑΛΑΜΟΦΥΛΑΚΕΣ ΜΑΓΕΙΡΕΙΑ ΛΥ', fn: () => nav.go('guard', { guardDate: tomorrow }) },
-    { t: HK() + ' σήμερα', k: HK() + ' ΗΜΕΡΗΣΙΑ ΑΝΑΦΟΡΑ ΚΑΤΑΣΤΑΣΗ', fn: () => nav.go('hkai', { hkaiDate: today }) },
+    { t: 'Εξοδούχοι σήμερα', k: 'ΕΞΟΔΟΥΧΟΙ ΕΞΟΔΟΣ ΔΝ ΔΙΑΝΥΚΤΕΡΕΥΣΗ ΠΑΡΑΜΕΝΟΝΤΕΣ', v: 'outs', fn: () => nav.go('outs', { outDate: today }) },
+    { t: 'Υπηρεσίες αύριο', k: 'ΥΠΗΡΕΣΙΕΣ ΦΡΟΥΡΑ ΘΑΛΑΜΟΦΥΛΑΚΕΣ ΜΑΓΕΙΡΕΙΑ ΛΥ', v: 'guard', fn: () => nav.go('guard', { guardDate: tomorrow }) },
+    { t: HK() + ' σήμερα', k: HK() + ' ΗΜΕΡΗΣΙΑ ΑΝΑΦΟΡΑ ΚΑΤΑΣΤΑΣΗ', v: 'hkai', fn: () => nav.go('hkai', { hkaiDate: today }) },
     { t: 'Δήλωσε ιατρικό (ΕΑ, ΕΑΡΒ, ΕΥ, ΕΟ, ΝΟΣ)', k: 'ΙΑΤΡΙΚΑ ΕΑ ΕΑΡΒ ΑΡΒΥΛΩΝ ΕΥ ΕΟ ΝΟΣ', fn: () => nav.declare({ cat: 'med', from: today, to: addDays(today, 2) }) },
     { t: 'Νέα ποινή (αίτηση στην ' + HK() + ')', k: 'ΠΟΙΝΗ ΤΙΜΩΡΗΜΕΝΟΣ ΚΡΑΤΗΣΗ ΠΕΡΙΟΡΙΣΜΟΣ', fn: () => nav.declare({ cat: 'pun', from: today, to: addDays(today, 4) }) },
-    { t: 'Ιατρικά', k: 'ΙΑΤΡΙΚΑ ΕΥ ΕΑ ΕΟ ΣΤΕΠ ΛΗΞΗ', fn: () => nav.go('records', { recTab: 'med' }) },
-    { t: HK() + ' › Ποινές', k: 'ΠΟΙΝΕΣ ΤΙΜΩΡΗΜΕΝΟΙ ΣΤΕΡΗΣΗ ΚΡΑΤΗΣΗ', fn: () => nav.go('hkai', { hkTab: 'pun' }) },
-    { t: HK() + ' › Άδειες', k: 'ΑΔΕΙΕΣ ΤΙΜΗΤΙΚΗ ΑΝΑΡΡΩΤΙΚΗ ΕΠΙΣΤΡΟΦΗ', fn: () => nav.go('hkai', { hkTab: 'leave' }) },
-    { t: HK() + ' › Αιτήσεις', k: 'ΑΙΤΗΣΕΙΣ ΑΙΤΗΣΗ ΑΔΕΙΑΣ ΕΓΚΡΙΣΗ', fn: () => nav.go('hkai', { hkTab: 'req' }) },
+    { t: 'Ιατρικά', k: 'ΙΑΤΡΙΚΑ ΕΥ ΕΑ ΕΟ ΣΤΕΠ ΛΗΞΗ', v: 'records', fn: () => nav.go('records', { recTab: 'med' }) },
+    { t: HK() + ' › Ποινές', k: 'ΠΟΙΝΕΣ ΤΙΜΩΡΗΜΕΝΟΙ ΣΤΕΡΗΣΗ ΚΡΑΤΗΣΗ', v: 'hkai', tab: 'hkai.pun', fn: () => nav.go('hkai', { hkTab: 'pun' }) },
+    { t: HK() + ' › Άδειες', k: 'ΑΔΕΙΕΣ ΤΙΜΗΤΙΚΗ ΑΝΑΡΡΩΤΙΚΗ ΕΠΙΣΤΡΟΦΗ', v: 'hkai', tab: 'hkai.leave', fn: () => nav.go('hkai', { hkTab: 'leave' }) },
+    { t: HK() + ' › Αιτήσεις', k: 'ΑΙΤΗΣΕΙΣ ΑΙΤΗΣΗ ΑΔΕΙΑΣ ΕΓΚΡΙΣΗ', v: 'hkai', tab: 'hkai.req', fn: () => nav.go('hkai', { hkTab: 'req' }) },
     { t: 'Δώσε άδεια', k: 'ΑΔΕΙΑ', fn: () => nav.declare({ cat: 'abs' }) },
-    { t: 'Δύναμη σήμερα', k: 'ΔΥΝΑΜΗ ΚΑΤΑΣΤΑΣΗ', fn: () => nav.go('strength', { strengthDate: today }) },
+    { t: 'Δύναμη σήμερα', k: 'ΔΥΝΑΜΗ ΚΑΤΑΣΤΑΣΗ', v: 'strength', fn: () => nav.go('strength', { strengthDate: today }) },
     { t: 'Εισαγωγή Δυναμολογίου', k: 'ΕΙΣΑΓΩΓΗ ΔΥΝΑΜΟΛΟΓΙΟ ΕΣΣΟ EXCEL', fn: () => nav.go('templates', { tab: 'import' }) },
     { t: 'Αρχεία Excel (από πού διαβάζει, πού γράφει)', k: 'ΑΡΧΕΙΑ EXCEL ΦΥΛΛΟ ΣΤΗΛΕΣ ΑΝΤΙΣΤΟΙΧΙΣΗ ΠΗΓΕΣ', fn: () => nav.go('templates', { tab: 'files' }) },
     { t: 'Ιστορικό ενεργειών', k: 'ΙΣΤΟΡΙΚΟ ΑΝΑΙΡΕΣΗ', fn: () => nav.go('history') },
     { t: 'Νέα σημείωση (Ctrl+Shift+N)', k: 'ΝΕΑ ΣΗΜΕΙΩΣΗ ΣΗΜΕΙΩΣΕΙΣ ΧΑΡΤΑΚΙ ΥΠΕΝΘΥΜΙΣΗ ΘΥΜΗΣΟΥ', fn: () => nav.note({}) },
-    { t: 'Σημειώσεις', k: 'ΣΗΜΕΙΩΣΕΙΣ ΧΑΡΤΑΚΙΑ ΥΠΕΝΘΥΜΙΣΕΙΣ', fn: () => nav.go('notes') },
-    { t: 'Σημειώσεις › Υπενθυμίσεις', k: 'ΣΗΜΕΙΩΣΕΙΣ ΥΠΕΝΘΥΜΙΣΕΙΣ ΥΠΕΝΘΥΜΙΣΗ ΣΗΜΕΡΑ', fn: () => nav.go('notes', { nfilter: 'rem' }) },
+    { t: 'Σημειώσεις', k: 'ΣΗΜΕΙΩΣΕΙΣ ΧΑΡΤΑΚΙΑ ΥΠΕΝΘΥΜΙΣΕΙΣ', v: 'notes', fn: () => nav.go('notes') },
+    { t: 'Σημειώσεις › Υπενθυμίσεις', k: 'ΣΗΜΕΙΩΣΕΙΣ ΥΠΕΝΘΥΜΙΣΕΙΣ ΥΠΕΝΘΥΜΙΣΗ ΣΗΜΕΡΑ', v: 'notes', fn: () => nav.go('notes', { nfilter: 'rem' }) },
     { t: 'Οδηγός χρήσης (πώς δουλεύει, τι επηρεάζει τι)', k: 'ΟΔΗΓΟΣ ΟΔΗΓΙΕΣ ΒΟΗΘΕΙΑ ΣΧΕΤΙΚΑ ΕΚΔΟΣΗ HELP ABOUT ΠΩΣ', fn: () => nav.go('guide') },
-    { t: 'Έντυπα (δικά σου Excel)', k: 'ΕΝΤΥΠΑ ΕΝΤΥΠΟ ΠΡΟΤΥΠΑ ΠΡΟΤΥΠΟ ΚΑΤΑΣΤΑΣΗ ΟΝΟΜΑΣΤΙΚΗ ΠΑΡΟΥΣΙΟΛΟΓΙΟ ΤΥΧΑΙΑ ΑΓΓΑΡΕΙΑ EXCEL', fn: () => nav.go('reports') },
-    ...(state.settings.reports || []).map(r => ({ t: 'Βγάλε: ' + r.name, k: 'ΕΝΤΥΠΟ ΕΝΤΥΠΑ ΒΓΑΛΕ ' + norm(r.name), fn: () => nav.go('reports', { repRun: r.id }) })),
+    { t: 'Έντυπα (δικά σου Excel)', k: 'ΕΝΤΥΠΑ ΕΝΤΥΠΟ ΠΡΟΤΥΠΑ ΠΡΟΤΥΠΟ ΚΑΤΑΣΤΑΣΗ ΟΝΟΜΑΣΤΙΚΗ ΠΑΡΟΥΣΙΟΛΟΓΙΟ ΤΥΧΑΙΑ ΑΓΓΑΡΕΙΑ EXCEL', v: 'reports', fn: () => nav.go('reports') },
+    ...(state.settings.reports || []).map(r => ({ t: 'Βγάλε: ' + r.name, k: 'ΕΝΤΥΠΟ ΕΝΤΥΠΑ ΒΓΑΛΕ ' + norm(r.name), v: 'reports', fn: () => nav.go('reports', { repRun: r.id }) })),
     { t: 'Αντίγραφο σε USB', k: 'ΑΝΤΙΓΡΑΦΟ USB BACKUP ΑΣΦΑΛΕΙΑ', fn: () => usb() },
     { t: 'Νέα ΕΣΣΟ / Επαναφορά ΕΣΣΟ', k: 'ΝΕΑ ΕΣΣΟ ΣΕΙΡΑ ΑΡΧΕΙΟ ΕΠΑΝΑΦΟΡΑ RESTORE', fn: () => nav.go('templates', { tab: 'esso' }) },
     { t: 'Επαναφορά από αντίγραφο', k: 'ΕΠΑΝΑΦΟΡΑ ΑΝΤΙΓΡΑΦΟ BACKUP', fn: () => nav.go('templates', { tab: 'backup' }) },
@@ -643,28 +648,29 @@ export function CommandPalette({ onClose }: P) {
     { t: 'Τίτλος και λογότυπο', k: 'ΤΙΤΛΟΣ ΛΟΓΟΤΥΠΟ LOGO ΕΜΦΑΝΙΣΗ ΒΑΘΜΟΣ', fn: () => nav.go('templates', { tab: 'look' }) },
     { t: 'Ρυθμίσεις › Υπηρεσίες και αργίες', k: 'ΘΕΣΕΙΣ ΥΠΗΡΕΣΙΕΣ ΑΡΓΙΕΣ ΒΑΡΔΙΕΣ ΣΙ Σ.Ι. ΠΟΙΟΣ ΚΑΝΕΙ ΤΙ', fn: () => nav.go('templates', { tab: 'duty' }) },
     { t: 'Ρυθμίσεις › Λίστες', k: 'ΛΙΣΤΕΣ ΒΑΘΜΟΙ ΙΑΤΡΙΚΑ ΠΟΙΝΕΣ ΑΔΕΙΕΣ', fn: () => nav.go('templates', { tab: 'lists' }) },
+    { t: 'Οθόνες και καρτέλες', k: 'ΟΘΟΝΕΣ ΚΑΡΤΕΛΕΣ ΚΡΥΨΕ ΚΡΥΦΕΣ ΜΕΝΟΥ ΑΠΟΚΡΥΨΗ ΕΜΦΑΝΙΣΗ ΑΝΟΙΞΕ ΟΛΕΣ', fn: () => nav.go('templates', { tab: 'screens' }) },
     { t: 'Ρυθμίσεις › Εμφάνιση', k: 'ΕΜΦΑΝΙΣΗ ΘΕΜΑ ΣΚΟΤΕΙΝΟ ΠΥΚΝΟΤΗΤΑ', fn: () => nav.go('templates', { tab: 'look' }) },
     // όλες οι οθόνες, οι καρτέλες, τα «+ Νέο…» και οι ενότητες των Ρυθμίσεων (UX Μ8, 22/10: πριν, το «εκτ» δεν έβρισκε τίποτα)
-    { t: 'Σήμερα', k: 'ΣΗΜΕΡΑ ΑΡΧΙΚΗ ΑΠΟΝΤΕΣ ΛΗΓΟΥΝ ΓΥΡΙΖΟΥΝ', fn: () => nav.go('home') },
-    { t: 'Στρατιώτες', k: 'ΔΥΝΑΜΟΛΟΓΙΟ ΣΤΡΑΤΙΩΤΕΣ ΠΡΟΣΩΠΙΚΟ ΛΙΣΤΑ', fn: () => nav.go('people') },
-    { t: 'Νέος στρατιώτης', k: 'ΝΕΟΣ ΣΤΡΑΤΙΩΤΗΣ ΠΡΟΣΘΗΚΗ ΚΑΤΑΤΑΞΗ', fn: () => nav.go('people', { quickAdd: 'one' }) },
-    { t: 'Γρήγορη εισαγωγή στρατιωτών (πολλοί μαζί)', k: 'ΓΡΗΓΟΡΗ ΕΙΣΑΓΩΓΗ ΠΟΛΛΟΙ ΣΤΡΑΤΙΩΤΕΣ ΕΠΙΚΟΛΛΗΣΗ ΝΕΑ ΕΣΣΟ', fn: () => nav.go('people', { quickAdd: 'many' }) },
-    { t: 'Εκτός δύναμης (Στρατιώτες)', k: 'ΕΚΤΟΣ ΔΥΝΑΜΗΣ ΔΙΑΓΡΑΦΕΣ ΑΠΟΛΥΣΗ ΜΕΤΑΘΕΣΗ ΜΕΤΑΚΙΝΗΣΗ', fn: () => nav.go('people', { filter: 'inactive' }) },
-    { t: 'Στελέχη', k: 'ΣΤΕΛΕΧΗ ΥΠΑΞΙΩΜΑΤΙΚΟΙ ΑΞΙΩΜΑΤΙΚΟΙ ΕΠΟΠ ΟΒΑ ΔΥΝΑΜΙΚΟ', fn: () => nav.go('cadre') },
-    { t: 'Υπηρεσίες › Έλεγχος υπηρεσιών', k: 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ΣΕΙΡΑ ΔΙΚΑΙΟΣΥΝΗΣ ΜΗΝΙΑΙΟ ΠΛΕΓΜΑ', fn: () => nav.go('guard', { gopen: 'check' }) },
-    { t: 'Υπηρεσίες › Υπηρεσίες με το χέρι', k: 'ΥΠΗΡΕΣΙΕΣ ΜΕ ΤΟ ΧΕΡΙ ΜΗΝΑ ΑΡΙΘΜΟΣ ΣΥΝΟΛΟ ΓΡΑΨΕ ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ', fn: () => nav.go('guard', { gopen: 'hand' }) },
-    { t: 'Υπηρεσίες › Εξαιρέσεις', k: 'ΕΞΑΙΡΕΣΕΙΣ ΕΞΑΙΡΕΣΗ ΥΠΗΡΕΣΙΑ ΕΦΑΠΑΞ ΜΗΝ ΜΠΕΙ ΣΚ ΑΠΟ ΕΩΣ ΑΙΤΙΟΛΟΓΙΑ', fn: () => nav.go('guard', { gopen: 'skips' }) },
-    { t: 'Υπηρεσίες › Ποιος κάνει τι', k: 'ΠΟΙΟΣ ΚΑΝΕΙ ΤΙ ΠΙΝΑΚΑΣ ΥΠΗΡΕΣΙΕΣ ΑΝΑ ΑΤΟΜΟ', fn: () => nav.go('guard', { gopen: 'who' }) },
-    { t: 'Κανόνες υπηρεσιών', k: 'ΚΑΝΟΝΕΣ ΥΠΗΡΕΣΙΩΝ ΑΝΑΠΑΥΣΗ ΟΡΙΑ ΣΕΙΡΑ ΔΙΚΑΙΟΣΥΝΗΣ ΑΥΣΤΗΡΑ ΑΟΠΛΟΙ', fn: () => nav.go('guard', { gopen: 'rules' }) },
-    { t: 'Εξοδούχοι αύριο', k: 'ΕΞΟΔΟΥΧΟΙ ΑΥΡΙΟ ΕΞΟΔΟΣ', fn: () => nav.go('outs', { outDate: tomorrow }) },
-    { t: 'Ιατρικά που έληξαν', k: 'ΙΑΤΡΙΚΑ ΕΛΗΞΑΝ ΛΗΞΗ', fn: () => nav.go('records', { recTab: 'expired' }) },
-    { t: HK() + ' (η αναφορά)', k: HK() + ' ΗΜΕΡΗΣΙΑ ΑΝΑΦΟΡΑ ΕΚΤΥΠΩΣΗ ΜΠΡΟΣΤΙΝΟ ΠΙΣΩ', fn: () => nav.go('hkai', { hkTab: 'hkai' }) },
-    { t: 'Οχήματα', k: 'ΟΧΗΜΑΤΑ ΟΧΗΜΑ ΠΙΝΑΚΙΔΑ ΚΑΥΣΙΜΑ ΓΕΜΙΣΜΑ ΧΙΛΙΟΜΕΤΡΑ ΣΥΝΤΗΡΗΣΗ ΑΚΙΝΗΣΙΑ ΟΔΗΓΟΣ', fn: () => nav.go('vehicles') },
-    { t: 'Οπλισμός', k: 'ΟΠΛΙΣΜΟΣ ΟΠΛΑ ΟΠΛΟ ΟΠΛΟΣΤΑΣΙΟ ΤΥΦΕΚΙΟ', fn: () => nav.go('weapons') },
-    { t: 'Οπλισμός › Μητρώο οπλισμού και υλικού', k: 'ΜΗΤΡΩΟ ΜΗΤΡΩΟΥ ΟΠΛΙΣΜΟΥ ΥΛΙΚΟΥ ΥΛΙΚΟ ΣΥΝΤΗΡΗΣΗ ΧΡΕΩΣΗ ΟΠΛΑ', fn: () => nav.go('weapons', { wtab: 'mitroo' }) },
-    { t: 'Οπλισμός › Υλικό', k: 'ΥΛΙΚΟ ΔΙΟΠΤΡΕΣ ΑΣΥΡΜΑΤΟΙ ΙΜΑΤΙΣΜΟΣ ΧΡΕΩΣΗ ΠΟΣΟΤΗΤΑ ΣΕΙΡΙΑΚΟΣ', fn: () => nav.go('weapons', { wtab: 'yliko' }) },
-    { t: 'Στελέχη › Υπηρεσίες στελεχών (πρόγραμμα μήνα)', k: 'ΥΠΗΡΕΣΙΕΣ ΣΤΕΛΕΧΩΝ ΠΡΟΓΡΑΜΜΑ ΜΗΝΑ ΑΥΔΜ ΠΥΛΗ ΦΥΛΑΚΙΟ ΟΜΑΔΕΣ ΟΡΙΑ', fn: () => nav.go('cadre', { cview: 'duty' }) },
-    { t: 'Στελέχη › Πρόγραμμα αδειών', k: 'ΠΡΟΓΡΑΜΜΑ ΑΔΕΙΩΝ ΣΤΕΛΕΧΩΝ ΑΔΕΙΕΣ ΑΠΑΛΛΑΓΕΣ ΜΗΝΑΣ', fn: () => nav.go('cadre', { cview: 'plan' }) },
+    { t: 'Σήμερα', k: 'ΣΗΜΕΡΑ ΑΡΧΙΚΗ ΑΠΟΝΤΕΣ ΛΗΓΟΥΝ ΓΥΡΙΖΟΥΝ', v: 'home', fn: () => nav.go('home') },
+    { t: 'Στρατιώτες', k: 'ΔΥΝΑΜΟΛΟΓΙΟ ΣΤΡΑΤΙΩΤΕΣ ΠΡΟΣΩΠΙΚΟ ΛΙΣΤΑ', v: 'people', fn: () => nav.go('people') },
+    { t: 'Νέος στρατιώτης', k: 'ΝΕΟΣ ΣΤΡΑΤΙΩΤΗΣ ΠΡΟΣΘΗΚΗ ΚΑΤΑΤΑΞΗ', v: 'people', fn: () => nav.go('people', { quickAdd: 'one' }) },
+    { t: 'Γρήγορη εισαγωγή στρατιωτών (πολλοί μαζί)', k: 'ΓΡΗΓΟΡΗ ΕΙΣΑΓΩΓΗ ΠΟΛΛΟΙ ΣΤΡΑΤΙΩΤΕΣ ΕΠΙΚΟΛΛΗΣΗ ΝΕΑ ΕΣΣΟ', v: 'people', fn: () => nav.go('people', { quickAdd: 'many' }) },
+    { t: 'Εκτός δύναμης (Στρατιώτες)', k: 'ΕΚΤΟΣ ΔΥΝΑΜΗΣ ΔΙΑΓΡΑΦΕΣ ΑΠΟΛΥΣΗ ΜΕΤΑΘΕΣΗ ΜΕΤΑΚΙΝΗΣΗ', v: 'people', fn: () => nav.go('people', { filter: 'inactive' }) },
+    { t: 'Στελέχη', k: 'ΣΤΕΛΕΧΗ ΥΠΑΞΙΩΜΑΤΙΚΟΙ ΑΞΙΩΜΑΤΙΚΟΙ ΕΠΟΠ ΟΒΑ ΔΥΝΑΜΙΚΟ', v: 'cadre', fn: () => nav.go('cadre') },
+    { t: 'Υπηρεσίες › Έλεγχος υπηρεσιών', k: 'ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ ΣΕΙΡΑ ΔΙΚΑΙΟΣΥΝΗΣ ΜΗΝΙΑΙΟ ΠΛΕΓΜΑ', v: 'guard', tab: 'guard.check', fn: () => nav.go('guard', { gopen: 'check' }) },
+    { t: 'Υπηρεσίες › Υπηρεσίες με το χέρι', k: 'ΥΠΗΡΕΣΙΕΣ ΜΕ ΤΟ ΧΕΡΙ ΜΗΝΑ ΑΡΙΘΜΟΣ ΣΥΝΟΛΟ ΓΡΑΨΕ ΕΛΕΓΧΟΣ ΥΠΗΡΕΣΙΩΝ', v: 'guard', tab: 'guard.check', fn: () => nav.go('guard', { gopen: 'hand' }) },
+    { t: 'Υπηρεσίες › Εξαιρέσεις', k: 'ΕΞΑΙΡΕΣΕΙΣ ΕΞΑΙΡΕΣΗ ΥΠΗΡΕΣΙΑ ΕΦΑΠΑΞ ΜΗΝ ΜΠΕΙ ΣΚ ΑΠΟ ΕΩΣ ΑΙΤΙΟΛΟΓΙΑ', v: 'guard', tab: 'guard.skips', fn: () => nav.go('guard', { gopen: 'skips' }) },
+    { t: 'Υπηρεσίες › Ποιος κάνει τι', k: 'ΠΟΙΟΣ ΚΑΝΕΙ ΤΙ ΠΙΝΑΚΑΣ ΥΠΗΡΕΣΙΕΣ ΑΝΑ ΑΤΟΜΟ', v: 'guard', tab: 'guard.who', fn: () => nav.go('guard', { gopen: 'who' }) },
+    { t: 'Κανόνες υπηρεσιών', k: 'ΚΑΝΟΝΕΣ ΥΠΗΡΕΣΙΩΝ ΑΝΑΠΑΥΣΗ ΟΡΙΑ ΣΕΙΡΑ ΔΙΚΑΙΟΣΥΝΗΣ ΑΥΣΤΗΡΑ ΑΟΠΛΟΙ', v: 'guard', fn: () => nav.go('guard', { gopen: 'rules' }) },
+    { t: 'Εξοδούχοι αύριο', k: 'ΕΞΟΔΟΥΧΟΙ ΑΥΡΙΟ ΕΞΟΔΟΣ', v: 'outs', fn: () => nav.go('outs', { outDate: tomorrow }) },
+    { t: 'Ιατρικά που έληξαν', k: 'ΙΑΤΡΙΚΑ ΕΛΗΞΑΝ ΛΗΞΗ', v: 'records', fn: () => nav.go('records', { recTab: 'expired' }) },
+    { t: HK() + ' (η αναφορά)', k: HK() + ' ΗΜΕΡΗΣΙΑ ΑΝΑΦΟΡΑ ΕΚΤΥΠΩΣΗ ΜΠΡΟΣΤΙΝΟ ΠΙΣΩ', v: 'hkai', tab: 'hkai.hkai', fn: () => nav.go('hkai', { hkTab: 'hkai' }) },
+    { t: 'Οχήματα', k: 'ΟΧΗΜΑΤΑ ΟΧΗΜΑ ΠΙΝΑΚΙΔΑ ΚΑΥΣΙΜΑ ΓΕΜΙΣΜΑ ΧΙΛΙΟΜΕΤΡΑ ΣΥΝΤΗΡΗΣΗ ΑΚΙΝΗΣΙΑ ΟΔΗΓΟΣ', v: 'vehicles', fn: () => nav.go('vehicles') },
+    { t: 'Οπλισμός', k: 'ΟΠΛΙΣΜΟΣ ΟΠΛΑ ΟΠΛΟ ΟΠΛΟΣΤΑΣΙΟ ΤΥΦΕΚΙΟ', v: 'weapons', fn: () => nav.go('weapons') },
+    { t: 'Οπλισμός › Μητρώο οπλισμού και υλικού', k: 'ΜΗΤΡΩΟ ΜΗΤΡΩΟΥ ΟΠΛΙΣΜΟΥ ΥΛΙΚΟΥ ΥΛΙΚΟ ΣΥΝΤΗΡΗΣΗ ΧΡΕΩΣΗ ΟΠΛΑ', v: 'weapons', tab: 'weapons.mitroo', fn: () => nav.go('weapons', { wtab: 'mitroo' }) },
+    { t: 'Οπλισμός › Υλικό', k: 'ΥΛΙΚΟ ΔΙΟΠΤΡΕΣ ΑΣΥΡΜΑΤΟΙ ΙΜΑΤΙΣΜΟΣ ΧΡΕΩΣΗ ΠΟΣΟΤΗΤΑ ΣΕΙΡΙΑΚΟΣ', v: 'weapons', tab: 'weapons.yliko', fn: () => nav.go('weapons', { wtab: 'yliko' }) },
+    { t: 'Στελέχη › Υπηρεσίες στελεχών (πρόγραμμα μήνα)', k: 'ΥΠΗΡΕΣΙΕΣ ΣΤΕΛΕΧΩΝ ΠΡΟΓΡΑΜΜΑ ΜΗΝΑ ΑΥΔΜ ΠΥΛΗ ΦΥΛΑΚΙΟ ΟΜΑΔΕΣ ΟΡΙΑ', v: 'cadre', tab: 'cadre.duty', fn: () => nav.go('cadre', { cview: 'duty' }) },
+    { t: 'Στελέχη › Πρόγραμμα αδειών', k: 'ΠΡΟΓΡΑΜΜΑ ΑΔΕΙΩΝ ΣΤΕΛΕΧΩΝ ΑΔΕΙΕΣ ΑΠΑΛΛΑΓΕΣ ΜΗΝΑΣ', v: 'cadre', tab: 'cadre.plan', fn: () => nav.go('cadre', { cview: 'plan' }) },
     { t: 'Ρυθμίσεις › Άδειες και απαλλαγές στελεχών', k: 'ΑΔΕΙΕΣ ΑΠΑΛΛΑΓΕΣ ΣΤΕΛΕΧΩΝ ΥΠΟΛΟΙΠΟ ΚΑΝΟΝΙΚΗ ΑΜΔ ΚΑΡΤΕΛΑ', fn: () => nav.go('templates', { tab: 'unit' }) },
     { t: 'Ρυθμίσεις › Υπηρεσίες στελεχών', k: 'ΥΠΗΡΕΣΙΕΣ ΣΤΕΛΕΧΩΝ ΟΜΑΔΕΣ ΑΥΔΜ ΟΡΙΑ ΑΝΑΠΑΥΣΗ ΠΡΟΓΡΑΜΜΑ', fn: () => nav.go('templates', { tab: 'cadreDuty' }) },
     { t: 'Ρυθμίσεις › Μητρώο οπλισμού και υλικού', k: 'ΜΗΤΡΩΟ ΚΑΤΗΓΟΡΙΕΣ ΤΥΠΟΙ ΟΠΛΙΣΜΟΥ ΥΛΙΚΟΥ ΟΧΗΜΑΤΩΝ ΘΕΣΕΙΣ ΛΕΞΕΙΣ', fn: () => nav.go('templates', { tab: 'assets' }) },
@@ -673,11 +679,11 @@ export function CommandPalette({ onClose }: P) {
     { t: 'Ρυθμίσεις › Δικές μου στήλες ' + HK(), k: 'ΔΙΚΕΣ ΜΟΥ ΣΤΗΛΕΣ ΣΤΗΛΗ ' + HK() + ' ΚΩΛΥΟΜΕΝΟΙ ΑΠΟΝΤΕΣ ΝΕΑ ΣΤΗΛΗ', fn: () => nav.go('templates', { tab: 'unit' }) },
     { t: 'Αρχεία Excel › Αντιστοίχιση προτύπου', k: 'ΑΝΤΙΣΤΟΙΧΙΣΗ ΠΡΟΤΥΠΟΥ ΑΛΛΗΣ ΜΟΝΑΔΑΣ ΣΤΗΛΕΣ ΕΝΤΥΠΟ ' + HK() + ' ΠΡΟΣΑΡΜΟΓΗ', fn: () => nav.go('templates', { tab: 'files' }) },
     { t: 'Ρυθμίσεις › Κινήσεις δύναμης (ΕΣΣΟ και κινήσεις)', k: 'ΚΙΝΗΣΕΙΣ ΔΥΝΑΜΗΣ ΑΠΟΛΥΣΗ ΕΣΣΟ ΜΕΤΑΘΕΣΗ ΠΡΟΓΡΑΜΜΑΤΙΣΜΕΝΕΣ ΑΚΥΡΩΣΗ', fn: () => nav.go('templates', { tab: 'esso' }) },
-    { t: 'Οπλισμός › Κινήσεις', k: 'ΚΙΝΗΣΕΙΣ ΟΠΛΩΝ ΕΝΤΟΣ ΕΚΤΟΣ ΧΡΕΩΣΗ', fn: () => nav.go('weapons', { wtab: 'moves' }) },
-    { t: 'Έξοδος όπλων…', k: 'ΕΞΟΔΟΣ ΟΠΛΩΝ ΟΠΛΙΣΜΟΣ ΕΚΤΟΣ ΒΓΑΛΕ ΟΠΛΑ ΣΑΡΩΣΗ ΘΕΣΗ ΑΡΙΘΜΟΣ ΟΠΛΟΥ', fn: () => nav.go('weapons', { wtab: 'weapons', wfocus: 'scan' }) },
-    { t: 'Είσοδος όλων…', k: 'ΕΙΣΟΔΟΣ ΟΠΛΩΝ ΟΛΩΝ ΟΠΛΙΣΜΟΣ ΕΝΤΟΣ ΕΠΙΣΤΡΟΦΗ ΟΠΛΑ ΚΙΝΗΣΕΙΣ ΕΚΤΟΣ ΤΩΡΑ', fn: () => nav.go('weapons', { wtab: 'moves', wmoves: 'open', wmreason: undefined, wfocus: 'in' }) },
-    { t: 'Εκτύπωση (ΦΡΟΥΡΑ, ' + HK() + ', Εξοδούχοι, Έντυπα)', k: 'ΕΚΤΥΠΩΣΗ ΕΚΤΥΠΩΣΕ ΤΥΠΩΣΕ ΧΑΡΤΙ ΕΚΤΥΠΩΤΗΣ PDF PRINT ΣΕΛΙΔΕΣ', fn: () => nav.go('reports') },
-    { t: 'Τα έντυπά μου', k: 'ΤΑ ΕΝΤΥΠΑ ΜΟΥ ΔΙΚΑ ΜΟΥ ΑΠΟΘΗΚΕΥΜΕΝΑ', fn: () => nav.go('reports', { repTab: undefined }) },
+    { t: 'Οπλισμός › Κινήσεις', k: 'ΚΙΝΗΣΕΙΣ ΟΠΛΩΝ ΕΝΤΟΣ ΕΚΤΟΣ ΧΡΕΩΣΗ', v: 'weapons', tab: 'weapons.moves', fn: () => nav.go('weapons', { wtab: 'moves' }) },
+    { t: 'Έξοδος όπλων…', k: 'ΕΞΟΔΟΣ ΟΠΛΩΝ ΟΠΛΙΣΜΟΣ ΕΚΤΟΣ ΒΓΑΛΕ ΟΠΛΑ ΣΑΡΩΣΗ ΘΕΣΗ ΑΡΙΘΜΟΣ ΟΠΛΟΥ', v: 'weapons', tab: 'weapons.weapons', fn: () => nav.go('weapons', { wtab: 'weapons', wfocus: 'scan' }) },
+    { t: 'Είσοδος όλων…', k: 'ΕΙΣΟΔΟΣ ΟΠΛΩΝ ΟΛΩΝ ΟΠΛΙΣΜΟΣ ΕΝΤΟΣ ΕΠΙΣΤΡΟΦΗ ΟΠΛΑ ΚΙΝΗΣΕΙΣ ΕΚΤΟΣ ΤΩΡΑ', v: 'weapons', tab: 'weapons.moves', fn: () => nav.go('weapons', { wtab: 'moves', wmoves: 'open', wmreason: undefined, wfocus: 'in' }) },
+    { t: 'Εκτύπωση (ΦΡΟΥΡΑ, ' + HK() + ', Εξοδούχοι, Έντυπα)', k: 'ΕΚΤΥΠΩΣΗ ΕΚΤΥΠΩΣΕ ΤΥΠΩΣΕ ΧΑΡΤΙ ΕΚΤΥΠΩΤΗΣ PDF PRINT ΣΕΛΙΔΕΣ', v: 'reports', fn: () => nav.go('reports') },
+    { t: 'Τα έντυπά μου', k: 'ΤΑ ΕΝΤΥΠΑ ΜΟΥ ΔΙΚΑ ΜΟΥ ΑΠΟΘΗΚΕΥΜΕΝΑ', v: 'reports', fn: () => nav.go('reports', { repTab: undefined }) },
     { t: 'Ρυθμίσεις › Μονάδα και έντυπα', k: 'ΜΟΝΑΔΑ ΚΕΦΑΛΙΔΑ ΙΛΗ ΛΟΧΟΣ ΔΙΟΙΚΗΤΗΣ ΣΕΙΡΕΣ ' + HK(), fn: () => nav.go('templates', { tab: 'unit' }) },
     { t: 'Ρυθμίσεις › Υπογραφές', k: 'ΥΠΟΓΡΑΦΕΣ ΥΠΟΓΡΑΦΗ ΘΕΩΡΗΘΗΚΕ ΔΙΟΙΚΗΤΗΣ', fn: () => nav.go('templates', { tab: 'unit' }) },
     { t: 'Ρυθμίσεις › Υπηρεσίες', k: 'ΘΕΣΕΙΣ ΥΠΗΡΕΣΙΩΝ ΒΑΡΔΙΕΣ ΩΡΕΣ ΕΝΕΡΓΗ ΝΕΑ ΥΠΗΡΕΣΙΑ', fn: () => nav.go('templates', { tab: 'duty', dsub: 'blocks' }) },
@@ -691,7 +697,8 @@ export function CommandPalette({ onClose }: P) {
     ...GUIDE_TITLES.map(([id, t]) => { const h = t.replace(/ΗΚΑΙ/g, HK()); return { t: 'Οδηγός: ' + h, k: 'ΟΔΗΓΟΣ ' + norm(h), fn: () => nav.go('guide', { topic: id }) }; })
   ];
   const n = norm(dq.trim());
-  const acts = ACTIONS.filter(a => !n || a.k.includes(n) || norm(a.t).includes(n));
+  // εντολές που ανοίγουν κρυφή οθόνη ή καρτέλα δεν εμφανίζονται (Ρυθμίσεις › Οθόνες και καρτέλες)
+  const acts = ACTIONS.filter(a => (!(a as any).v || isShown(state.settings, (a as any).v, (a as any).tab?.split('.')[1])) && (!n || a.k.includes(n) || norm(a.t).includes(n)));
   const ppl = n ? searchPeople(state.people, dq).slice(0, 6) : [];
   const nts = n.length > 1 ? (state.notes || []).filter(x => !x.done && noteSearch(state, x, dq)).slice(0, 4) : [];
   // με άδειο πεδίο: πρώτα οι 5 τελευταίοι που άνοιξες

@@ -34,6 +34,7 @@ import { essoPersonTxt } from '../shared/esso';
 import { isUnit, essoRows } from '../shared/mode';
 import { HK, setUnitKind } from '../shared/unit';
 import type { Command } from '../shared/commands';
+import { firstShown, hideNext, isShown } from './shown';
 
 const SCREENS: Record<string, [string, any, any]> = {
   home: ['Σήμερα', Icon.home, TodayScreen], people: ['Στρατιώτες', Icon.people, PeopleScreen], cadre: ['Στελέχη', Icon.cadre, CadreScreen], guard: ['Υπηρεσίες', Icon.guard, GuardScreen],
@@ -127,7 +128,7 @@ function Root({ boot: initial }: { boot: Boot }) {
 }
 
 function Shell() {
-  const { state, audit, today, tomorrow, undo, boot } = useStore();
+  const { state, audit, today, tomorrow, undo, boot, run } = useStore(); const toast = useToast();
   const nm = useNowMin(); const hm = String(Math.floor(nm / 60)).padStart(2, '0') + ':' + String(nm % 60).padStart(2, '0');
   // επεξήγηση της ώρας: ζώνη, διόρθωση και, αν διαφέρει, η ώρα των Windows
   const clockTip = useMemo(() => {
@@ -145,7 +146,8 @@ function Shell() {
   const unitMode = isUnit(state.settings);
   const [activeN, essoN] = useMemo(() => unitMode ? [state.people.filter(p => p.active).length, essoRows(state.people.filter(p => p.active)).length] : [0, 0], [unitMode, state.people]);
   const essos = useMemo(() => (state.settings.essos ? essoPersonTxt(state.settings.essos) : currentEssos(state.people)), [state.settings.essos, state.people]);
-  const [route, setRoute] = useState<Route>({ view: 'home', params: {} });
+  const [route, setRoute] = useState<Route>(() => ({ view: firstShown(state.settings, NAV_MAIN), params: {} }));   // Σήμερα, ή η πρώτη οθόνη που φαίνεται όταν το Σήμερα είναι κρυφό
+  const hidRef = useRef({ settings: state.settings, run, toast }); hidRef.current = { settings: state.settings, run, toast };
   const [layer, setLayer] = useState<any>(null);
   // Υπόμνημα (Shift+F1) και αναζήτηση (Ctrl+K) ανοίγουν από πάνω, χωρίς να κλείσουν τη δήλωση που γράφεις
   const [over, setOver] = useState<'legend' | 'palette' | null>(null);
@@ -180,6 +182,12 @@ function Shell() {
   }, [guard]);
   // από το μενού (χωρίς params): ό,τι άφησες. Με params (π.χ. από το «Σήμερα»): μόνο αυτά, για να ταιριάζουν οι αριθμοί.
   const go = useCallback((view: string, params?: Record<string, any>) => {
+    // κρυφή οθόνη (Ρυθμίσεις › Οθόνες και καρτέλες): μήνυμα με κουμπί που την ξανανοίγει, αντί να ανοίξει
+    const hs = hidRef.current;
+    if (!isShown(hs.settings, view)) {
+      hs.toast({ text: 'Η οθόνη «' + screenName(view) + '» είναι κρυφή. Ρυθμίσεις › Οθόνες και καρτέλες', actions: [{ label: 'Άνοιξε τη', fn: () => { const t = 'εμφάνιση οθόνης «' + screenName(view) + '»'; hs.run({ t: 'setSettings', settings: { hide: hideNext(hidRef.current.settings, view, false) }, text: t }, t); } }] });
+      return;
+    }
     const r = cur.current.route; let base = view === r.view ? r.params : params ? {} : memory.current[view] || {};
     if (!params && MENU_TAB[view]) base = { ...base, [MENU_TAB[view]]: undefined };
     moveTo({ view, params: { ...base, ...(params || {}) } }, true);
@@ -234,6 +242,7 @@ function Shell() {
   const emptyTomorrow = useMemo(() => (state.people.some(p => p.active) ? frouraEmpty(state, tomorrow) : 0), [state, tomorrow]);
   const waiting = useMemo(() => state.requests.filter(r => isWaiting(r) && state.people.some(p => p.id === r.pid && p.active)).length, [state.requests, state.people]);
   const notesDue = useMemo(() => dueCount(state.notes, today), [state.notes, today]);
+  const vis = (v: string) => isShown(state.settings, v);   // κρυφές οθόνες: έξω από το μενού, μαζί με τις ενδείξεις τους
   const navItem = (v: string, inRail = false) => {
     const [, icon] = SCREENS[v]; const label = screenName(v); const n = v === 'guard' ? emptyTomorrow : v === 'hkai' ? waiting : v === 'notes' ? notesDue : 0;
     const what = v === 'guard' ? 'κενές θέσεις αύριο' : v === 'notes' ? 'υπενθυμίσεις σημειώσεων' : 'αιτήσεις περιμένουν';
@@ -261,12 +270,12 @@ function Shell() {
           <${Button} variant="outline" size="sm" disabled=${!lastUndo} data-tip=${lastUndo ? 'Αναίρεση: ' + lastUndo.text + ' (' + (lastUndo.day === today ? '' : dm(lastUndo.day) + ' ') + lastUndo.at + ') · Ctrl+Z' : 'Δεν υπάρχει κάτι για αναίρεση'} data-tip-side="left" onClick=${() => undo()}>Αναίρεση<//>
         </div>
       </header>
-      <nav className="sidenav" aria-label="Κύριο μενού">${NAV_MAIN.map(v => navItem(v, rail))}<div className="sidenav__sep"></div>${NAV_MORE.map(v => navItem(v, rail))}
+      <nav className="sidenav" aria-label="Κύριο μενού">${NAV_MAIN.filter(vis).map(v => navItem(v, rail))}<div className="sidenav__sep"></div>${NAV_MORE.filter(vis).map(v => navItem(v, rail))}
         <button type="button" className="navbtn sidenav__toggle" aria-expanded=${!rail} aria-label=${rail ? 'Άνοιγμα μενού' : undefined} data-tip=${rail ? 'Άνοιγμα μενού (Ctrl+B)' : 'Στενό μενού, για περισσότερο χώρο (Ctrl+B)'} data-tip-side=${rail ? 'right' : undefined} onClick=${toggleRail}>${rail ? Icon.expand : Icon.collapse}<span className="navbtn__lbl">${rail ? 'Άνοιγμα' : 'Σύμπτυξη μενού'}</span></button></nav>
       <main className="main"><${ErrorBoundary} key=${route.view}><${Suspense} fallback=${html`<div className="empty">Φόρτωση…</div>`}><${Screen}/><//><//><${PendingBar}/></main>
     </div>
     <nav className="bottomnav" aria-label="Κύριο μενού">
-      ${MOBILE_MAIN.map(v => html`<button key=${v} type="button" aria-current=${route.view === v ? 'page' : undefined} onClick=${() => go(v)}>${SCREENS[v][1]}${screenName(v)}${v === 'guard' && emptyTomorrow > 0 && html`<span className="dot">${emptyTomorrow}</span>`}</button>`)}
+      ${MOBILE_MAIN.filter(vis).map(v => html`<button key=${v} type="button" aria-current=${route.view === v ? 'page' : undefined} onClick=${() => go(v)}>${SCREENS[v][1]}${screenName(v)}${v === 'guard' && emptyTomorrow > 0 && html`<span className="dot">${emptyTomorrow}</span>`}</button>`)}
       <button type="button" aria-current=${MOBILE_MORE.includes(route.view) ? 'page' : undefined} onClick=${() => setLayer({ kind: 'more' })}>${Icon.more}Άλλα</button>
     </nav>
     ${personId != null && html`<${PersonSheet} pid=${personId} list=${personList} onMove=${(id: number) => guard(() => setPersonId(id))} onClose=${() => guard(() => setPersonId(null))}/>`}
@@ -274,7 +283,7 @@ function Shell() {
     ${leaveNote && html`<${DiscardAsk} title="Να φύγεις χωρίς αποθήκευση;" text="Η σημείωση δεν αποθηκεύτηκε. Αν συνεχίσεις, χάνεται." leave="Συνέχισε χωρίς αποθήκευση" stay="Πίσω στη σημείωση" onStay=${() => setLeaveNote(null)} onLeave=${() => { const go = leaveNote; setLeaveNote(null); go(); }}/>`}
     ${layer && layer.kind === 'declare' && html`<${DeclareStatusDialog} initial=${layer.data || {}} onClose=${() => setLayer(null)}/>`}
     ${layer && layer.kind === 'note' && html`<${NoteDialog} start=${layer.data} onClose=${() => setLayer(null)}/>`}
-    ${layer && layer.kind === 'more' && html`<${Sheet} title=${html`<h2 style=${{ fontSize: '18px' }}>Άλλα</h2>`} onClose=${() => setLayer(null)}><div className="morelist">${MOBILE_MORE.map(v => navItem(v))}</div><//>`}
+    ${layer && layer.kind === 'more' && html`<${Sheet} title=${html`<h2 style=${{ fontSize: '18px' }}>Άλλα</h2>`} onClose=${() => setLayer(null)}><div className="morelist">${MOBILE_MORE.filter(vis).map(v => navItem(v))}</div><//>`}
     ${!baseLater && !layer && state && needsBaselineReview(state) && html`<${BaselineReviewDialog} onClose=${() => setBaseLater(true)}/>`}
     ${updOpen && upd && html`<${UpdateDialog} u=${upd} onClose=${() => setUpdOpen(false)}/>`}
     ${over === 'legend' && html`<${LegendDialog} onClose=${() => setOver(null)}/>`}

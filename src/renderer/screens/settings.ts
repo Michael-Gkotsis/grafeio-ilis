@@ -13,6 +13,7 @@ import { useBlockForm, BlockForm } from '../blockForm';
 import { phaseDelWhy } from '../../shared/commands';
 import { DEFAULT_TZ, DOW_FULL, FIX_MAX, appVsOs, dmy, dow, durLabel, greekHolidays, nowParts, osParts, utcLabel, weekday, zoneLabel, zoneOffset, type Parts } from '../../shared/dates';
 import { useNowMin } from '../clock';
+import { SCREEN_TABLE, hiddenNow, hideNext, isShown, lastTab, settingShown } from '../shown';
 import { codeErrors } from '../../shared/codes';
 import type { BackupInfo, ImportPreview } from '../../shared/api';
 import { usePrefs, type Prefs } from '../prefs';
@@ -366,11 +367,38 @@ function DutySection() {
 }
 
 // Ρυθμίσεις: υπο-μενού αριστερά, ένα κομμάτι τη φορά (Michael, 13/10: «Ρυθμίσεις σαν οθόνη»). Τα παλιά tab (settings) ανοίγουν το «Μονάδα».
-const SET_SECTIONS: [string, string][] = [['unit', 'Μονάδα και έντυπα'], ['heads', 'Επικεφαλίδες εγγράφων'], ['rooms', 'Θάλαμοι και ουλαμοί'], ['duty', 'Υπηρεσίες και αργίες'], ['cadreDuty', 'Υπηρεσίες στελεχών'], ['assets', 'Μητρώο οπλισμού'], ['lists', 'Λίστες'], ['import', 'Εισαγωγή Δυναμολογίου'], ['files', 'Αρχεία Excel'], ['names', 'Ονόματα αρχείων'], ['templates', 'Πρότυπα εφαρμογής'], ['excel', 'Γράμματα Excel'], ['look', 'Εμφάνιση'], ['clock', 'Ώρα και ζώνη ώρας'], ['esso', 'ΕΣΣΟ'], ['backup', 'Αντίγραφα ασφαλείας'], ['update', 'Ενημερώσεις']];
+const SET_SECTIONS: [string, string][] = [['unit', 'Μονάδα και έντυπα'], ['heads', 'Επικεφαλίδες εγγράφων'], ['rooms', 'Θάλαμοι και ουλαμοί'], ['duty', 'Υπηρεσίες και αργίες'], ['cadreDuty', 'Υπηρεσίες στελεχών'], ['assets', 'Μητρώο οπλισμού'], ['lists', 'Λίστες'], ['import', 'Εισαγωγή Δυναμολογίου'], ['files', 'Αρχεία Excel'], ['names', 'Ονόματα αρχείων'], ['templates', 'Πρότυπα εφαρμογής'], ['excel', 'Γράμματα Excel'], ['look', 'Εμφάνιση'], ['screens', 'Οθόνες και καρτέλες'], ['clock', 'Ώρα και ζώνη ώρας'], ['esso', 'ΕΣΣΟ'], ['backup', 'Αντίγραφα ασφαλείας'], ['update', 'Ενημερώσεις']];
+// Οθόνες και καρτέλες που φαίνονται (shown.ts): μόνο εμφάνιση, τα δεδομένα και τα αρχεία Excel/Word δεν αλλάζουν
+function ScreensCard() {
+  const { state, run } = useStore(); const st = state.settings;
+  const nm = (v: string) => (v === 'hkai' ? HK() : SCREEN_TABLE.find(x => x[0] === v)![1]);
+  const save = (id: string, hidden: boolean, what: string) => { const t = (hidden ? 'απόκρυψη ' : 'εμφάνιση ') + what; run({ t: 'setSettings', settings: { hide: hideNext(st, id, hidden) }, text: t }, t); };
+  const row = ([v, , locked, tabs]: (typeof SCREEN_TABLE)[number]) => {
+    const on = isShown(st, v);
+    return html`<div key=${v} className=${'scr__row' + (on ? '' : ' is-off')}>
+      <label className="scr__head"><input type="checkbox" className="ui-switch" role="switch" checked=${on} disabled=${locked} aria-label=${'Η οθόνη ' + nm(v)} onChange=${(e: any) => save(v, !e.target.checked, 'οθόνης «' + nm(v) + '»')}/>
+        <span>${nm(v)}</span>${locked && html`<small>🔒 πάντα</small>`}${!on && html`<${Badge}>κρυφή<//>`}</label>
+      ${tabs.length > 0 && html`<div className="scr__tabs">${tabs.map(([t, l, tl]) => html`<label key=${t} className="ui-checkrow">
+        <input type="checkbox" className="ui-check" checked=${on && isShown(st, v, t)} disabled=${!on || !!tl || lastTab(st, v, t)} onChange=${(e: any) => save(v + '.' + t, !e.target.checked, 'καρτέλας «' + l + '»')}/>
+        <span className=${on && isShown(st, v, t) ? undefined : 'is-off'}>${v === 'hkai' && t === 'hkai' ? HK() : l}${tl ? ' 🔒' : ''}</span></label>`)}</div>`}
+    </div>`;
+  };
+  const main = SCREEN_TABLE.filter(x => !['templates', 'guide', 'history', 'diag'].includes(x[0]));   // οι τέσσερις πάντα ανοιχτές χωρίς καρτέλες γράφονται σε μία γραμμή
+  const left = main.slice(0, 7), right = main.slice(7);
+  const hid = hiddenNow(st, nm);
+  const side = [...(!settingShown(st, 'assets') ? ['Μητρώο οπλισμού'] : []), ...(!settingShown(st, 'cadreDuty') ? ['Υπηρεσίες στελεχών'] : [])];
+  return html`<${Card} title="Οθόνες και καρτέλες" actions=${html`<${Button} variant="outline" disabled=${!hid.length} data-tip=${hid.length ? 'Δείξε ξανά όλες τις οθόνες και τις καρτέλες' : 'Όλες οι οθόνες και οι καρτέλες φαίνονται ήδη'} onClick=${() => { const t = 'εμφάνιση όλων των οθονών και καρτελών'; run({ t: 'setSettings', settings: { hide: [] }, text: t }, t); }}>Άνοιξε όλες<//>`}>
+    <p className="note" style=${{ margin: '0 0 10px' }}>Κλείσε ό,τι δεν χρησιμοποιείς. Φεύγει από το μενού, τις καρτέλες, το «Σήμερα» και την αναζήτηση. <b>Τα στοιχεία μένουν αποθηκευμένα</b> και τα αρχεία Excel/Word βγαίνουν όπως πριν. Άνοιξε τη ξανά και τα βρίσκεις όλα. Ισχύει αμέσως, με Αναίρεση (Ctrl+Z), και είναι ίδιο σε κάθε PC που ανοίγει αυτά τα δεδομένα.</p>
+    <div className="scr"><div>${left.map(row)}</div><div>${right.map(row)}
+      <div className="scr__row"><div className="scr__head"><span>Ρυθμίσεις</span><small>🔒 πάντα</small><small>και Οδηγός, Ιστορικό</small></div></div></div></div>
+    ${hid.length > 0 && html`<div style=${{ marginTop: '12px' }}><${Alert} tone="info"><span>Κρυφά τώρα: <b>${hid.join(', ')}</b>.${side.length ? ' Μαζί κρύβονται και οι Ρυθμίσεις «' + side.join('» και «') + '».' : ''}</span><//></div>`}
+  <//>`;
+}
 export function TemplatesScreen() {
   const { boot, state } = useStore(); const nav = useNav();
   const want = nav.params.tab === 'settings' ? 'unit' : nav.params.tab;
-  const tab = SET_SECTIONS.some(([k]) => k === want) ? want : 'unit';
+  const sections = SET_SECTIONS.filter(([k]) => settingShown(state.settings, k));   // ενότητες που εξυπηρετούν μόνο κρυφό κομμάτι κρύβονται μαζί του
+  const tab = sections.some(([k]) => k === want) ? want : 'unit';
   const templates = html`<div>
       <div className="ui-card"><ul className="tpl">${boot.templates.map(t => html`<li key=${t.file}><div><b>${t.name}</b> <${Badge} tone="ok">Excel<//>${t.custom && html` <${Badge} tone="info">δικό σου<//>`}<small>${t.file}</small></div>
         ${t.ok ? html`<${Badge} tone="ok">✓ Έτοιμο<//>` : html`<${Badge} tone="bad">Λείπει<//>`}</li>`)}</ul></div>
@@ -379,11 +407,11 @@ export function TemplatesScreen() {
     </div>`;
   const body = tab === 'unit' ? html`<div className="stack"><${SettingsCard}/><${SigsCard}/><${HkRowsCard}/><${HkColsCard}/><${TypeColsCard}/><${CadreLeaveCard}/></div>` : tab === 'heads' ? html`<${HeadsSection}/>` : tab === 'rooms' ? html`<${RoomsCard}/>` : tab === 'duty' ? html`<${DutySection}/>` : tab === 'cadreDuty' ? html`<${CadreDutyCard}/>` : tab === 'assets' ? html`<${AssetsCard}/>`
     : tab === 'lists' ? html`<${ListsCard}/>` : tab === 'import' ? html`<${ImportCard}/>` : tab === 'files' ? html`<div className="stack"><${SourcesView}/><${FoldersCard}/></div>`
-    : tab === 'names' ? html`<${FileNamesCard}/>` : tab === 'excel' ? html`<${XlLookCard}/>` : tab === 'look' ? html`<div className="stack"><${BrandCard}/><${AppearanceCard}/></div>` : tab === 'backup' ? html`<${BackupsCard}/>` : tab === 'update' ? html`<${UpdatesCard}/>` : tab === 'esso' ? html`<${EssoCards}/>` : tab === 'clock' ? html`<${ClockCard}/>` : templates;
+    : tab === 'names' ? html`<${FileNamesCard}/>` : tab === 'excel' ? html`<${XlLookCard}/>` : tab === 'look' ? html`<div className="stack"><${BrandCard}/><${AppearanceCard}/></div>` : tab === 'screens' ? html`<${ScreensCard}/>` : tab === 'backup' ? html`<${BackupsCard}/>` : tab === 'update' ? html`<${UpdatesCard}/>` : tab === 'esso' ? html`<${EssoCards}/>` : tab === 'clock' ? html`<${ClockCard}/>` : templates;
   return html`<div>
     <${PageHeader} title="Ρυθμίσεις" sub="Η μονάδα, οι υπηρεσίες, οι λίστες, τα αρχεία Excel και τα έντυπα που συμπληρώνει η εφαρμογή."/>
     <div className="setgrid">
-      <nav className="setnav" aria-label="Ρυθμίσεις">${SET_SECTIONS.map(([k, l]) => html`<button key=${k} type="button" aria-current=${tab === k ? 'page' : undefined} onClick=${() => tab !== k && requestLeave(() => nav.set({ tab: k }))}>${k === 'esso' && isUnit(state.settings) ? 'ΕΣΣΟ και κινήσεις' : l}</button>`)}</nav>
+      <nav className="setnav" aria-label="Ρυθμίσεις">${sections.map(([k, l]) => html`<button key=${k} type="button" aria-current=${tab === k ? 'page' : undefined} onClick=${() => tab !== k && requestLeave(() => nav.set({ tab: k }))}>${k === 'esso' && isUnit(state.settings) ? 'ΕΣΣΟ και κινήσεις' : l}</button>`)}</nav>
       <div className="setbody">${body}</div>
     </div>
   </div>`;
