@@ -70,11 +70,11 @@ function diffMap<K>(before: Map<K, unknown>, after: Map<K, unknown>): { changed:
   after.forEach((_, k) => { if (!before.has(k)) added.push(k); });
   return { changed, removed, added };
 }
-const KV_KEYS = ['rules', 'settings', 'printed', 'baseline', 'hkaiManual', 'cadreList', 'cadreAbs', 'cadreGrants', 'cadreNoDuty', 'cadreDuties', 'cadreDutyOf', 'assets', 'assetLog', 'dutyLog', 'nightTraining', 'weaponLog', 'dutyFix', 'notes', 'outNotes', 'imer', 'hd', 'dayPlan', 'backFix', 'lastExpire', 'dutyOnce'] as const;
+const KV_KEYS = ['rules', 'settings', 'printed', 'baseline', 'hkaiManual', 'cadreList', 'cadreAbs', 'cadreGrants', 'cadreNoDuty', 'cadreDuties', 'cadreDutyOf', 'assets', 'assetLog', 'dutyLog', 'nightTraining', 'weaponLog', 'dutyFix', 'notes', 'outNotes', 'imer', 'hd', 'dayPlan', 'backFix', 'lastExpire', 'dutyOnce', 'dutyHand'] as const;
 // Τιμές που μεγαλώνουν κάθε μέρα: η αναίρεση κρατά μόνο ό,τι άλλαξε (μία μέρα της ΗΚΑΙ, μία απουσία), όχι όλη την τιμή.
 // obj: αντικείμενο ανά ημερομηνία· ids: λίστα με id.
-// dutyLog: υπηρεσίες χωρίς θέση ανά μέρα (από Excel), nightTraining: μέρες με βραδινή εκπαίδευση, dayPlan: ώρες μιας μέρας, backFix: διορθώσεις επιστροφής, dutyOnce: μέρες με 2 υπηρεσίες που μετρούν για μία· η παλιά έκδοση της εφαρμογής απλώς δεν τα διαβάζει
-const KV_ENTRIES: Partial<Record<string, 'obj' | 'ids'>> = { hkaiManual: 'obj', printed: 'obj', cadreAbs: 'ids', cadreGrants: 'ids', cadreNoDuty: 'ids', cadreDuties: 'ids', cadreDutyOf: 'obj', assets: 'ids', assetLog: 'ids', dutyLog: 'obj', nightTraining: 'obj', weaponLog: 'ids', dutyFix: 'ids', notes: 'ids', outNotes: 'obj', imer: 'obj', hd: 'obj', dayPlan: 'obj', backFix: 'ids', dutyOnce: 'obj' };
+// dutyLog: υπηρεσίες χωρίς θέση ανά μέρα (από Excel), nightTraining: μέρες με βραδινή εκπαίδευση, dayPlan: ώρες μιας μέρας, backFix: διορθώσεις επιστροφής, dutyHand: μήνες με υπηρεσίες με το χέρι, dutyOnce: μέρες με 2 υπηρεσίες που μετρούν για μία· η παλιά έκδοση της εφαρμογής απλώς δεν τα διαβάζει
+const KV_ENTRIES: Partial<Record<string, 'obj' | 'ids'>> = { hkaiManual: 'obj', printed: 'obj', cadreAbs: 'ids', cadreGrants: 'ids', cadreNoDuty: 'ids', cadreDuties: 'ids', cadreDutyOf: 'obj', assets: 'ids', assetLog: 'ids', dutyLog: 'obj', nightTraining: 'obj', weaponLog: 'ids', dutyFix: 'ids', notes: 'ids', outNotes: 'obj', imer: 'obj', hd: 'obj', dayPlan: 'obj', backFix: 'ids', dutyOnce: 'obj', dutyHand: 'obj' };
 const entriesOf = (k: string, v: unknown): Map<string, unknown> =>
   KV_ENTRIES[k] === 'ids' ? new Map(((v as { id: string }[]) || []).map(x => [x.id, x])) : new Map(Object.entries((v as Record<string, unknown>) || {}));
 
@@ -177,6 +177,7 @@ export class Store {
     s.settings = migrateSettings({ ...JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), rev: 0, ...(kv.get('settings') || {}) });
     s.printed = kv.get('printed') || {};
     s.baseline = kv.get('baseline') || {};
+    s.dutyHand = kv.get('dutyHand') || {};   // παλιά βάση: δεν υπάρχει, μένει κενό
     s.hkaiManual = kv.get('hkaiManual') || {};
     s.cadreList = kv.get('cadreList') || [];
     s.cadreAbs = kv.get('cadreAbs') || [];

@@ -11,7 +11,7 @@ import { onceDays, onceKeyOfCadre, onceKeyOfPid } from './dutyOnce';
 import { dayTimes, leaveOut, outHeld } from './returns';   // κυκλική εξάρτηση: καλείται μέσα σε συναρτήσεις (returns.ts)
 import {
   ADIK_APS_TYPES, TYPES, TYPE_KEYS, RECORD_CATS, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, STEP_COL, stepColOf, kolColName, kolColOf, kolColsOf, kolHk, coversDay, CAP_KINDS, CAP_ACC, buildPosts, blocksOf, everyBlock, phaseBlocks, dutyStartOf, DEFAULT_BLOCKS, DEFAULT_BLOCKS_SPEN, postTxt, shortName, noteNamesakes,
-  KIND_NAME, type AppState, type CapKey, type Caps, type Phase, type Baseline, type Cadre, type CadreAbs, type CadreDuty, type DutyLog, type Person, type PersonRequest, type Post, type Skip, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
+  KIND_NAME, type AppState, type CapKey, type Caps, type Phase, type Baseline, type DutyHandRow, type Cadre, type CadreAbs, type CadreDuty, type DutyLog, type Person, type PersonRequest, type Post, type Skip, type Status, type TypeKey, type DutyKind, type Guards, type Settings, type Rules, type BlockDef
 } from './domain';
 
 // --------------------------- ευρετήρια (cache ανά αντικείμενο) ---------------------------
@@ -110,7 +110,7 @@ export function monthDuties(s: AppState, date: ISODate, pid: number, idx?: Map<n
       if (k > 1) n -= k - 1;
     }
   }
-  return n;
+  return n + handMonth(s, ym, pid);   // υπηρεσίες του μήνα με το χέρι (χωρίς ημερομηνία)
 }
 // Το όριο του μήνα ενός στελέχους σε θέση στρατιωτών (Michael, 24/11): ΕΝΑ όριο από τα δύο που υπήρχαν χωριστά. Πρώτα το δικό του
 // «υπηρεσίες τον μήνα» (Cadre.monthMax, χωρίς έξτρα), μετά το προσωπικό όριο του προγράμματος στελεχών (cadreDutyOf.limit, με το έξτρα της
@@ -799,13 +799,14 @@ export const outRoomsOn = (rules: Rules, d: ISODate): number[] | null => rules.o
 // log: k = θέση, κενό για υπηρεσία χωρίς θέση (από Excel)· kind = είδος
 // byKind: ανά είδος, και ανά δική σου υπηρεσία («b:» + id, μετρά ως δική της) · log.t: η δική σου υπηρεσία της θέσης
 // once: μέρες με 2+ υπηρεσίες που μετρούν για 1 (state.dutyOnce): το total τις έχει ήδη μετρήσει μία φορά, ο byKind και το log όχι
-export interface DutyStat { byKind: Record<string, number>; total: number; hol: number; last: ISODate | null; lastHol: ISODate | null; log: { d: ISODate; k: string; kind: DutyKind; h: boolean; t?: string }[]; once?: ISODate[] }
+// hand/handHol/handM: υπηρεσίες με το χέρι (state.dutyHand, handExtras) χωρίς ημερομηνία: όλοι οι μήνες μαζί, και ανά μήνα· μετρούν στο total, hol και byKind, ΟΧΙ στο log
+export interface DutyStat { byKind: Record<string, number>; total: number; hol: number; last: ISODate | null; lastHol: ISODate | null; log: { d: ISODate; k: string; kind: DutyKind; h: boolean; t?: string }[]; once?: ISODate[]; hand?: Record<string, number>; handHol?: number; handM?: Record<string, HandX> }
 // ανά ημερολόγιο υπηρεσιών, υπηρεσίες χωρίς θέση και λίστα αργιών: αν αλλάξουν οι αργίες, ξαναμετριούνται οι αργίες του καθενός
 const statsCache = new WeakMap<Guards, { hol: Settings['holidays']; off: Settings['holidaysOff']; log: DutyLog; st: Map<number, DutyStat> }>();
 export const emptyStat = (): DutyStat => ({ byKind: {}, total: 0, hol: 0, last: null, lastHol: null, log: [] });
 export function dutyStats(s: AppState): Map<number, DutyStat> {
   const c = statsCache.get(s.guards); const log = s.dutyLog || NO_LOG;
-  if (c && c.hol === s.settings.holidays && c.off === s.settings.holidaysOff && c.log === log) return withBaseline(s, withOnce(s, c.st));
+  if (c && c.hol === s.settings.holidays && c.off === s.settings.holidaysOff && c.log === log) return withBaseline(s, withHand(s, withOnce(s, c.st)));
   const st = new Map<number, DutyStat>();
   const one = (pid: number, d: ISODate, k: string, kind: DutyKind, h: boolean) => {
     let x = st.get(pid); if (!x) { x = emptyStat(); st.set(pid, x); }
@@ -820,7 +821,78 @@ export function dutyStats(s: AppState): Map<number, DutyStat> {
     for (const e of log[d] || []) one(e.pid, d, '', e.kind, h);
   }
   statsCache.set(s.guards, { hol: s.settings.holidays, off: s.settings.holidaysOff, log, st });
-  return withBaseline(s, withOnce(s, st));
+  return withBaseline(s, withHand(s, withOnce(s, st)));
+}
+// --------------------------- Υπηρεσίες του μήνα με το χέρι (Michael, 27/11) ---------------------------
+// Ο χρήστης γράφει το ΣΥΝΟΛΟ του μήνα ανά υπηρεσία (state.dutyHand[ym][pid]). Το «έξτρα» είναι ό,τι περισσεύει από όσες έχει ήδη η εφαρμογή
+// με ημερομηνία στον μήνα ως τη μέρα αποθήκευσης (on): extra = max(0, γραμμένο − εφαρμογή). Όσες γράψει η εφαρμογή μετά την on προστίθενται
+// από πάνω· όσες μπουν αργότερα στο ημερολόγιο μέρα ≤ on μειώνουν το έξτρα (δεν μετρούν δύο φορές). Το κλειδί είναι της δικαιοσύνης (fairKey).
+// byKey: έξτρα ανά κλειδί δικαιοσύνης· byKind: το ίδιο όπως το μετρά ο byKind των DutyStat (είδος, και για δική σου υπηρεσία και το κλειδί της)
+export interface HandX { byKey: Record<string, number>; byKind: Record<string, number>; total: number; hol: number; on: ISODate }
+const NO_HAND: Record<string, Record<number, DutyHandRow>> = {};
+// όσες υπηρεσίες έχει η εφαρμογή με ημερομηνία στον μήνα (ym) ως τη μέρα on (χωρίς on: όλος ο μήνας), ανά άτομο και κλειδί δικαιοσύνης
+export interface AppMonth { by: Record<string, number>; hol: number }
+export function appMonth(s: AppState, ym: string, on?: ISODate): Map<number, AppMonth> {
+  const m = new Map<number, AppMonth>(); const log = s.dutyLog || NO_LOG;
+  const one = (pid: number, key: string, h: boolean) => { let x = m.get(pid); if (!x) { x = { by: {}, hol: 0 }; m.set(pid, x); } x.by[key] = (x.by[key] || 0) + 1; if (h) x.hol++; };
+  for (let n = 1; n <= 31; n++) {
+    const d = ym + '-' + (n < 10 ? '0' : '') + n; if (on && d > on) break;
+    const g = s.guards[d], l = log[d]; if (!g && !l) continue;
+    const h = isHol(s.settings, d);
+    if (g) for (const k in g) { const post = postBy(s, k); if (post) one(g[k], fairKey(s, post), h); }
+    if (l) for (const e of l) one(e.pid, e.kind, h);
+  }
+  return m;
+}
+const handCache = new WeakMap<object, { guards: Guards; log: DutyLog; settings: Settings; out: Map<string, Map<number, HandX>> }>();
+export function handExtras(s: AppState): Map<string, Map<number, HandX>> {
+  const hand = s.dutyHand || NO_HAND; const log = s.dutyLog || NO_LOG;
+  const c = handCache.get(hand); if (c && c.guards === s.guards && c.log === log && c.settings === s.settings) return c.out;
+  const out = new Map<string, Map<number, HandX>>();
+  // ό,τι έχει η εφαρμογή με ημερομηνία στον μήνα ως την on (μία φορά ανά μήνα και on)
+  const apps = new Map<string, Map<number, AppMonth>>();
+  const appOf = (ym: string, on: ISODate) => { const key = ym + '|' + on; let m = apps.get(key); if (!m) { m = appMonth(s, ym, on); apps.set(key, m); } return m; };
+  for (const ym in hand) {
+    const rows = hand[ym]; let mm: Map<number, HandX> | null = null;
+    for (const id in rows) {
+      const r = rows[id]; const pid = Number(id); const app = appOf(ym, r.on).get(pid);
+      const x: HandX = { on: r.on, byKey: {}, byKind: {}, total: 0, hol: Math.max(0, (r.hol || 0) - (app?.hol || 0)) };
+      for (const k in r.n) { const e = Math.max(0, (r.n[k] || 0) - (app?.by[k] || 0)); if (e) {
+        x.byKey[k] = e; x.total += e;
+        const kind = handKind(s, k); if (kind) x.byKind[kind] = (x.byKind[kind] || 0) + e;
+        if (k.startsWith('b:')) x.byKind[k] = (x.byKind[k] || 0) + e;
+      } }
+      if (!x.total && !x.hol) continue;
+      if (!mm) { mm = new Map(); out.set(ym, mm); }
+      mm.set(pid, x);
+    }
+  }
+  handCache.set(hand, { guards: s.guards, log, settings: s.settings, out });
+  return out;
+}
+// το είδος που μετρά μαζί με το κλειδί: το ίδιο, ή το είδος της δικής σου υπηρεσίας (null αν η υπηρεσία δεν υπάρχει πια)
+const handKind = (s: AppState, key: string): DutyKind | null => {
+  if (!key.startsWith('b:')) return key as DutyKind;
+  const id = key.slice(2); return allPosts(s.settings).find(p => p.block === id)?.kind ?? null;
+};
+// τα έξτρα του μήνα ενός ατόμου (για το όριο του μήνα)
+export const handMonth = (s: AppState, ym: string, pid: number): number => (s.dutyHand?.[ym] ? handExtras(s).get(ym)?.get(pid)?.total || 0 : 0);
+// στα σύνολα (dutyStats): χωρίς ημερομηνία, άρα όχι στο log· όπως η one() προσθέτει το είδος και, για δική σου υπηρεσία, και το κλειδί της
+const handCacheSt = new WeakMap<object, { from: Map<number, DutyStat>; hx: Map<string, Map<number, HandX>>; out: Map<number, DutyStat> }>();
+function withHand(s: AppState, st: Map<number, DutyStat>): Map<number, DutyStat> {
+  const hand = s.dutyHand; if (!hand || !Object.keys(hand).length) return st;
+  const hx = handExtras(s); const c = handCacheSt.get(hand); if (c && c.from === st && c.hx === hx) return c.out;
+  const out = new Map(st); const mine = new Map<number, DutyStat>();
+  for (const [ym, rows] of hx) rows.forEach((h, pid) => {
+    let x = mine.get(pid);
+    if (!x) { const x0 = st.get(pid) || emptyStat(); x = { ...x0, byKind: { ...x0.byKind }, hand: {}, handHol: 0, handM: {} }; mine.set(pid, x); out.set(pid, x); }
+    for (const [k, n] of Object.entries(h.byKind)) x.byKind[k] = (x.byKind[k] || 0) + n;
+    for (const [k, n] of Object.entries(h.byKey)) x.hand![k] = (x.hand![k] || 0) + n;
+    x.total += h.total; x.hol += h.hol; x.handHol! += h.hol; x.handM![ym] = h;
+  });
+  const r = mine.size ? out : st;
+  handCacheSt.set(hand, { from: st, hx, out: r });
+  return r;
 }
 // «Μετρά για 1»: το σύνολο όποιου έχει απάντηση σε μέρα με 2+ υπηρεσίες μετρά τη μέρα μία φορά. Ξεχωριστό αντίγραφο ανά dutyOnce (η βάση της μέτρησης μένει όπως είναι)
 const onceCache = new WeakMap<object, { from: Map<number, DutyStat>; cl: Cadre[] | undefined; out: Map<number, DutyStat> }>();
@@ -873,6 +945,12 @@ export function monthStats(st: Map<number, DutyStat>, ym: string): Map<number, D
       if (e.h) { m.hol++; m.lastHol = e.d; }
       m.last = e.d; m.log.push(e);
     }
+    const h = x.handM?.[ym];   // υπηρεσίες με το χέρι του μήνα (χωρίς ημερομηνία: όχι στο log)
+    if (h) {
+      if (!m) { m = emptyStat(); out.set(pid, m); }
+      m.hand = h.byKey; m.handHol = h.hol; m.total += h.total; m.hol += h.hol;
+      for (const k in h.byKind) m.byKind[k] = (m.byKind[k] || 0) + h.byKind[k];
+    }
   }
   return out;
 }
@@ -919,6 +997,7 @@ function newcomerAvg(s: AppState, inOn: ISODate): { hol: number; total: number }
       if (q.inOn && q.inOn >= inOn) continue;
       n++;
       const b = s.baseline?.[q.id]; if (b) { total += baseTotal(b); hol += b.hol || 0; }
+      for (const h of Object.values(stats.get(q.id)?.handM || {})) if (h.on < inOn) { total += h.total; hol += h.hol; }   // με το χέρι: όσες γράφτηκαν πριν μπει ο νέος
       const sx = stats.get(q.id); let cd = '';
       for (const e of sx?.log || []) { if (e.d >= inOn) break; if (!sx!.once || e.d !== cd || !sx!.once.includes(e.d)) total++; cd = e.d; if (e.h) hol++; }
     }
@@ -941,6 +1020,11 @@ export function fairOf(s: AppState, pid: number, date: ISODate): Fair {
   }
   const b = s.baseline?.[pid];
   if (b) { for (const [k, n] of Object.entries(b)) if (k !== 'hol' && n) { f.byKind[k] = (f.byKind[k] || 0) + n; f.byType[k] = (f.byType[k] || 0) + n; } f.total += baseTotal(b); f.hol += b.hol || 0; }
+  // υπηρεσίες του μήνα με το χέρι (χωρίς ημερομηνία: μετρούν στα σύνολα και στο είδος, όχι στο «τελευταία»)
+  if (st.hand) {
+    for (const h of Object.values(st.handM || {})) { for (const [k, n] of Object.entries(h.byKind)) f.byKind[k] = (f.byKind[k] || 0) + n; f.total += h.total; f.hol += h.hol; }
+    for (const [k, n] of Object.entries(st.hand)) f.byType[k] = (f.byType[k] || 0) + n;
+  }
   if (s.rules.newAvg && pid > 0) {
     const inOn = personMap(s.people).get(pid)?.inOn;
     if (inOn && inOn <= date) { const a = newcomerAvg(s, inOn); f.total += a.total; f.hol += a.hol; f.avg = true; }

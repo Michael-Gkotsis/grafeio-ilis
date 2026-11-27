@@ -55,6 +55,7 @@ src/shared/     pure rules and types shared by main + renderer (domain.ts types,
                 unitLists.ts + listMap.ts = lists of ANOTHER unit: services as a vertical list, outs/leaves side by side, room lists with VLOOKUP (detection, matching, write plans, screen model)
                 rosterUnit.ts + rosterUnitWrite.ts = roster (Δυναμολόγιο) of ANOTHER unit: master list + derived lists, mixed cadre/soldiers, own words (reading, screen model, write plan; used only when the binding has own:true)
                 dutyOnce.ts + dutyOnceAsk.ts = «Μετρά για 1»: a person with 2+ duties on one day counts 1 when the user says so (state.dutyOnce, kv «dutyOnce»): person keys, counting, whom the screen asks (renderer/dutyOnce.ts = dialog and 1/2 toggle)
+                dutyHand: rules.ts handExtras/appMonth = «Υπηρεσίες με το χέρι»: το γραμμένο σύνολο του μήνα (state.dutyHand, kv «dutyHand», command setDutyHand) μείον όσες έχει η εφαρμογή ως τη μέρα αποθήκευσης· μετρά σε dutyStats/fairOf/monthStats/monthDuties, ΠΟΤΕ σε Excel/Word (renderer/screens/dutyHand.ts = το πλέγμα)
                 weaponUnit.ts = weapons file of ANOTHER unit read into the registry (assets.ts): sheets, columns, type/place words, plan «Τι θα αλλάξει» (READ only, never writes their file; command importWeapons)
 src/main/       main.ts (entry, IPC handlers), db.ts (sql.js database), xlsx.ts (own Excel engine), exports.ts
                 (ΦΡΟΥΡΑ/ΗΚΑΙ/Εξοδούχοι forms), hdDocx.ts (Word ΗΔ), print.ts, sources.ts (unit Excel files),

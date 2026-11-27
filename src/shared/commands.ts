@@ -4,15 +4,15 @@ import type { WeaponApply } from './weaponUnit';
 import { HK } from './unit';
 import { applyHkCols, type HkColInput } from './hkCols';
 import { cleanHd, type HdDoc } from './hd';
-import { addDays, dayName, daysBetween, dm, dmy, DOW_FULL, weekday, type ISODate } from './dates';
+import { addDays, dayName, daysBetween, dm, dmy, DOW_FULL, MONTHS, weekday, type ISODate } from './dates';
 import { norm, normGreek, upper } from './text';
-import { noPending, TYPES, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, RECORD_CATS, kolColOf, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, blockGroups, blockShape, cleanShift, everyBlock, hasShift, MAX_NUMS, MAX_PER, reshapeBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Asset, type AssetEvent, type AssetHolder, type Baseline, type Cadre, type CadreAbs, type CadreGrant, type CadreDuty, type CadreDutyPerson, type DutyFix, type Note, type BlockDef, type ShiftDef, type BackFix, type CapKey, type DayPlan, type DutyKind, type HkaiManual, type Move, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
+import { noPending, TYPES, DEFAULT_NUM_ROTS, DEFAULT_STRICT_ORDER, RECORD_CATS, kolColOf, WEEK, CAP_ACC, OUT_NOTE, PUN_KINDS, KIND_NAME, blocksOf, blockGroups, blockShape, cleanShift, everyBlock, hasShift, MAX_NUMS, MAX_PER, reshapeBlock, phaseBase, phaseList, phaseName, shiftGroups, withBlocks, postTxt, shortName, fullName, type AppState, type Asset, type AssetEvent, type AssetHolder, type Baseline, type Cadre, type CadreAbs, type CadreGrant, type CadreDuty, type CadreDutyPerson, type DutyFix, type Note, type BlockDef, type ShiftDef, type BackFix, type CapKey, type DayPlan, type DutyHandRow, type DutyKind, type HkaiManual, type Move, type Person, type PersonRequest, type Phase, type Rules, type Settings, type Skip, type Status, type TypeKey, type WeaponMove } from './domain';
 import { codeErrors, freeCode } from './codes';
 import { cleanEke, ekeWhy, isUnit } from './mode';
 import { essoPersonTxt, parseEsso } from './esso';
 import { mergeDuties, type DutyCell } from './sources';
 import type { AbsNew, CadreNew } from './cadreSource';
-import { leaveCmdOf, sameLeave, nextCadrePid, seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, rosterSameDay, secondDuty, alreadyOn, twoMode, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
+import { cadreOf, leaveCmdOf, sameLeave, nextCadrePid, seatMap, skipTxt, capBlock, capCell, capCols, dutyBlock, lastResort, rosterSameDay, secondDuty, alreadyOn, twoMode, swapCheck, fillDay, outBlock, personMap, planStatusChange, postBy, postOf, ruleBlock, isRecordExpiredOn, sameMed, splitOut, outCutTo, planTo, canOpen, statusesOn, statusWarn, type StatusCmd } from './rules';
 import { noNotes, svcColOk, svcDefault, cadreAbsOf, guessHk, hkClaimOf, hkRowList, itemKey, isAway, itemName, LIST_BASE, leavePhrase, listRows, rankTxt, statusLbl, weaponBack, withOrigin, type HkRowDef, type ListId, type UserLists } from './ranks';
 import { insertCadre, isManualOrder } from './cadre';
 import { clearRange, setNoDuty } from './cadrePlan';
@@ -124,6 +124,8 @@ export type Command =
   | { t: 'addPeople'; people: NewPerson[] }
   | { t: 'setBaseline'; pid: number; baseline: Baseline }
   | { t: 'setBaselines'; baselines: Record<number, Baseline> }
+  // υπηρεσίες του μήνα με το χέρι (Michael, 27/11): n = το ΣΥΝΟΛΟ του μήνα ανά κλειδί δικαιοσύνης· οι γραμμές των ατόμων που στέλνονται αντικαθιστούν τις παλιές του μήνα
+  | { t: 'setDutyHand'; ym: string; rows: Record<number, { n: Record<string, number>; hol?: number }> }
   | { t: 'removeDutyLog'; date: ISODate; pid: number; kind: DutyKind }
   | { t: 'setHkaiManual'; date: ISODate; manual: HkaiManual }
   | { t: 'setHkaiLv'; date: ISODate; on: boolean }
@@ -1366,6 +1368,24 @@ function run(s: AppState, c: Command, ctx: Ctx): Result {
       const settings = s.settings.baselineReviewed ? s.settings : { ...s.settings, baselineReviewed: true };
       if (!n && settings === s.settings) return { state: s, text: '', files: [] };
       return { state: { ...s, baseline: n ? baseline : s.baseline, settings }, text: n ? 'Προηγούμενες υπηρεσίες: άλλαξαν σε ' + n + (n === 1 ? ' άτομο' : ' άτομα') : 'Προηγούμενες υπηρεσίες: έμειναν όπως ήταν', files: n ? ['Έλεγχος υπηρεσιών'] : [] };
+    }
+    case 'setDutyHand': {
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(c.ym)) throw new Error('Ο μήνας δεν είναι σωστός');
+      const num = (v: unknown) => Math.max(0, Math.min(99, Math.floor(Number(v) || 0)));
+      let last: ISODate = c.ym + '-28'; while (addDays(last, 1).slice(0, 7) === c.ym) last = addDays(last, 1);   // τελευταία μέρα του μήνα
+      const on = ctx.today < last ? ctx.today : last;
+      const month = { ...(s.dutyHand?.[c.ym] || {}) }; let n = 0;
+      for (const [id, r] of Object.entries(c.rows || {})) {
+        const pid = Number(id); if (!Number.isInteger(pid) || (!pm.has(pid) && !month[pid] && !cadreOf(s, pid))) continue;
+        const clean: DutyHandRow['n'] = {}; for (const [k, v] of Object.entries(r?.n || {})) { const x = num(v); if (x && k.length <= 40) clean[k] = x; }
+        const hol = num(r?.hol); const old = month[pid];
+        if (!Object.keys(clean).length && !hol) { if (old) { delete month[pid]; n++; } continue; }
+        if (old && JSON.stringify(old.n) === JSON.stringify(clean) && (old.hol || 0) === hol) continue;
+        month[pid] = { on, n: clean, ...(hol ? { hol } : {}) }; n++;
+      }
+      if (!n) return { state: s, text: 'Υπηρεσίες με το χέρι, ' + MONTHS[+c.ym.slice(5) - 1] + ' ' + c.ym.slice(0, 4) + ': έμειναν όπως ήταν', files: [] };
+      const dutyHand = { ...(s.dutyHand || {}) }; if (Object.keys(month).length) dutyHand[c.ym] = month; else delete dutyHand[c.ym];
+      return { state: { ...s, dutyHand }, text: 'Υπηρεσίες με το χέρι, ' + MONTHS[+c.ym.slice(5) - 1] + ' ' + c.ym.slice(0, 4) + ': άλλαξαν σε ' + n + (n === 1 ? ' άτομο' : ' άτομα'), files: [] };
     }
     case 'updatePerson': {
       const old = pm.get(c.person.id); if (!old) throw new Error('Δεν βρέθηκε το άτομο');

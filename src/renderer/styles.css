@@ -1995,3 +1995,18 @@ thead .mg-tail--n{font-size:11px}
 .op__kpi--warn{background:var(--warn-bg);border-color:var(--warn)}.op__kpi--warn .op__kpi-n,.op__kpi--warn .op__kpi-l{color:var(--warn)}
 .op__kpi--bad{background:var(--bad-bg);border-color:var(--bad-line)}.op__kpi--bad .op__kpi-n,.op__kpi--bad .op__kpi-l{color:var(--bad)}
 @media (max-width:900px){.op__kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Υπηρεσίες του μήνα με το χέρι (dutyHand.ts) */
+.hand{max-height:56vh;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);font-size:13px}
+.hand__head,.hand__row{display:grid;align-items:center;min-width:max-content}
+.hand__head{position:sticky;top:0;z-index:2;background:var(--muted);font-weight:600;min-height:44px;border-bottom:1px solid var(--border)}
+.hand__head > span,.hand__row > span{padding:0 6px}.hand__head > :not(:first-child){text-align:center;font-size:12px;line-height:1.2}
+.hand__row{height:38px;border-bottom:1px solid var(--border)}.hand__row:hover{background:var(--hover)}
+.hand__head > :first-child,.hand__row > :first-child{position:sticky;left:0;z-index:1;background:inherit;box-shadow:1px 0 0 var(--border)}
+.hand__head > :first-child{background:var(--muted)}.hand__row > :first-child{background:var(--card);height:100%;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.hand__c{display:flex;align-items:center;gap:4px}
+.hand__in{width:44px;height:30px;padding:0 4px;text-align:center;font-weight:600;font-family:var(--f-mono)}
+.hand__in.is-min{border-color:var(--warn)}
+.hand__app{color:var(--muted-fg);font-size:11px;white-space:nowrap}
+.hand__tot{text-align:center;font-weight:700}
+.hand-x{color:var(--info);font-weight:600;font-size:11px;margin-left:2px;white-space:nowrap}
