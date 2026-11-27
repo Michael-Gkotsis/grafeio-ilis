@@ -8,6 +8,7 @@ import { isUnit } from '../../shared/mode';
 import { ARM_MAX, armMargin } from '../../shared/armed';
 import { RULE_TXT, strictOrderTxt, strictTxt } from '../../shared/rulesText';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
+import { pickTab, shownTabs } from '../shown';
 import { ActiveFilter, DateBar, ExcelSheet, ExportButton, GoLink, PersonPicker, PrintButton, SigsButton, TemplateNote, TimeField, MonthField, useExport, useExportBusy } from '../common';
 import { useHeadPick } from '../headPick';
 import { mins, normTime } from '../../shared/hours';
@@ -504,13 +505,14 @@ export function GuardScreen() {
   const skipN = useMemo(() => state.people.reduce((n, p) => n + (p.skips?.filter(k => k.to >= today).length || 0), 0), [state.people, today]);   // ισχύουν τώρα ή έρχονται
   const whoTab = html`<${WhoDoes} key=${who.n} date=${date} pid=${who.pid}/>`;
   const tabs = [{ value: 'posts', label: 'Θέσεις' + (empty.length ? ' (' + empty.length + ')' : '') }, { value: 'check', label: mobile ? 'Έλεγχος' : 'Έλεγχος υπηρεσιών' }, { value: 'who', label: 'Ποιος κάνει τι' }, { value: 'skips', label: 'Εξαιρέσεις' + (skipN ? ' (' + skipN + ')' : '') }].concat(mobile ? [{ value: 'xl', label: 'Excel' }] : []);
-  const cur = !mobile && tab === 'xl' ? 'posts' : tab;
+  const shownT = shownTabs(state.settings, 'guard', tabs);
+  const cur = pickTab(state.settings, 'guard', !mobile && tab === 'xl' ? 'posts' : tab);   // κρυφή καρτέλα: ανοίγει η πρώτη που φαίνεται
   const emptyOn = (d: string) => { const gd = state.guards[d] || {}; let n = 0; for (const x of posts) if (!gd[x.k]) n++; return n; };
   return html`<div>
     <${PageHeader} title=${'Υπηρεσίες ' + DOW_GEN[parseD(date).getDay()] + ' ' + dm(date)} sub=${html`Κύκλος <b className="mono-lg">${dow(date)} ${dm(date)} ${dutyStartOf(state.settings)} → ${dow(addDays(date, 1))} ${dm(addDays(date, 1))} ${dutyStartOf(state.settings)}</b>`}>
       <div className="page-head__acts"><${Button} variant="outline" onClick=${() => setRules(true)} data-tip=${'Ισχύουν: ' + RULE_TXT(state.rules, state.settings)}>Κανόνες<//><label className="strict-sw" data-tip=${strictTxt(state.rules, state.settings) + (opState(state) ? ' Τώρα: ' + opState(state) + '.' : '')} data-tip-side="bottom"><input type="checkbox" className="ui-check" checked=${!!state.rules.strictUnarmed} onChange=${async (e: any) => { const on = e.target.checked; const nr = { ...state.rules, strictUnarmed: on }; if (await run({ t: 'setRules', rules: nr, text: RULE_TXT(nr, state.settings) }, false)) toast({ text: 'Αυστηρά Άοπλοι: ' + (on ? 'ανοιχτό. Ισχύει στην αυτόματη συμπλήρωση και στο «Επόμενος».' : 'κλειστό, κανονική σειρά.') }); }}/>Αυστηρά Άοπλοι</label><${Button} disabled=${!!afWhy} why=${afWhy} onClick=${autofill} data-tip="Γεμίζει τις κενές θέσεις μόνο με όσους επιτρέπουν οι κανόνες. Σειρά: αργίες (Πέμπτη-Παρασκευή κρατά στην άκρη όσους χρωστάνε ΣΚ), μέρες χωρίς υπηρεσία, λιγότερες υπηρεσίες· από όσους είναι η σειρά τους, η υπηρεσία πάει σε όποιον δεν την έχει κάνει (εναλλαγή υπηρεσιών), μετά κλήρωση. Λεπτομέρειες στο «Κανόνες»." data-tip-side="left">Αυτόματη συμπλήρωση${rTag}<//><${Button} variant="ghost" size="sm" className="rooms-btn" onClick=${() => setRoomsOpen(true)} data-tip="Προαιρετικά: η επόμενη αυτόματη συμπλήρωση (της μέρας ή του ΠΣΚ) παίρνει μόνο από όσους θαλάμους διαλέξεις. Δεν αποθηκεύεται.">${onlyRooms.length ? 'Θάλαμοι: ' + roomsLbl : 'Θάλαμοι…'}<//>${!mobile && html`${hpF.nodeAt('hd')}<${Button} variant="outline" disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>`}</div><//>
     <div className="guard__days"><${DateBar} value=${date} onChange=${setDate} days=${[0, 1, 2, 3, 4, 5, 6].map(i => addDays(today, i))} count=${emptyOn}/></div>
-    <div style=${{ marginBottom: '14px' }}><${Tabs} value=${cur} onChange=${setTab} items=${tabs}/></div>
+    <div style=${{ marginBottom: '14px' }}><${Tabs} value=${cur} onChange=${setTab} items=${shownT}/></div>
     ${cur === 'skips' ? html`<${SkipsView} onPerson=${setProf}/>` : cur === 'who' ? whoTab : mobile ? (cur === 'posts' ? left : cur === 'check' ? check : xl) : (cur === 'posts' ? html`<div className="guard">${left}${side}</div>` : check)}
     ${preview && html`<${Dialog} size="xl" title=${'Προεπισκόπηση · ' + fileName} description="Είναι το ίδιο αρχείο που βγαίνει στο Excel." onClose=${() => setPreview(false)}
       footer=${html`<${Button} variant="outline" onClick=${() => setPreview(false)}>Κλείσε<//><${PrintButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών" variant="outline" take=${hpF.take}/>${hpF.nodeAt('pv')}<${Button} disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//>`}>${sheet()}<//>`}

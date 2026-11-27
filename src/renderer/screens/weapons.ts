@@ -10,6 +10,7 @@ import { html, cx, Badge, Button, Dialog, Icon, PageHeader, Segmented, Strip, Ta
 import { Select } from '../select';
 import { MovesView, Pop, WeaponInDialog, WeaponOutDialog, WeaponState, Key, reasonLbl } from './weaponMoves';
 import { useNav, useOpenFrom, useStore } from '../store';
+import { pickTab, shownTabs } from '../shown';
 import { RegistryView } from './assets';
 import { ActiveFilter, DateBar, SigsMenu } from '../common';
 import { useHeadPick } from '../headPick';
@@ -178,7 +179,7 @@ export function WeaponsScreen() {
   const [sel, setSel] = useState(() => new Set<number>());
   const [outFor, setOutFor] = useState<number[] | null>(null); const [outReason, setOutReason] = useState('');
   const outReasons = useMemo(() => listOf(lists, 'weaponOut'), [lists]); const [inFor, setInFor] = useState<string[] | null>(null);
-  const tab: string = nav.params.wtab || 'weapons';
+  const tab: string = pickTab(state.settings, 'weapons', nav.params.wtab || 'weapons');   // κρυφή καρτέλα: ανοίγει η πρώτη που φαίνεται
   const [onlySel, setOnlySel] = useState(false);       // «Επιλεγμένοι»: δείχνει μόνο τους τσεκαρισμένους, όποια φίλτρα κι αν υπάρχουν
   const [scan, setScan] = useState(''); const [pickMsg, setPickMsg] = useState<{ tone: string; text: string } | null>(null);
   const [lastReason, setLastReason] = useState('');    // ο τελευταίος λόγος εξόδου: το «Ώρα…» ανοίγει με αυτόν, για να επιβεβαιώνει το Enter
@@ -333,7 +334,7 @@ export function WeaponsScreen() {
     const p: Person = items ? it.p : it; const i: number = items ? it.ri : k;
     return html`<${WRow} key=${p.id} p=${p} i=${i} style=${style} selected=${sel.has(p.id)} info=${info} pm=${pm} types=${types} lists=${lists} statuses=${liveSts(state)} date=${date} reset=${reset} onToggle=${toggle} onOpen=${openP} save=${save} commit=${commit} paste=${paste}/>`;
   };
-  const tabsEl = html`<${Tabs} value=${tab} onChange=${(v: string) => nav.set({ wtab: v })} items=${[{ value: 'weapons', label: 'Όπλα ανά άτομο (' + (armedN + secN) + ')' }, { value: 'moves', label: 'Κινήσεις' + (outN ? ' · εκτός ' + outN : '') }, { value: 'mitroo', label: 'Μητρώο όπλων' }, { value: 'yliko', label: 'Υλικό' }]}/>`;
+  const tabsEl = html`<${Tabs} value=${tab} onChange=${(v: string) => nav.set({ wtab: v })} items=${shownTabs(state.settings, 'weapons', [{ value: 'weapons', label: 'Όπλα ανά άτομο (' + (armedN + secN) + ')' }, { value: 'moves', label: 'Κινήσεις' + (outN ? ' · εκτός ' + outN : '') }, { value: 'mitroo', label: 'Μητρώο όπλων' }, { value: 'yliko', label: 'Υλικό' }])}/>`;
   // Μητρώο όπλων και Υλικό: δική τους κεφαλίδα μίας γραμμής, με τις καρτέλες μέσα (assets.ts)
   if (tab === 'mitroo' || tab === 'yliko') return html`<${RegistryView} mode=${tab === 'yliko' ? 'material' : 'weapon'} tabs=${tabsEl}/>`;
   return html`<div>

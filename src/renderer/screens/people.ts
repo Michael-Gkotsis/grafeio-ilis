@@ -7,6 +7,7 @@ import { destNote, reqWhat } from '../../shared/hkaiText';
 import { html, cx, Alert, Badge, Button, Why, missingOf, Dialog, Icon, PageHeader, Segmented, Sheet, SheetNav, Strip, Tabs, VirtualList, useMedia, useSheetNav, useDirty, useToast, useViewportHeight } from '../ui';
 import { Combo, Select } from '../select';
 import { useNav, useOpenFrom, useStore, searchPeople } from '../store';
+import { pickTab, shownTabs } from '../shown';
 import { ActiveFilter, ChangePlanList, ChoiceField, SubField, SigsMenu, UnsavedDialog, DateField, DateRangeField, PersonPicker, StatusBadge, timesHelp, TimeField } from '../common';
 import { useHeadPick } from '../headPick';
 import type { Sig } from '../../shared/sigs';
@@ -108,8 +109,8 @@ const DEF_SORT = { k: 'last', dir: 1 };
 const legacyMatch = (f: string, ss: Status[], lists?: UserLists) => { const away = ss.some(s => isAway(s, lists)); return f === 'present' ? !away : f === 'absent' ? away : (TYPES as any)[f] ? ss.some(s => s.type === f) : true; };
 // Δυναμολόγιο: δύο καρτέλες, η Λίστα και το Ημερολόγιο κωλυομένων (imerologio.ts)
 export function PeopleScreen() {
-  const { state } = useStore(); const nav = useNav(); const tab = nav.params.ptab === 'imer' ? 'imer' : 'list';
-  return html`<div><div style=${{ marginBottom: '14px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ ptab: v === 'imer' ? 'imer' : undefined })} items=${[{ value: 'list', label: 'Λίστα (' + state.people.filter(p => p.active).length + ')' }, { value: 'imer', label: 'Ημερολόγιο κωλυομένων' }]}/></div>
+  const { state } = useStore(); const nav = useNav(); const tab = pickTab(state.settings, 'people', nav.params.ptab === 'imer' ? 'imer' : 'list');
+  return html`<div><div style=${{ marginBottom: '14px' }}><${Tabs} value=${tab} onChange=${(v: string) => nav.set({ ptab: v === 'imer' ? 'imer' : undefined })} items=${shownTabs(state.settings, 'people', [{ value: 'list', label: 'Λίστα (' + state.people.filter(p => p.active).length + ')' }, { value: 'imer', label: 'Ημερολόγιο κωλυομένων' }])}/></div>
     ${tab === 'imer' ? html`<${ImerTab}/>` : html`<${PeopleList}/>`}</div>`;
 }
 function PeopleList() {

@@ -5,6 +5,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { html, cx, Alert, Badge, Button, Why, Dialog, PageHeader, Sheet, SheetNav, Strip, Tabs, useDirty, useSheetNav, useToast } from '../ui';
 import { Select } from '../select';
 import { useNav, useStore } from '../store';
+import { pickTab, shownTabs } from '../shown';
 import { ActiveFilter, ChoiceField, DateRangeField, SigsMenu } from '../common';
 import { useHeadPick } from '../headPick';
 import type { Sig } from '../../shared/sigs';
@@ -88,9 +89,9 @@ export function CadreScreen() {
   // η καρτέλα του στελέχους είναι πλαϊνή κάρτα του Shell (πάνω από κάθε οθόνη)· εδώ μόνο η επιλεγμένη γραμμή και η σειρά ↑/↓
   const card: string | null = nav.params.cadre ?? null; const openCard = (id: string) => nav.openCadre(id, rows.map(r => r.id));
   // δύο όψεις (Michael, 17/11): Λίστα και Πρόγραμμα αδειών· η επιλογή μένει όπως τις άλλες οθόνες (nav.params.cview)
-  const view: string = nav.params.cview === 'plan' ? 'plan' : nav.params.cview === 'duty' ? 'duty' : 'list';
+  const view: string = pickTab(state.settings, 'cadre', nav.params.cview === 'plan' ? 'plan' : nav.params.cview === 'duty' ? 'duty' : 'list');   // κρυφή καρτέλα: ανοίγει η πρώτη που φαίνεται
   const [dutyFor, setDutyFor] = useState<Cadre | null>(null);
-  const tabs = html`<${Tabs} value=${view} onChange=${(v: string) => nav.set({ cview: v === 'list' ? undefined : v })} items=${CADRE_VIEWS}/>`;
+  const tabs = html`<${Tabs} value=${view} onChange=${(v: string) => nav.set({ cview: v === 'list' ? undefined : v })} items=${shownTabs(state.settings, 'cadre', CADRE_VIEWS)}/>`;
   if (view === 'plan') return html`<div>
     <${PageHeader} title="Στελέχη" sub="Πρόγραμμα αδειών του μήνα: ποιος λείπει και πότε. Σύρε πάνω στις μέρες για να βάλεις άδεια ή απαλλαγή."/>
     ${tabs}

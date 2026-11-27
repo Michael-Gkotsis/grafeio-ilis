@@ -64,7 +64,7 @@ src/main/       main.ts (entry, IPC handlers), db.ts (sql.js database), xlsx.ts 
                 tplLists.ts (fill + screen model of those lists; fillFroura / fillOuts call it when a saved mapping matches the file)
                 formEdit.ts (structure of ANOTHER unit's services list in the output copy: remove blocks, add an app service or a state list where asked with the look of an existing block, tidy separators/formulas; called by tplLists.ts when the mapping has show:'remove' or add)
 src/preload/    preload.ts (IPC bridge), print.ts
-src/renderer/   app.ts (shell, nav, shortcuts), screens/*.ts (one per screen; dutyMap.ts, listMap.ts, rosterMap.ts = «Αντιστοίχιση…» dialogs; weaponMap.ts = the same for a weapons file, opened from Οπλισμός › Μητρώο όπλων › Ενέργειες; assets.ts = the Μητρώο όπλων and Υλικό tabs, RegistryView), store.ts, realPreview.ts (RealPreview: pages of the real export file), mockApi.ts, styles.css
+src/renderer/   app.ts (shell, nav, shortcuts), screens/*.ts (one per screen; dutyMap.ts, listMap.ts, rosterMap.ts = «Αντιστοίχιση…» dialogs; weaponMap.ts = the same for a weapons file, opened from Οπλισμός › Μητρώο όπλων › Ενέργειες; assets.ts = the Μητρώο όπλων and Υλικό tabs, RegistryView), store.ts, shown.ts (screens and tabs the user hides: `settings.hide`, table + isShown/shownTabs/pickTab; display only, main never reads it), realPreview.ts (RealPreview: pages of the real export file), mockApi.ts, styles.css
 templates/      the official .xlsx templates (rule 1)
 ```
 - The renderer never imports from `src/main`; it reaches main only through the preload API (`src/shared/api.ts`).

@@ -513,6 +513,7 @@ export interface AssetEvent {
   litres?: number; km?: number;
 }
 export interface Settings {
+  hide?: string[];                       // κρυφές οθόνες και καρτέλες: «weapons» ή «guard.who» (Ρυθμίσεις › Οθόνες και καρτέλες)· ό,τι λείπει φαίνεται, άγνωστα id αγνοούνται· μόνο εμφάνιση, ο main δεν το διαβάζει
   assets?: Partial<AssetCfg>;            // μητρώο οπλισμού και υλικού: κατηγορίες, λέξεις θέσης, μέρες προειδοποίησης· ό,τι λείπει παίρνει την προεπιλογή (shared/assets.ts)
   cadreDuty?: Partial<CadreDutyCfg>;     // υπηρεσίες στελεχών: ομάδες, υπηρεσίες, όρια (Ρυθμίσεις › Υπηρεσίες στελεχών)· ό,τι λείπει παίρνει την προεπιλογή (shared/cadreDuty.ts)
   cadreLeave?: Partial<CadreLeaveCfg>;   // άδειες και απαλλαγές στελεχών (Ρυθμίσεις › Μονάδα και έντυπα)· ό,τι λείπει παίρνει την προεπιλογή (shared/cadreBalance.ts)
