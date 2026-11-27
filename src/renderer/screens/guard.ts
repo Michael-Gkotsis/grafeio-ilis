@@ -32,6 +32,7 @@ import { live, statusLbl } from '../../shared/ranks';
 import { WhoDoes } from './whodoes';
 import { BlockForm, useBlockForm } from '../blockForm';
 import { SkipsView } from './skips';
+import { DutyHandDialog } from './dutyHand';
 type P = any;
 
 // «οπλοφύλακας: ένοπλος» όπως είναι τώρα στις Ρυθμίσεις (μόνο αν η φάση έχει οπλοφύλακες)
@@ -73,7 +74,7 @@ function useDutyMonth() {
 type DutyMonth = ReturnType<typeof useDutyMonth>;
 const MonthSelect = ({ m, width = '190px', small }: { m: DutyMonth; width?: string; small?: boolean }) => html`<${Select} className="ui-input" style=${{ flex: '0 0 ' + width, width, ...(small ? { height: '32px', fontSize: '13px' } : {}) }} aria-label="Μήνας" data-tip="Υπηρεσίες μόνο αυτού του μήνα· «Όλοι οι μήνες» μετρά και τις προηγούμενες υπηρεσίες" value=${m.allM ? '' : m.ym} onChange=${(e: any) => { const v = e.target.value; m.setAllM(!v); if (v) m.setYm(v); }}><option value="">Όλοι οι μήνες</option>${m.months.map(x => html`<option key=${x} value=${x}>${monLbl(x)}</option>`)}<//>`;
 
-function DutyCheck({ onOpen, m }: P) {
+function DutyCheck({ onOpen, m, onHand }: P) {
   const { state, today } = useStore();
   const [q, setQ] = useState(''); const dq = useDeferredValue(q); const [hol, setHol] = useState(false); const [view, setView] = useState('list'); const [pvOpen, setPvOpen] = useState(false);
   // μέρες χωρίς υπηρεσία: από την τελευταία υπηρεσία του, όποιου μήνα (όχι μόνο του μήνα που βλέπεις)
@@ -81,7 +82,7 @@ function DutyCheck({ onOpen, m }: P) {
   const idle = (pid: number): number => { const l = allSt.get(pid)?.last; return l ? Math.max(0, daysBetween(l, today) - 1) : 9999; };
   const { ym, setYm, allM, setAllM, st } = m as DutyMonth;
   // στέλεχος: στο Σύν. μετρούν και οι υπηρεσίες του προγράμματος στελεχών, με το «μετρά για 1» (όπως στο Excel, Michael 26/11)
-  const cadreTotal = (p: P, d: P) => { const c = p.cid ? cadreOf(state, p.id) : undefined; return c ? { ...d, total: cadreCheckTotal(state, c, allM ? undefined : ym) } : d; };
+  const cadreTotal = (p: P, d: P) => { const c = p.cid ? cadreOf(state, p.id) : undefined; return c ? { ...d, total: cadreCheckTotal(state, c, allM ? undefined : ym) + Object.values(d.hand || {}).reduce((a: number, n: any) => a + n, 0) } : d; };
   // στήλες: τα είδη του εντύπου και κάθε δική σου υπηρεσία χωριστά (μετρά ως δική της), και των ανενεργών όσο έχουν
   // υπηρεσίες στο διάστημα (δεν χάνονται)· «Άλλη» μόνο για υπηρεσίες χωρίς θέση (π.χ. «Υ» από το Excel)
   const kinds = useMemo(() => {
@@ -105,7 +106,7 @@ function DutyCheck({ onOpen, m }: P) {
   const chkCols = 'minmax(140px,1fr) repeat(' + kinds.length + ',84px) 52px 52px 78px 62px' + (limOn ? ' 84px' : '');
   const chkMin = 140 + kinds.length * 84 + 52 + 52 + 78 + 62 + (limOn ? 84 : 0);
   const chkHead = kinds.some(k => kindLbl(k).length > 9) ? 58 : 34;
-  return html`<${Card} title="Έλεγχος υπηρεσιών" actions=${html`<${Badge} tone="ok" data-tip="Βγαίνει από το ημερολόγιο υπηρεσιών (ποιος, ποια μέρα, ποια θέση) (Κ-03)" data-tip-side="left">Ενημερώνεται αυτόματα<//>`}>
+  return html`<${Card} title="Έλεγχος υπηρεσιών" actions=${html`<${Button} size="sm" variant="outline" onClick=${onHand} data-tip="Γράψε πόσες υπηρεσίες έκανε ο καθένας τον μήνα που βλέπεις, ανά υπηρεσία" data-tip-side="left">✎ Γράψε με το χέρι…<//><${Badge} tone="ok" data-tip="Βγαίνει από το ημερολόγιο υπηρεσιών (ποιος, ποια μέρα, ποια θέση) (Κ-03)" data-tip-side="left">Ενημερώνεται αυτόματα<//>`}>
     <div className="toolbar"><${Segmented} value=${view} onChange=${setView} items=${[{ value: 'list', label: 'Λίστα' }, { value: 'grid', label: 'Μηνιαίο πλέγμα (Excel)' }]}/>
       ${view === 'grid' && html`<input type="search" className="ui-input" style=${{ width: '240px' }} aria-label="Αναζήτηση στο πλέγμα" placeholder="Όνομα (χωρίς τόνους) · Ctrl+F" value=${q} onChange=${(e: any) => setQ(e.target.value)}/><${MonthField} aria-label="Μήνας" style=${{ width: '170px' }} value=${ym} onChange=${(e: any) => { if (e.target.value) { setYm(e.target.value); setAllM(false); } }}/><${ExportButton} kind="check" date=${ym + '-01'} label=${'Έλεγχος υπηρεσιών ' + mon} size="sm"/><${Button} size="sm" variant="outline" onClick=${() => setPvOpen(true)} data-tip="Το ίδιο αρχείο που βγαίνει στο Excel, σε σελίδες όπως θα τυπωθεί">Προεπισκόπηση αρχείου<//>`}</div>
     ${pvOpen && html`<${Dialog} size="xl" title=${'Προεπισκόπηση · ' + fileNameOf(state.settings, 'check', { text: norm(mon) })} description="Είναι το ίδιο αρχείο που βγαίνει στο Excel (το πλέγμα εδώ πάνω φιλτράρεται, το αρχείο έχει πάντα όλους)." onClose=${() => setPvOpen(false)}
@@ -115,9 +116,9 @@ function DutyCheck({ onOpen, m }: P) {
       <${MonthSelect} m=${m}/>
       <${Segmented} value=${hol ? 'hol' : 'all'} onChange=${(v: string) => { setSk(null); setHol(v === 'hol'); }} items=${[{ value: 'all', label: 'Σειρά δικαιοσύνης', tip: 'Περισσότερες μέρες χωρίς υπηρεσία, μετά λιγότερες συνολικά, μετά λιγότερες αργίες' }, { value: 'hol', label: 'Λιγότερες αργίες' }]}/><${ActiveFilter} parts=${[dq && '«' + dq + '»']} onClear=${() => setQ('')}/><span className="toolbar__count">${rows.length} άτομα</span></div>
     <div className="chk">
-      <${VirtualList} items=${rows} rowHeight=${36} height=${380 + chkHead} headHeight=${chkHead} minWidth=${chkMin} head=${html`<div className="chk__head" style=${{ gridTemplateColumns: chkCols }}>${H('name', 'Ονοματεπώνυμο')}${kinds.map(k => html`<span key=${k}>${H(k, kindLbl(k), kindLbl(k))}</span>`)}${H('total', 'Σύν.')}${H('hol', 'Αργ.', 'Υπηρεσίες σε ΣΚ ή επίσημη αργία')}${H('last', 'Τελευταία')}${H('idle', 'Μέρες', 'Μέρες χωρίς υπηρεσία')}${limOn && H('lim', 'Όριο', 'Υπηρεσίες από το όριο (στρατιώτες: όριο υπηρεσιών στους Κανόνες ή δικό του· στελέχη: όριο του μήνα). Πάνω από το όριο με κίτρινο')}</div>`} renderRow=${(r: P, _i: number, style: P) => html`<div key=${r.p.id} className="chk__row" style=${{ ...style, gridTemplateColumns: chkCols }} role="button" tabIndex="0" onClick=${() => onOpen(r.p.id)}><span data-tip=${rkFull(r.p)}><${RkName} p=${r.p}/></span>${kinds.map(k => html`<span key=${k} className="num">${r.d.byKind[k] || '·'}</span>`)}<span className="num tot">${r.d.total}</span><span className="num hol">${r.d.hol}</span><span className="num last">${r.d.last ? dm(r.d.last) : '—'}${r.d.last && isHol(state.settings, r.d.last) ? ' ★' : ''}</span><span className="num">${r.idle === 9999 ? '—' : r.idle}</span>${limOn && html`<span className=${'num lim' + (r.lim?.over ? ' is-over' : '')} data-tip=${r.lim ? (r.lim.per === 'month' ? 'Υπηρεσίες τον μήνα' : 'Υπηρεσίες συνολικά') + ' από το όριο' + (r.lim.over ? ': ΠΑΝΩ από το όριο' : '') : undefined}>${r.lim ? r.lim.txt : '·'}</span>`}</div>`}/>
+      <${VirtualList} items=${rows} rowHeight=${36} height=${380 + chkHead} headHeight=${chkHead} minWidth=${chkMin} head=${html`<div className="chk__head" style=${{ gridTemplateColumns: chkCols }}>${H('name', 'Ονοματεπώνυμο')}${kinds.map(k => html`<span key=${k}>${H(k, kindLbl(k), kindLbl(k))}</span>`)}${H('total', 'Σύν.')}${H('hol', 'Αργ.', 'Υπηρεσίες σε ΣΚ ή επίσημη αργία')}${H('last', 'Τελευταία')}${H('idle', 'Μέρες', 'Μέρες χωρίς υπηρεσία')}${limOn && H('lim', 'Όριο', 'Υπηρεσίες από το όριο (στρατιώτες: όριο υπηρεσιών στους Κανόνες ή δικό του· στελέχη: όριο του μήνα). Πάνω από το όριο με κίτρινο')}</div>`} renderRow=${(r: P, _i: number, style: P) => html`<div key=${r.p.id} className="chk__row" style=${{ ...style, gridTemplateColumns: chkCols }} role="button" tabIndex="0" onClick=${() => onOpen(r.p.id)}><span data-tip=${rkFull(r.p)}><${RkName} p=${r.p}/></span>${kinds.map(k => { const hx = r.d.hand?.[k] || 0; const n = (r.d.byKind[k] || 0) - hx; return html`<span key=${k} className="num">${n || hx ? n : '·'}${hx > 0 && html`<span className="hand-x" data-tip="Γραμμένες με το χέρι (χωρίς ημερομηνία)">+${hx}✎</span>`}</span>`; })}<span className="num tot">${r.d.total}</span><span className="num hol">${r.d.hol}</span><span className="num last">${r.d.last ? dm(r.d.last) : '—'}${r.d.last && isHol(state.settings, r.d.last) ? ' ★' : ''}</span><span className="num">${r.idle === 9999 ? '—' : r.idle}</span>${limOn && html`<span className=${'num lim' + (r.lim?.over ? ' is-over' : '')} data-tip=${r.lim ? (r.lim.per === 'month' ? 'Υπηρεσίες τον μήνα' : 'Υπηρεσίες συνολικά') + ' από το όριο' + (r.lim.over ? ': ΠΑΝΩ από το όριο' : '') : undefined}>${r.lim ? r.lim.txt : '·'}</span>`}</div>`}/>
     </div></div>`}
-    <p className="note" style=${{ margin: '8px 0 0' }}>${view === 'list' && !allM ? monLbl(ym) + ': μετρούν μόνο οι υπηρεσίες του μήνα, χωρίς τις προηγούμενες. ' : ''}Κάθε υπηρεσία κρατιέται με την ημερομηνία της (★ = ΣΚ ή αργία). Πάτα σε άτομο για όλο το ημερολόγιο.</p>
+    <p className="note" style=${{ margin: '8px 0 0' }}>${view === 'list' && !allM ? monLbl(ym) + ': μετρούν μόνο οι υπηρεσίες του μήνα, χωρίς τις προηγούμενες. ' : ''}Κάθε υπηρεσία κρατιέται με την ημερομηνία της (★ = ΣΚ ή αργία). ${view === 'list' && rows.some(r => r.d.hand) ? '✎ = γραμμένες με το χέρι (χωρίς ημερομηνία). ' : ''}Πάτα σε άτομο για όλο το ημερολόγιο.</p>
   <//>`;
 }
 
@@ -304,14 +305,14 @@ export function GuardScreen() {
   const { state, run, today, tomorrow, undoMark } = useStore(); const toast = useToast(); const nav = useNav(); const mobile = useMedia('(max-width: 767px)');
   const once = useDutyOnce(); const ex = useExport(); const xb = useExportBusy(); const hpF = useHeadPick('froura'); const hpPf = useHeadPick('froura'); const hpPo = useHeadPick('outs');
   const date = nav.params.guardDate || tomorrow; const setDate = (d: string) => nav.set({ guardDate: d });
-  const [tab, setTab] = useState('posts'); const [rules, setRules] = useState(false);
+  const [tab, setTab] = useState('posts'); const [rules, setRules] = useState(false); const [handOpen, setHandOpen] = useState(false);
   // θάλαμοι μόνο για την επόμενη αυτόματη συμπλήρωση (κενό = όλοι)· μετά τη συμπλήρωση ξαναγυρίζει σε όλους
   const [onlyRooms, setOnlyRooms] = useState<number[]>([]); const [roomsOpen, setRoomsOpen] = useState(false);
   const roomsLbl = onlyRooms.map(n => 'Θ' + n).join(', '); const rTag = onlyRooms.length ? ' · ' + roomsLbl : '';
   const rArg = onlyRooms.length ? { rooms: onlyRooms } : {};
   const fromTxt = onlyRooms.length ? ' (μόνο ' + roomsLbl + ')' : '';
   // από το Ctrl+K: ανοίγει κατευθείαν μια καρτέλα ή τους Κανόνες
-  useEffect(() => { const o = nav.params.gopen; if (!o) return; nav.set({ gopen: undefined }); if (o === 'rules') setRules(true); else setTab(o); }, [nav.params.gopen]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const o = nav.params.gopen; if (!o) return; nav.set({ gopen: undefined }); if (o === 'rules') setRules(true); else if (o === 'hand') { setTab('check'); setHandOpen(true); } else setTab(o); }, [nav.params.gopen]);   // eslint-disable-line react-hooks/exhaustive-deps
   // «Ποιος κάνει τι»: η καρτέλα, μόνο με τον στρατιώτη όταν έρχεσαι από ένα όνομα (κλειδί για να ξαναρχίσει)
   const [who, setWho] = useState<{ pid: number | null; n: number }>({ pid: null, n: 0 });
   const setProf = (pid: number) => { setWho(w => ({ pid: pid >= 0 ? pid : null, n: w.n + 1 })); setTab('who'); };
@@ -499,7 +500,7 @@ export function GuardScreen() {
     </section>
   </div>`;
   const xl = html`<div className="guard__xl">${sheet()}<div className="toolbar" style=${{ marginTop: '10px' }}>${hpF.node}<${Button} disabled=${!!xb} onClick=${exportX}>${xb === 'froura' ? 'Δημιουργία…' : 'Βγάλε το Excel'}<//><${PrintButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών" variant="outline" take=${hpF.take}/><${SigsButton} kind="froura" date=${date} label="η κατάσταση υπηρεσιών" headId=${hpF.headId} take=${hpF.take}/></div><${TemplateNote} ids=${['froura', 'check']}/></div>`;
-  const check = html`<${DutyCheck} onOpen=${nav.openPerson} m=${mon}/>`;
+  const check = html`<${DutyCheck} onOpen=${nav.openPerson} m=${mon} onHand=${() => setHandOpen(true)}/>${handOpen && html`<${DutyHandDialog} ym=${mon.ym} onClose=${() => setHandOpen(false)}/>`}`;
   const skipN = useMemo(() => state.people.reduce((n, p) => n + (p.skips?.filter(k => k.to >= today).length || 0), 0), [state.people, today]);   // ισχύουν τώρα ή έρχονται
   const whoTab = html`<${WhoDoes} key=${who.n} date=${date} pid=${who.pid}/>`;
   const tabs = [{ value: 'posts', label: 'Θέσεις' + (empty.length ? ' (' + empty.length + ')' : '') }, { value: 'check', label: mobile ? 'Έλεγχος' : 'Έλεγχος υπηρεσιών' }, { value: 'who', label: 'Ποιος κάνει τι' }, { value: 'skips', label: 'Εξαιρέσεις' + (skipN ? ' (' + skipN + ')' : '') }].concat(mobile ? [{ value: 'xl', label: 'Excel' }] : []);

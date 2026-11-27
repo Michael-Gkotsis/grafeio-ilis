@@ -688,6 +688,7 @@ export interface AppState {
   settings: Settings;
   printed: Record<ISODate, string>;
   baseline: Record<number, Baseline>;    // υπηρεσίες πριν από την εφαρμογή (χωρίς ημερομηνία)
+  dutyHand: Record<string, Record<number, DutyHandRow>>;   // υπηρεσίες του μήνα με το χέρι (kv «dutyHand»): ανά 'ΕΕΕΕ-ΜΜ', ανά άτομο (rules.ts handExtras)
   hkaiManual: Record<ISODate, HkaiManual>;
   cadreList: Cadre[];                    // στελέχη με ονόματα (αν είναι κενό, η ΗΚΑΙ παίρνει τους αριθμούς των Ρυθμίσεων)
   cadreAbs: CadreAbs[];                  // απουσίες στελεχών
@@ -806,10 +807,13 @@ export const stepColOf = (lists?: OwnCols | null, dflt: string | null = STEP_COL
 };
 // Προηγούμενες υπηρεσίες ανά είδος (+ πόσες σε ΣΚ/αργία), γραμμένες με το χέρι
 export type Baseline = Partial<Record<DutyKind, number>> & { hol?: number };
+// Υπηρεσίες ενός μήνα γραμμένες με το χέρι (Michael, 27/11): n = το ΣΥΝΟΛΟ του μήνα ανά κλειδί δικαιοσύνης (fairKey: είδος ή 'b:' + id δικής σου υπηρεσίας),
+// hol = πόσες από αυτές σε ΣΚ/αργία, on = η μέρα της αποθήκευσης (ό,τι έχει ήδη η εφαρμογή ως τότε δεν προστίθεται ξανά)
+export interface DutyHandRow { on: ISODate; n: Record<string, number>; hol?: number }
 // Ό,τι στην ΗΚΑΙ δεν βγαίνει από την εφαρμογή: αριθμοί ανά βαθμό και στήλη, και κείμενα της πίσω σελίδας
 // lv: 3. ΑΔΕΙΕΣ ναι/όχι για τη μέρα (λείπει = η προεπιλογή των Ενοτήτων)· μπαίνει με τον διακόπτη της μέρας ή όταν βγαίνει το Excel
 export interface HkaiManual { cells: Record<string, Record<string, number>>; text: Record<string, string>; lv?: boolean }
 
 export const emptyState = (): AppState => ({
-  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, hkaiManual: {}, cadreList: [], cadreAbs: [], requests: [], notes: [], dutyLog: {}, nightTraining: {}, weaponLog: [], dutyFix: [], dayPlan: {}, backFix: [], outNotes: {}, imer: {}, hd: {}, lastExpire: ''
+  people: [], statuses: [], guards: {}, caps: {}, rules: { ...DEFAULT_RULES }, settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), printed: {}, baseline: {}, dutyHand: {}, hkaiManual: {}, cadreList: [], cadreAbs: [], requests: [], notes: [], dutyLog: {}, nightTraining: {}, weaponLog: [], dutyFix: [], dayPlan: {}, backFix: [], outNotes: {}, imer: {}, hd: {}, lastExpire: ''
 });

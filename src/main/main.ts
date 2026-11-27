@@ -499,7 +499,7 @@ function scheduleAuto(prev: AppState, next: AppState, toExcel = true) {
   if (prev === next) return;
   if (toExcel) kindsOf(prev, next).forEach(k => dirty.add(k));
   // τα έντυπα δεν χρησιμοποιούν δυνατότητες ούτε το «βγήκε στις…»: χωρίς αυτά δεν ξαναπαράγονται
-  if ((Object.keys(next) as (keyof AppState)[]).some(k => k !== 'printed' && k !== 'caps' && k !== 'lastExpire' && k !== 'notes' && k !== 'imer' && k !== 'hd' && prev[k] !== next[k])) { formsDirty = true; if (autoReps().length) repDirty = true; }
+  if ((Object.keys(next) as (keyof AppState)[]).some(k => k !== 'printed' && k !== 'caps' && k !== 'lastExpire' && k !== 'notes' && k !== 'imer' && k !== 'hd' && k !== 'dutyHand' && prev[k] !== next[k])) { formsDirty = true; if (autoReps().length) repDirty = true; }
   if (!dirty.size && !formsDirty) return;
   clearTimeout(autoTimer); autoTimer = setTimeout(runAuto, 1200);
 }
